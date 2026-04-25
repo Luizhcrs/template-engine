@@ -1,12 +1,13 @@
 # template-engine
 
-Engine proprietária de normalização documental: aprende padrão a partir de documentos-exemplo e converte qualquer documento-fonte pro padrão automaticamente.
+Document normalization engine: learn a pattern from example documents and convert any source document to that pattern automatically via LLM.
 
-**Status:** v0.1.0 — proprietário, todos os direitos reservados.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-## O que faz
+## What it does
 
-Pipeline de 5 etapas:
+Pipeline em 5 etapas:
 
 ```
 extractor → preset_creator → llm_mapper → validator → renderer
@@ -18,36 +19,101 @@ extractor → preset_creator → llm_mapper → validator → renderer
 - **`validator`** — tokens críticos + cobertura + score 0-1
 - **`renderer`** — template + JSON + render_ops → `.docx` final determinístico
 
-## Uso
+## Princípio
+
+**Renderer determinístico, conteúdo via LLM.** Regras de formatação vivem em YAML; conteúdo é extraído pelo modelo. Trocar de LLM (Gemini → GPT → Claude) não muda o resultado visual.
+
+## Install
+
+```bash
+pip install template-engine
+```
+
+Ou direto do source:
+
+```bash
+git clone https://github.com/Luizhcrs/template-engine
+cd template-engine
+pip install -e ".[dev]"
+```
+
+## Quickstart
 
 ```python
 from engine.extractor import extract
 from engine.preset_creator import create_preset
 from engine.llm.gemini_free import GeminiFreeProvider
-from engine.llm_mapper import map_extracted_to_json
-from engine.renderer import render_preset
+from engine.llm_mapper import map_content
+from engine.renderer import render
+from engine.preset_loader import load_preset
 
 provider = GeminiFreeProvider(api_key="AIza...")
 
+# Aprende padrão a partir de docs de referência
+preset_dir = create_preset(
+    template_path="template.docx",
+    gold_paths=["gold_01.docx", "gold_02.docx"],
+    out_dir="./presets/my-template",
+    llm=provider,
+)
+
+# Carrega preset
+preset = load_preset(preset_dir)
+
+# Converte um documento-fonte
 doc = extract("source.docx")
-preset = create_preset(template_path="template.docx", gold_paths=[...], llm=provider)
-json_out = await map_extracted_to_json(doc, preset, provider)
-render_preset(preset, json_out, output_path="out.docx")
+data = await map_content(doc, preset, provider)
+render(preset, data, output_path="out.docx")
 ```
 
-## Arquitetura
+## Architecture
 
-**Stateless:** recebe paths/bytes, retorna paths/bytes/dicts. Sem dependência de FastAPI, SQLAlchemy ou qualquer framework de SaaS.
+**Stateless.** Recebe paths/bytes, retorna paths/bytes/dicts. Sem dependência de FastAPI, SQLAlchemy ou qualquer framework de SaaS.
 
-**Determinístico no rendering:** LLM nunca decide forma visual. Tudo que afeta visual vive em `render_ops.yaml`. Trocar de LLM não muda output visual.
+**Determinístico no rendering.** LLM nunca decide forma visual. Tudo que afeta visual vive em `render_ops.yaml`. Trocar de modelo não muda saída visual.
 
-## Desenvolvimento
+**Multi-provider.** Atualmente suporta Gemini. Adicione providers implementando `engine.llm.base.LLMProvider`:
+
+```python
+from engine.llm.base import LLMProvider
+
+class MyProvider:
+    name = "my-provider"
+
+    async def generate_structured(self, prompt: str, json_schema: dict) -> dict:
+        # ... sua implementação
+        return parsed_json
+```
+
+## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest
+pytest                    # 29 tests
+pytest --cov              # com coverage
 ```
 
-## Licença
+## Use cases
 
-Proprietário. Não distribuir, redistribuir, ou modificar sem autorização.
+- Padronização de contratos jurídicos
+- Normalização de laudos técnicos
+- Conversão de relatórios entre formatos corporativos
+- Migração de documentos legados pra template novo
+- Extração estruturada de PDFs em documentos `.docx`
+
+## Roadmap
+
+- [ ] OpenAI provider
+- [ ] Anthropic provider
+- [ ] Ollama provider (modelos locais)
+- [ ] PDF output além de `.docx`
+- [ ] Eval suite com benchmark de prompt + LLM rotation
+- [ ] CI com pytest
+
+## License
+
+[Apache 2.0](LICENSE) · Copyright 2026 luizhcrs
+
+## Contributing
+
+Issues e PRs bem-vindos. Pra mudanças grandes, abra uma issue antes pra discutir.
