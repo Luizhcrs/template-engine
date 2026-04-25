@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-25
+
+### Added
+
+- **5 novos providers LLM**:
+  - `engine.llm.openai_provider.OpenAIProvider` — Chat Completions com `response_format=json_schema`
+  - `engine.llm.anthropic_provider.AnthropicProvider` — Tool use forçado pra coerce JSON
+  - `engine.llm.groq_provider.GroqProvider` — fast inference, JSON mode
+  - `engine.llm.ollama_provider.OllamaProvider` — local via httpx (sem SDK extra)
+  - `engine.llm.openrouter_provider.OpenRouterProvider` — 400+ modelos via OpenAI-compatible API
+- **`LLMRouter`** — encadeia providers com fallback automático em `LLMRateLimit`/`LLMTimeout`. Errors genéricos (`LLMError`) propagam imediatamente sem fallback.
+- **`AllProvidersFailed`** — exception levantada quando todos providers da chain falham.
+- Optional dep extras por provider: `template-engine[openai|anthropic|groq|ollama|openrouter]` ou `[all]`.
+- 7 tests pra router (cobertura: ok, rate-limit fallback, timeout fallback, generic error não-fallback, todos exaustos).
+
 ## [0.1.1] - 2026-04-25
 
 ### Security
@@ -46,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Apache 2.0 license.
 - Gemini Free provider.
 
-[Unreleased]: https://github.com/Luizhcrs/template-engine/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Luizhcrs/template-engine/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Luizhcrs/template-engine/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Luizhcrs/template-engine/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Luizhcrs/template-engine/releases/tag/v0.1.0
