@@ -49,7 +49,7 @@ class AnthropicProvider:
             "input_schema": json_schema,
         }
         try:
-            resp = await self._client.messages.create(
+            resp = await self._client.messages.create(  # type: ignore[call-overload]
                 model=self.model,
                 max_tokens=self._max_tokens,
                 temperature=0,

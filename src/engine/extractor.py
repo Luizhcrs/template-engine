@@ -37,7 +37,7 @@ def extract(path: Path) -> ExtractedDoc:
 
 
 def _extract_docx(path: Path) -> ExtractedDoc:
-    doc = Document(path)
+    doc = Document(str(path))
     paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
     tables = [[[c.text for c in row.cells] for row in t.rows] for t in doc.tables]
 

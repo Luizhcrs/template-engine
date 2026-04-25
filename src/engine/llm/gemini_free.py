@@ -8,14 +8,15 @@ import structlog
 from .base import LLMError, LLMRateLimit, LLMTimeout
 
 # Specific exception types from google.api_core (transitive dep of google-generativeai)
+_RATE_LIMIT_EXCS: tuple[type[BaseException], ...] = ()
+_TIMEOUT_EXCS: tuple[type[BaseException], ...] = ()
 try:
     from google.api_core import exceptions as gapi_exc
 
     _RATE_LIMIT_EXCS = (gapi_exc.ResourceExhausted, gapi_exc.TooManyRequests)
     _TIMEOUT_EXCS = (gapi_exc.DeadlineExceeded, gapi_exc.ServiceUnavailable)
 except ImportError:
-    _RATE_LIMIT_EXCS = ()
-    _TIMEOUT_EXCS = ()
+    pass
 
 log = structlog.get_logger(__name__)
 
@@ -27,10 +28,10 @@ class GeminiFreeProvider:
     def __init__(self, api_key: str, model: str | None = None):
         if not api_key:
             raise RuntimeError("api_key obrigatório (passe via construtor)")
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key)  # type: ignore[attr-defined]
         if model:
             self.model = model
-        self._model = genai.GenerativeModel(self.model)
+        self._model = genai.GenerativeModel(self.model)  # type: ignore[attr-defined]
 
     async def generate_structured(self, prompt: str, json_schema: dict) -> dict:
         full_prompt = (

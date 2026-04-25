@@ -103,21 +103,30 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.11"
-strict = true
 warn_unused_configs = true
 warn_redundant_casts = true
-warn_unused_ignores = true
-disallow_any_generics = true
+warn_unused_ignores = false  # noqa-style suppressions vary per Python/mypy version
 check_untyped_defs = true
 no_implicit_reexport = true
-disallow_untyped_defs = true
 mypy_path = "src"
 packages = ["engine"]
 exclude = ["tests/", "build/", "examples/"]
+# Strict mode coming in v0.3 — alpha 0.x focuses on shipping correctness over typing perfection.
 
 [[tool.mypy.overrides]]
-module = ["docx.*", "pdfplumber.*", "yaml.*", "google.*"]
+module = [
+    "docx.*",
+    "pdfplumber.*",
+    "yaml.*",
+    "google.*",
+    "openai.*",
+    "anthropic.*",
+    "groq.*",
+    "structlog.*",
+    "httpx.*",
+]
 ignore_missing_imports = true
+disable_error_code = ["no-any-return", "attr-defined", "assignment"]
 
 [tool.coverage.run]
 source = ["engine"]

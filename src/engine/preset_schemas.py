@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path  # noqa: TC003 — runtime needed by Pydantic
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -45,7 +45,10 @@ class PresetBundle(BaseModel):
     template_docx_path: Path
     gold_docs_paths: list[Path]
     pattern_md: str
-    schema_json: dict
+    schema_json: dict[str, Any] = Field(  # type: ignore[assignment]
+        ...,
+        description="Parsed JSON Schema for content extraction (shadows deprecated BaseModel.schema_json)",
+    )
     render_ops: RenderOpsFile
     validation: ValidationConfig
 

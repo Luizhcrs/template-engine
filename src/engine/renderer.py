@@ -25,7 +25,7 @@ def render(preset: PresetBundle, content: dict, output_path: Path) -> Path:
     """Apply preset's template + LLM content + deterministic ops to produce output .docx."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(preset.template_docx_path, output_path)
-    doc = Document(output_path)
+    doc = Document(str(output_path))
 
     ctx = {
         "doc": doc,
@@ -41,5 +41,5 @@ def render(preset: PresetBundle, content: dict, output_path: Path) -> Path:
         log.info("render.op", op=op.op, params=list(op.params.keys()))
         handler(ctx, op.params)
 
-    doc.save(output_path)
+    doc.save(str(output_path))
     return output_path
