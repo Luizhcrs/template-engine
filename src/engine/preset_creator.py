@@ -1,13 +1,19 @@
 from __future__ import annotations
+
 import json
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
 import structlog
 import yaml
-from engine.llm.base import LLMProvider
+
 from engine.extractor import extract
 from engine.preset_schemas import PresetManifest
+
+if TYPE_CHECKING:
+    from engine.llm.base import LLMProvider
 
 log = structlog.get_logger(__name__)
 
@@ -164,7 +170,7 @@ async def create_preset(
         version=1,
         owner_sub=owner,
         locked=False,
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
     )
     (dest_dir / "manifest.json").write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
 

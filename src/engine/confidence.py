@@ -1,9 +1,13 @@
 from __future__ import annotations
-from enum import Enum
-from engine.validator import ValidationResult
+
+from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from engine.validator import ValidationResult
 
 
-class ConfidenceLabel(str, Enum):
+class ConfidenceLabel(StrEnum):
     """Confidence tier derived from a 0-1 score."""
 
     HIGH = "high"
@@ -21,10 +25,7 @@ def calculate_confidence(result: ValidationResult, min_completeness: float = 0.7
     else:
         tok_score = result.critical_tokens_found / result.critical_tokens_total
 
-    if result.sections_required == 0:
-        sec_score = 1.0
-    else:
-        sec_score = result.sections_present / result.sections_required
+    sec_score = 1.0 if result.sections_required == 0 else result.sections_present / result.sections_required
 
     score = 0.6 * tok_score + 0.4 * sec_score
     return round(score, 3)

@@ -1,13 +1,16 @@
 from __future__ import annotations
+
 import json
-import structlog
+
 import google.generativeai as genai
+import structlog
 
 from .base import LLMError, LLMRateLimit, LLMTimeout
 
 # Specific exception types from google.api_core (transitive dep of google-generativeai)
 try:
     from google.api_core import exceptions as gapi_exc
+
     _RATE_LIMIT_EXCS = (gapi_exc.ResourceExhausted, gapi_exc.TooManyRequests)
     _TIMEOUT_EXCS = (gapi_exc.DeadlineExceeded, gapi_exc.ServiceUnavailable)
 except ImportError:

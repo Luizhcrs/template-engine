@@ -1,8 +1,10 @@
-import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock
-from engine.preset_loader import load_preset
+
+import pytest
+
 from engine.llm_mapper import map_content
+from engine.preset_loader import load_preset
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

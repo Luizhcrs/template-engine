@@ -3,6 +3,7 @@
 OpenRouter aggregates 400+ models behind an OpenAI-compatible API. This provider is a
 thin subclass of OpenAIProvider with the base_url pointing to openrouter.
 """
+
 from __future__ import annotations
 
 from .openai_provider import OpenAIProvider

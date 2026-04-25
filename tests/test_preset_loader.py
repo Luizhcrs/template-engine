@@ -1,6 +1,8 @@
 from pathlib import Path
+
 import pytest
-from engine.preset_loader import load_preset, PresetNotFound, PresetInvalid
+
+from engine.preset_loader import PresetInvalid, PresetNotFound, load_preset
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

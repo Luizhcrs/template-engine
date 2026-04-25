@@ -1,5 +1,7 @@
 """Ollama provider — local inference via HTTP API."""
+
 from __future__ import annotations
+
 import json
 from typing import Any
 
@@ -10,9 +12,7 @@ from .base import LLMError, LLMTimeout
 try:
     import httpx
 except ImportError as e:  # pragma: no cover - optional dep
-    raise ImportError(
-        "httpx não instalado. Instale com: pip install template-engine[ollama]"
-    ) from e
+    raise ImportError("httpx não instalado. Instale com: pip install template-engine[ollama]") from e
 
 log = structlog.get_logger(__name__)
 

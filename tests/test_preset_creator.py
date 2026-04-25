@@ -1,6 +1,8 @@
-import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock
+
+import pytest
+
 from engine.preset_creator import create_preset
 from engine.preset_loader import load_preset
 

@@ -5,7 +5,9 @@ Cria preset a partir de template + 1 gold doc, depois converte um source.
 Uso:
     GEMINI_API_KEY=AIza... python examples/01_quickstart.py
 """
+
 from __future__ import annotations
+
 import asyncio
 import os
 import sys

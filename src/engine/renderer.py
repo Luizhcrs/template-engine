@@ -1,11 +1,18 @@
 from __future__ import annotations
+
 import shutil
-from pathlib import Path
 from datetime import date
+from typing import TYPE_CHECKING
+
 import structlog
 from docx import Document
-from engine.preset_schemas import PresetBundle
+
 from engine.render_ops import OP_HANDLERS
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from engine.preset_schemas import PresetBundle
 
 log = structlog.get_logger(__name__)
 

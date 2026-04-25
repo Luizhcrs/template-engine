@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from engine.llm.base import LLMError, LLMRateLimit
@@ -6,6 +7,7 @@ from engine.llm.base import LLMError, LLMRateLimit
 
 def _make_provider():
     from engine.llm.gemini_free import GeminiFreeProvider
+
     with patch("engine.llm.gemini_free.genai"):
         return GeminiFreeProvider(api_key="test-key")
 
@@ -18,13 +20,14 @@ def test_gemini_provider_imports():
 
 def test_gemini_rejects_missing_api_key():
     from engine.llm.gemini_free import GeminiFreeProvider
-    with patch("engine.llm.gemini_free.genai"):
-        with pytest.raises(RuntimeError, match="api_key"):
-            GeminiFreeProvider(api_key="")
+
+    with patch("engine.llm.gemini_free.genai"), pytest.raises(RuntimeError, match="api_key"):
+        GeminiFreeProvider(api_key="")
 
 
 def test_gemini_custom_model_override():
     from engine.llm.gemini_free import GeminiFreeProvider
+
     with patch("engine.llm.gemini_free.genai"):
         provider = GeminiFreeProvider(api_key="test-key", model="gemini-2.0-flash")
         assert provider.model == "gemini-2.0-flash"

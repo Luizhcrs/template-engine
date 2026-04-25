@@ -1,5 +1,7 @@
 """Anthropic provider — uses tool use to coerce JSON output."""
+
 from __future__ import annotations
+
 import json
 from typing import Any
 
@@ -8,8 +10,7 @@ import structlog
 from .base import LLMError, LLMRateLimit, LLMTimeout
 
 try:
-    from anthropic import AsyncAnthropic
-    from anthropic import APITimeoutError, RateLimitError
+    from anthropic import APITimeoutError, AsyncAnthropic, RateLimitError
 except ImportError as e:  # pragma: no cover - optional dep
     raise ImportError(
         "anthropic SDK não instalado. Instale com: pip install template-engine[anthropic]"

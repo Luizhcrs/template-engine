@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from engine.render_ops.sections import write_table
 
 
@@ -38,11 +39,13 @@ def write_auto_migration(ctx: dict, params: dict) -> None:
 
     history = list(content.get(source_key, []) or [])
     new_rev = _next_revision(history, columns[0])
-    history.append({
-        columns[0]: new_rev,
-        columns[1]: today.strftime("%d/%m/%Y"),
-        columns[2]: default_text,
-    })
+    history.append(
+        {
+            columns[0]: new_rev,
+            columns[1]: today.strftime("%d/%m/%Y"),
+            columns[2]: default_text,
+        }
+    )
 
     new_content = dict(content)
     new_content[source_key] = history

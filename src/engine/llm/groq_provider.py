@@ -1,5 +1,7 @@
 """Groq provider — Groq SDK is OpenAI-compatible; uses JSON mode."""
+
 from __future__ import annotations
+
 import json
 from typing import Any
 
@@ -8,12 +10,9 @@ import structlog
 from .base import LLMError, LLMRateLimit, LLMTimeout
 
 try:
-    from groq import AsyncGroq
-    from groq import APITimeoutError, RateLimitError
+    from groq import APITimeoutError, AsyncGroq, RateLimitError
 except ImportError as e:  # pragma: no cover - optional dep
-    raise ImportError(
-        "groq SDK não instalado. Instale com: pip install template-engine[groq]"
-    ) from e
+    raise ImportError("groq SDK não instalado. Instale com: pip install template-engine[groq]") from e
 
 log = structlog.get_logger(__name__)
 

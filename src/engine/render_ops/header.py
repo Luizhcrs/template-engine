@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import structlog
 from docx.oxml.ns import qn
 

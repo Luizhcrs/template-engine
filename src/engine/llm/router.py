@@ -3,7 +3,9 @@
 Tries providers in order; on rate-limit / timeout, falls back to next.
 Other errors propagate immediately (LLMError without retry semantics).
 """
+
 from __future__ import annotations
+
 from typing import Any
 
 import structlog

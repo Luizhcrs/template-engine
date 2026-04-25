@@ -3,6 +3,7 @@
 Mostra como rodar `validate` + `calculate_confidence` + `confidence_label`
 pra decidir se uma saída do LLM tem qualidade suficiente pra publicar.
 """
+
 from __future__ import annotations
 
 from engine import (

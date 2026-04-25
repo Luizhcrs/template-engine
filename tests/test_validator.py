@@ -1,6 +1,6 @@
+from engine.confidence import ConfidenceLabel, calculate_confidence, confidence_label
 from engine.preset_schemas import ValidationConfig
 from engine.validator import validate
-from engine.confidence import ConfidenceLabel, calculate_confidence, confidence_label
 
 
 def test_validate_all_tokens_preserved():
@@ -61,6 +61,7 @@ def test_confidence_low_when_missing_tokens():
 
 def test_confidence_labels():
     from engine.validator import ValidationResult
+
     r_high = ValidationResult(True, 10, 10, 5, 5, [], [])
     r_mid = ValidationResult(False, 10, 7, 5, 4, [], [])
     r_low = ValidationResult(False, 10, 2, 5, 1, [], [])

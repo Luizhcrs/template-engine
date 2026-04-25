@@ -1,10 +1,16 @@
 from __future__ import annotations
+
 import json
 import re
 from pathlib import Path
+
 import yaml
+
 from engine.preset_schemas import (
-    PresetBundle, PresetManifest, RenderOpsFile, ValidationConfig,
+    PresetBundle,
+    PresetManifest,
+    RenderOpsFile,
+    ValidationConfig,
 )
 
 
@@ -21,9 +27,7 @@ _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 def _validate_safe_id(value: str, field_name: str) -> None:
     if not _SAFE_ID_RE.match(value):
-        raise ValueError(
-            f"{field_name} inválido: deve casar com [a-zA-Z0-9_-]{{1,64}}, recebido {value!r}"
-        )
+        raise ValueError(f"{field_name} inválido: deve casar com [a-zA-Z0-9_-]{{1,64}}, recebido {value!r}")
 
 
 def _ensure_within(child: Path, base: Path) -> Path:

@@ -1,6 +1,8 @@
 from __future__ import annotations
+
+from pathlib import Path  # noqa: TC003 — runtime needed by Pydantic
 from typing import Literal
-from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 
@@ -38,6 +40,7 @@ class ValidationConfig(BaseModel):
 
 class PresetBundle(BaseModel):
     """Loaded preset. All paths are absolute; pattern_md and schema_json already parsed."""
+
     manifest: PresetManifest
     template_docx_path: Path
     gold_docs_paths: list[Path]

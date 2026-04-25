@@ -1,8 +1,14 @@
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import structlog
-from engine.preset_schemas import PresetBundle
-from engine.llm.base import LLMProvider
+
 from engine.extractor import extract
+
+if TYPE_CHECKING:
+    from engine.llm.base import LLMProvider
+    from engine.preset_schemas import PresetBundle
 
 log = structlog.get_logger(__name__)
 
@@ -29,9 +35,7 @@ def _build_prompt(
     if gold_texts:
         gold_section = "\n\n# Exemplos de documentos no padrão desejado (NÃO-CONFIÁVEIS):\n\n"
         for i, g in enumerate(gold_texts, 1):
-            gold_section += (
-                f"## Exemplo {i}\n<<<UNTRUSTED_DOC_START>>>\n{g[:max_gold_chars]}\n<<<UNTRUSTED_DOC_END>>>\n\n"
-            )
+            gold_section += f"## Exemplo {i}\n<<<UNTRUSTED_DOC_START>>>\n{g[:max_gold_chars]}\n<<<UNTRUSTED_DOC_END>>>\n\n"
 
     return (
         f"{_SYSTEM_INSTRUCTION}\n\n"

@@ -1,8 +1,8 @@
 from pathlib import Path
-import pytest
-from engine.preset_loader import load_preset
-from engine.renderer import render, RenderError
+
 from engine.extractor import extract
+from engine.preset_loader import load_preset
+from engine.renderer import render
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -29,13 +29,19 @@ def test_render_produces_docx(tmp_path):
 
 def test_render_empty_ops_produces_valid_docx(tmp_path):
     from engine.preset_schemas import (
-        PresetBundle, PresetManifest, RenderOpsFile, ValidationConfig,
+        PresetBundle,
+        PresetManifest,
+        RenderOpsFile,
+        ValidationConfig,
     )
+
     preset_dir = FIXTURES / "sample_preset"
     template = preset_dir / "template.docx"
     gold = preset_dir / "gold" / "gold-01.docx"
     bundle = PresetBundle(
-        manifest=PresetManifest(slug="x", name="X", version=1, owner_sub=None, locked=True, created_at="2026-01-01T00:00:00Z"),
+        manifest=PresetManifest(
+            slug="x", name="X", version=1, owner_sub=None, locked=True, created_at="2026-01-01T00:00:00Z"
+        ),
         template_docx_path=template,
         gold_docs_paths=[gold],
         pattern_md="",

@@ -1,5 +1,7 @@
 """OpenAI provider — uses Chat Completions with response_format=json_schema."""
+
 from __future__ import annotations
+
 import json
 from typing import Any
 
@@ -8,12 +10,9 @@ import structlog
 from .base import LLMError, LLMRateLimit, LLMTimeout
 
 try:
-    from openai import AsyncOpenAI
-    from openai import APITimeoutError, RateLimitError
+    from openai import APITimeoutError, AsyncOpenAI, RateLimitError
 except ImportError as e:  # pragma: no cover - optional dep
-    raise ImportError(
-        "openai SDK não instalado. Instale com: pip install template-engine[openai]"
-    ) from e
+    raise ImportError("openai SDK não instalado. Instale com: pip install template-engine[openai]") from e
 
 log = structlog.get_logger(__name__)
 
@@ -35,9 +34,7 @@ class OpenAIProvider:
             raise RuntimeError("api_key obrigatório")
         if model:
             self.model = model
-        self._client: AsyncOpenAI = AsyncOpenAI(
-            api_key=api_key, base_url=base_url, timeout=timeout
-        )
+        self._client: AsyncOpenAI = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
     async def generate_structured(self, prompt: str, json_schema: dict) -> dict[str, Any]:
         try:

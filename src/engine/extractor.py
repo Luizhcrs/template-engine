@@ -1,8 +1,13 @@
 from __future__ import annotations
-from pathlib import Path
+
 from dataclasses import dataclass
-from docx import Document
+from typing import TYPE_CHECKING
+
 import pdfplumber
+from docx import Document
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @dataclass
@@ -11,7 +16,7 @@ class ExtractedDoc:
 
     - text: flat concatenation (paragraphs + tables as " | " joined rows).
     - paragraphs: original paragraphs in order, non-empty only.
-    - tables: 3-level nested list — tables × rows × cells (all strings).
+    - tables: 3-level nested list -- tables x rows x cells (all strings).
     - header_fields: heuristic key→value map. Currently only {"raw_header": str}
       for .docx or {} for .pdf. Consumers must not rely on specific keys.
     """

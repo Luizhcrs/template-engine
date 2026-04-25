@@ -5,7 +5,9 @@ Como implementar um provider próprio que satisfaz `engine.llm.base.LLMProvider`
 
 Demonstra também o uso de mock pra desenvolvimento sem chamar API real.
 """
+
 from __future__ import annotations
+
 import asyncio
 import json
 from pathlib import Path
@@ -40,9 +42,7 @@ async def main() -> None:
             "properties": {"titulo": {"type": "string"}},
             "required": ["titulo"],
         },
-        "render_ops": [
-            {"op": "set_header_field", "params": {"name": "CODIGO", "source_key": "codigo"}}
-        ],
+        "render_ops": [{"op": "set_header_field", "params": {"name": "CODIGO", "source_key": "codigo"}}],
         "validation": {"critical_tokens": [], "required_sections": [], "min_completeness": 0.7},
     }
 
