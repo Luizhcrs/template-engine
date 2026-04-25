@@ -2,8 +2,12 @@
 
 Document normalization engine: learn a pattern from example documents and convert any source document to that pattern automatically via LLM.
 
+[![CI](https://github.com/Luizhcrs/template-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Luizhcrs/template-engine/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![PyPI version](https://img.shields.io/pypi/v/template-engine.svg)](https://pypi.org/project/template-engine/)
+[![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Typed](https://img.shields.io/badge/typed-mypy_strict-2A6DB2.svg)](http://mypy-lang.org/)
 
 ## What it does
 

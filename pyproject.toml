@@ -57,3 +57,62 @@ engine = ["py.typed"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",     # pycodestyle
+    "F",          # pyflakes
+    "I",          # isort
+    "B",          # bugbear
+    "UP",         # pyupgrade
+    "SIM",        # simplify
+    "C4",         # comprehensions
+    "RET",        # return
+    "TCH",        # type-checking
+    "PTH",        # use pathlib
+    "RUF",        # ruff-specific
+]
+ignore = [
+    "E501",       # line length handled by formatter
+    "B008",       # function call as default arg (Pydantic Field needs)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["B011"]   # asserts ok em tests
+"examples/**/*.py" = ["E402"] # late imports ok em examples
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_any_generics = true
+check_untyped_defs = true
+no_implicit_reexport = true
+disallow_untyped_defs = true
+mypy_path = "src"
+packages = ["engine"]
+exclude = ["tests/", "build/", "examples/"]
+
+[[tool.mypy.overrides]]
+module = ["docx.*", "pdfplumber.*", "yaml.*", "google.*"]
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["engine"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
+skip_covered = false
