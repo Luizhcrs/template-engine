@@ -1,0 +1,28 @@
+from engine.validator import ValidationResult
+
+
+def calculate_confidence(result: ValidationResult, min_completeness: float = 0.7) -> float:
+    """Score 0.0-1.0 derived from tokens + section completeness.
+
+    Weights: 60% critical tokens, 40% required sections.
+    """
+    if result.critical_tokens_total == 0:
+        tok_score = 1.0
+    else:
+        tok_score = result.critical_tokens_found / result.critical_tokens_total
+
+    if result.sections_required == 0:
+        sec_score = 1.0
+    else:
+        sec_score = result.sections_present / result.sections_required
+
+    score = 0.6 * tok_score + 0.4 * sec_score
+    return round(score, 3)
+
+
+def confidence_label(score: float) -> str:
+    if score >= 0.9:
+        return "alta"
+    if score >= 0.7:
+        return "média"
+    return "baixa"

@@ -1,0 +1,7 @@
+operations:
+  - op: set_header_field
+    params: {name: CODIGO, source_key: codigo}
+  - op: write_section
+    params: {heading: OBJETIVO, source_key: objetivo}
+  - op: write_list
+    params: {heading: PROCEDIMENTO, source_key: procedimento, marker: "•"}

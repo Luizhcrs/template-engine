@@ -1,0 +1,1 @@
+{"type":"object","properties":{"codigo":{"type":"string"},"objetivo":{"type":"string"},"procedimento":{"type":"array","items":{"type":"string"}}}}
