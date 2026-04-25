@@ -1,4 +1,14 @@
+from __future__ import annotations
+from enum import Enum
 from engine.validator import ValidationResult
+
+
+class ConfidenceLabel(str, Enum):
+    """Confidence tier derived from a 0-1 score."""
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
 
 
 def calculate_confidence(result: ValidationResult, min_completeness: float = 0.7) -> float:
@@ -20,9 +30,13 @@ def calculate_confidence(result: ValidationResult, min_completeness: float = 0.7
     return round(score, 3)
 
 
-def confidence_label(score: float) -> str:
+def confidence_label(score: float) -> ConfidenceLabel:
+    """Categorize a confidence score 0-1 into a tier (HIGH/MEDIUM/LOW).
+
+    Returns enum so callers control display strings/i18n.
+    """
     if score >= 0.9:
-        return "alta"
+        return ConfidenceLabel.HIGH
     if score >= 0.7:
-        return "média"
-    return "baixa"
+        return ConfidenceLabel.MEDIUM
+    return ConfidenceLabel.LOW

@@ -1,6 +1,6 @@
 from engine.preset_schemas import ValidationConfig
 from engine.validator import validate
-from engine.confidence import calculate_confidence, confidence_label
+from engine.confidence import ConfidenceLabel, calculate_confidence, confidence_label
 
 
 def test_validate_all_tokens_preserved():
@@ -46,7 +46,7 @@ def test_confidence_high_when_all_ok():
     r = validate("123", {"a": "x contendo 123"}, config)
     score = calculate_confidence(r)
     assert score >= 0.9
-    assert confidence_label(score) == "alta"
+    assert confidence_label(score) == ConfidenceLabel.HIGH
 
 
 def test_confidence_low_when_missing_tokens():
@@ -65,9 +65,9 @@ def test_confidence_labels():
     r_mid = ValidationResult(False, 10, 7, 5, 4, [], [])
     r_low = ValidationResult(False, 10, 2, 5, 1, [], [])
 
-    assert confidence_label(calculate_confidence(r_high)) == "alta"
-    assert confidence_label(calculate_confidence(r_mid)) in ("alta", "média")  # boundary
-    assert confidence_label(calculate_confidence(r_low)) == "baixa"
+    assert confidence_label(calculate_confidence(r_high)) == ConfidenceLabel.HIGH
+    assert confidence_label(calculate_confidence(r_mid)) in (ConfidenceLabel.HIGH, ConfidenceLabel.MEDIUM)
+    assert confidence_label(calculate_confidence(r_low)) == ConfidenceLabel.LOW
 
 
 def test_confidence_empty_config_is_perfect():

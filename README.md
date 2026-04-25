@@ -25,8 +25,16 @@ extractor → preset_creator → llm_mapper → validator → renderer
 
 ## Install
 
+Core (provider-agnostic):
+
 ```bash
 pip install template-engine
+```
+
+Com provider Gemini incluído:
+
+```bash
+pip install "template-engine[gemini]"
 ```
 
 Ou direto do source:
@@ -40,30 +48,34 @@ pip install -e ".[dev]"
 ## Quickstart
 
 ```python
-from engine.extractor import extract
-from engine.preset_creator import create_preset
-from engine.llm.gemini_free import GeminiFreeProvider
-from engine.llm_mapper import map_content
-from engine.renderer import render
-from engine.preset_loader import load_preset
-
-provider = GeminiFreeProvider(api_key="AIza...")
-
-# Aprende padrão a partir de docs de referência
-preset_dir = create_preset(
-    template_path="template.docx",
-    gold_paths=["gold_01.docx", "gold_02.docx"],
-    out_dir="./presets/my-template",
-    llm=provider,
+import asyncio
+from pathlib import Path
+from engine import (
+    create_preset, load_preset, extract, map_content, render,
 )
+from engine.llm.gemini_free import GeminiFreeProvider
 
-# Carrega preset
-preset = load_preset(preset_dir)
+async def main():
+    provider = GeminiFreeProvider(api_key="AIza...")
 
-# Converte um documento-fonte
-doc = extract("source.docx")
-data = await map_content(doc, preset, provider)
-render(preset, data, output_path="out.docx")
+    # 1. Aprende padrão a partir de docs de referência
+    preset_dir = await create_preset(
+        llm=provider,
+        template_path=Path("template.docx"),
+        gold_paths=[Path("gold_01.docx"), Path("gold_02.docx")],
+        dest_dir=Path("./presets/my-template"),
+        # slug, name, owner são opcionais; defaults derivados de dest_dir.name
+    )
+
+    # 2. Carrega preset
+    preset = load_preset(preset_dir)
+
+    # 3. Converte um documento-fonte
+    doc = extract(Path("source.docx"))
+    data = await map_content(preset, doc.text, provider)
+    render(preset, data, output_path=Path("out.docx"))
+
+asyncio.run(main())
 ```
 
 ## Architecture

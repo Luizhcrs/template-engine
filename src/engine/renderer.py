@@ -2,12 +2,12 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 from datetime import date
+import structlog
 from docx import Document
 from engine.preset_schemas import PresetBundle
 from engine.render_ops import OP_HANDLERS
-import logging
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 class RenderError(Exception):

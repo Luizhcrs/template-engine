@@ -4,37 +4,54 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "template-engine"
-version = "0.1.0"
-description = "Template normalization engine: extractor + preset creator + LLM mapper + validator + renderer"
+version = "0.1.1"
+description = "Document normalization engine: learn a template from examples and convert any document automatically via LLM."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "Apache-2.0"}
 authors = [{name = "luizhcrs", email = "luizhcrs@gmail.com"}]
+keywords = ["llm", "rag", "nlp", "document-processing", "docx", "pdf", "template", "normalization"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Text Processing",
     "Topic :: Office/Business",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
 ]
 dependencies = [
     "pydantic>=2.9,<3",
     "python-docx>=1.1,<2",
     "pdfplumber>=0.11,<0.12",
-    "google-generativeai>=0.8,<0.9",
     "pyyaml>=6.0,<7",
+    "structlog>=24.1,<26",
 ]
 
 [project.optional-dependencies]
+gemini = ["google-generativeai>=0.8,<0.9"]
+all = ["google-generativeai>=0.8,<0.9"]
 dev = [
     "pytest>=8.3,<9",
     "pytest-asyncio>=0.24,<0.25",
     "pytest-cov>=5.0,<6",
+    "google-generativeai>=0.8,<0.9",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Luizhcrs/template-engine"
+Repository = "https://github.com/Luizhcrs/template-engine"
+Issues = "https://github.com/Luizhcrs/template-engine/issues"
+Changelog = "https://github.com/Luizhcrs/template-engine/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+engine = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

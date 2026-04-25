@@ -31,7 +31,7 @@ async def test_create_preset_generates_all_artifacts(tmp_path):
         template_path=FIXTURES / "template_sample.docx",
         gold_paths=[FIXTURES / "gold_sample_01.docx"],
         dest_dir=dest,
-        owner_sub="user-123",
+        owner="user-123",
     )
 
     assert (dest / "manifest.json").exists()
@@ -63,7 +63,7 @@ async def test_created_preset_loads_via_loader(tmp_path):
         template_path=FIXTURES / "template_sample.docx",
         gold_paths=[FIXTURES / "gold_sample_01.docx", FIXTURES / "gold_sample_02.docx"],
         dest_dir=dest,
-        owner_sub="user-1",
+        owner="user-1",
     )
 
     bundle = load_preset(dest)
