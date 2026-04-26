@@ -10,17 +10,17 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 
 | Versão | Estado | Tag | Highlight |
 |---|---|---|---|
-| v0.1.0 | ✅ entregue | `v0.1.0` (2026-04-25) | Pipeline básico, Gemini provider, 29 tests |
-| v0.1.1 | ✅ entregue | `v0.1.1` (2026-04-25) | Security hardening + breaking API cleanups |
-| v0.2.0 | ✅ entregue | `v0.2.0` (2026-04-25) | Multi-provider (5 novos) + LLMRouter |
-| v0.2.1 | ✅ entregue | `v0.2.1` (2026-04-26) | OpenAI strict fix + bilingual README, 49 tests |
-| Wave A | ✅ entregue | `3c42feb` (2026-04-26) | regex inference automatica (10 shapes pre-def + label aggregation) |
-| Wave A v2 | ✅ entregue | `594ee1f` (2026-04-26) | grex Tier 2 — generaliza regex via digit/word conversion |
-| Wave D | ✅ entregue | `126b0c0` (2026-04-26) | batch orchestrator (1 template + N docs → N normalized + report) |
-| Wave E | ✅ entregue | `(pending push)` (2026-04-26) | drop legacy preset/renderer/validator/visual_validator (~26% LOC ↓) |
-| Wave F | 🟡 planejada | — | conformity validator multi-dim (texto + estrutural + visual + design + técnico) |
-| v0.3.0 | ✅ entregue | `(pending tag)` (2026-04-26) | Wave A + Wave D + Wave E shipped, single Wave D path |
-| v0.4+  | 📋 planejado | — | OCR + extractors + renderer expandido |
+| v0.1.0 | [done] entregue | `v0.1.0` (2026-04-25) | Pipeline básico, Gemini provider, 29 tests |
+| v0.1.1 | [done] entregue | `v0.1.1` (2026-04-25) | Security hardening + breaking API cleanups |
+| v0.2.0 | [done] entregue | `v0.2.0` (2026-04-25) | Multi-provider (5 novos) + LLMRouter |
+| v0.2.1 | [done] entregue | `v0.2.1` (2026-04-26) | OpenAI strict fix + bilingual README, 49 tests |
+| Wave A | [done] entregue | `3c42feb` (2026-04-26) | regex inference automatica (10 shapes pre-def + label aggregation) |
+| Wave A v2 | [done] entregue | `594ee1f` (2026-04-26) | grex Tier 2 — generaliza regex via digit/word conversion |
+| Wave D | [done] entregue | `126b0c0` (2026-04-26) | batch orchestrator (1 template + N docs → N normalized + report) |
+| Wave E | [done] entregue | `(pending push)` (2026-04-26) | drop legacy preset/renderer/validator/visual_validator (~26% LOC ↓) |
+| Wave F | [wip] planejada | — | conformity validator multi-dim (texto + estrutural + visual + design + técnico) |
+| v0.3.0 | [done] entregue | `(pending tag)` (2026-04-26) | Wave A + Wave D + Wave E shipped, single Wave D path |
+| v0.4+ | [plan] planejado | — | OCR + extractors + renderer expandido |
 
 **Onde estamos hoje (2026-04-26):**
 
@@ -35,79 +35,79 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 
 ---
 
-## v0.1.0 — entregue 2026-04-25 ✅
+## v0.1.0 — entregue 2026-04-25 [done]
 
 Pipeline básico:
-- ✅ Extractor `.docx` + `.pdf`
-- ✅ Preset creator (LLM gera pattern + schema + render_ops)
-- ✅ LLM mapper (prompt + few-shot + JSON Schema)
-- ✅ Validator (tokens críticos + cobertura)
-- ✅ Renderer (.docx output via render_ops)
-- ✅ Provider Gemini
+- [done] Extractor `.docx` + `.pdf`
+- [done] Preset creator (LLM gera pattern + schema + render_ops)
+- [done] LLM mapper (prompt + few-shot + JSON Schema)
+- [done] Validator (tokens críticos + cobertura)
+- [done] Renderer (.docx output via render_ops)
+- [done] Provider Gemini
 
 ---
 
-## v0.1.1 — entregue 2026-04-25 ✅
+## v0.1.1 — entregue 2026-04-25 [done]
 
 Security + breaking API cleanups:
-- ✅ Path traversal hardening em `preset_loader`
-- ✅ Prompt injection delimiters em `llm_mapper` + `preset_creator`
-- ✅ `create_preset` keyword-only com defaults
-- ✅ `ConfidenceLabel` enum (HIGH/MEDIUM/LOW)
-- ✅ structlog substituiu stdlib logging
-- ✅ Gemini captura `ResourceExhausted`/`DeadlineExceeded` SDK-typed
-- ✅ `engine.__init__` exporta API pública + `__all__`
-- ✅ `py.typed` marker
-- ✅ `gemini` virou optional dep `[gemini]`
+- [done] Path traversal hardening em `preset_loader`
+- [done] Prompt injection delimiters em `llm_mapper` + `preset_creator`
+- [done] `create_preset` keyword-only com defaults
+- [done] `ConfidenceLabel` enum (HIGH/MEDIUM/LOW)
+- [done] structlog substituiu stdlib logging
+- [done] Gemini captura `ResourceExhausted`/`DeadlineExceeded` SDK-typed
+- [done] `engine.__init__` exporta API pública + `__all__`
+- [done] `py.typed` marker
+- [done] `gemini` virou optional dep `[gemini]`
 
 ---
 
-## v0.2.0 — entregue 2026-04-25 ✅
+## v0.2.0 — entregue 2026-04-25 [done]
 
 Multi-provider LLM:
-- ✅ **`OpenAIProvider`** — `response_format=json_schema` strict mode
-- ✅ **`AnthropicProvider`** — tool use forçado pra coerce JSON
-- ✅ **`GroqProvider`** — JSON mode (OpenAI-compatible)
-- ✅ **`OllamaProvider`** — local via httpx
-- ✅ **`OpenRouterProvider`** — subclass de OpenAI com base_url
-- ✅ **`LLMRouter`** — fallback automático em rate-limit/timeout
-- ✅ `_retry_after_from_error` extrai header dinâmico (era hardcoded 60s)
-- ✅ Optional deps por provider: `[gemini|openai|anthropic|groq|ollama|openrouter|all]`
-- ✅ 36 tests passing (29 anteriores + 7 novos pro router)
+- [done] **`OpenAIProvider`** — `response_format=json_schema` strict mode
+- [done] **`AnthropicProvider`** — tool use forçado pra coerce JSON
+- [done] **`GroqProvider`** — JSON mode (OpenAI-compatible)
+- [done] **`OllamaProvider`** — local via httpx
+- [done] **`OpenRouterProvider`** — subclass de OpenAI com base_url
+- [done] **`LLMRouter`** — fallback automático em rate-limit/timeout
+- [done] `_retry_after_from_error` extrai header dinâmico (era hardcoded 60s)
+- [done] Optional deps por provider: `[gemini|openai|anthropic|groq|ollama|openrouter|all]`
+- [done] 36 tests passing (29 anteriores + 7 novos pro router)
 
 **Não entregue (movido pra v0.3+):**
-- ❌ `LLMConfig` tipada (max_tokens, temperature, retry_attempts, timeout) — providers aceitam kwargs ad-hoc
-- ❌ Streaming `generate_structured_stream` — não tinha caso de uso urgente
-- ❌ Tool use uniformizado cross-provider — Anthropic usa, OpenAI usa schema, outros injetam — dívida técnica
+- [no] `LLMConfig` tipada (max_tokens, temperature, retry_attempts, timeout) — providers aceitam kwargs ad-hoc
+- [no] Streaming `generate_structured_stream` — não tinha caso de uso urgente
+- [no] Tool use uniformizado cross-provider — Anthropic usa, OpenAI usa schema, outros injetam — dívida técnica
 
 ---
 
-## Wave A — regex inference (entregue 2026-04-26 ✅)
+## Wave A — regex inference (entregue 2026-04-26 [done])
 
 Substitui `_FIELD_PATTERNS` hardcoded por inferência mecânica.
 
-- ✅ `engine.pattern_inference` — `infer_field_patterns(gold_docs, field_examples)` aprende regex de exemplos
-- ✅ Tier 1: 10 shapes pre-definidas (iso_date, doc_code, cpf, cep, uf, fullname, version, br_date, decimal_br, integer, month_year_pt)
-- ✅ Label aggregation via Counter — alterna múltiplos rótulos no mesmo campo
-- ✅ Wave A v2: integração `grex` (optional dep `[inference]`) — Tier 2 generaliza patterns
-- ✅ Heurística hybrid digits-only/words: aceita generalização só com structural anchors
-- ✅ POCs 08-13 refatorados — 49/49 campos extraídos sem regex hardcoded em 6 designs
+- [done] `engine.pattern_inference` — `infer_field_patterns(gold_docs, field_examples)` aprende regex de exemplos
+- [done] Tier 1: 10 shapes pre-definidas (iso_date, doc_code, cpf, cep, uf, fullname, version, br_date, decimal_br, integer, month_year_pt)
+- [done] Label aggregation via Counter — alterna múltiplos rótulos no mesmo campo
+- [done] Wave A v2: integração `grex` (optional dep `[inference]`) — Tier 2 generaliza patterns
+- [done] Heurística hybrid digits-only/words: aceita generalização só com structural anchors
+- [done] POCs 08-13 refatorados — 49/49 campos extraídos sem regex hardcoded em 6 designs
 
 **Commits:** `cfc9b71` (v1) + `594ee1f` (v2). Tests: +24 (49 → 110 → 116).
 
 ---
 
-## Wave D — batch orchestrator (entregue 2026-04-26 ✅)
+## Wave D — batch orchestrator (entregue 2026-04-26 [done])
 
 End-to-end: 1 template + N source docs → N normalized + report.json.
 
-- ✅ `engine.schema_inference` — detecta placeholders no template (5 sintaxes: mustache/bracket/chevron/named-blank/anonymous-blank), opcional LLM enrichment de field_type/format_hint/required
-- ✅ `engine.hybrid_mapper` — regex first via pattern_inference, single batched LLM call só nos missing. Output `MappingResult{value, source: regex|llm|missing, confidence}`
-- ✅ `engine.semantic_diff` — text-only LLM compare (zero LibreOffice). Discrepancies tipadas: `missing_in_output` / `value_mismatch` / `extra_in_output`. Severity: critical / warning / info
-- ✅ `engine.batch.normalize_batch()` — async paralelo, max_concurrent configurável, direct token-substitution renderer (sem PresetBundle)
-- ✅ `BatchReport.to_dict()` — JSON-serializable com per-doc mapping summary, discrepancies, tier
-- ✅ Tier classification: `high` (regex resolveu tudo, sem critical diff) / `medium` (LLM filled OR warning) / `low` (missing required OR critical) / `error`
-- ✅ CLI `template-engine normalize --template T --source-dir SD --output-dir OD --provider gemini --gold-doc G --field-examples FE.json --report R --skip-diff --max-concurrent N`
+- [done] `engine.schema_inference` — detecta placeholders no template (5 sintaxes: mustache/bracket/chevron/named-blank/anonymous-blank), opcional LLM enrichment de field_type/format_hint/required
+- [done] `engine.hybrid_mapper` — regex first via pattern_inference, single batched LLM call só nos missing. Output `MappingResult{value, source: regex|llm|missing, confidence}`
+- [done] `engine.semantic_diff` — text-only LLM compare (zero LibreOffice). Discrepancies tipadas: `missing_in_output` / `value_mismatch` / `extra_in_output`. Severity: critical / warning / info
+- [done] `engine.batch.normalize_batch()` — async paralelo, max_concurrent configurável, direct token-substitution renderer (sem PresetBundle)
+- [done] `BatchReport.to_dict()` — JSON-serializable com per-doc mapping summary, discrepancies, tier
+- [done] Tier classification: `high` (regex resolveu tudo, sem critical diff) / `medium` (LLM filled OR warning) / `low` (missing required OR critical) / `error`
+- [done] CLI `template-engine normalize --template T --source-dir SD --output-dir OD --provider gemini --gold-doc G --field-examples FE.json --report R --skip-diff --max-concurrent N`
 
 **Smoke test real:** 5 docs → 5/5 high tier, ZERO LLM calls quando regex resolve. Commit: `126b0c0`. Tests: +55 (116 → 172).
 
@@ -154,19 +154,19 @@ End-to-end: 1 template + N source docs → N normalized + report.json.
 from engine.conformity import check_conformity, ConformityReport
 
 report = await check_conformity(
-    template_path="padrao.docx",
-    candidate_path="candidato.docx",
-    *,
-    llm=llm,                 # texto + design (multimodal)
-    schemas=schemas,          # pra technical_dimension
-    inferred_patterns=...,    # pra technical_dimension
-    dimensions=["text", "structural", "visual", "design", "technical"],
+ template_path="padrao.docx",
+ candidate_path="candidato.docx",
+ *,
+ llm=llm, # texto + design (multimodal)
+ schemas=schemas, # pra technical_dimension
+ inferred_patterns=..., # pra technical_dimension
+ dimensions=["text", "structural", "visual", "design", "technical"],
 )
 
-report.is_conformant   # bool
-report.score           # 0-1 weighted
-report.failures        # list[Failure(dimension, field, expected, actual, severity)]
-report.by_dimension    # dict[str, DimensionResult]
+report.is_conformant # bool
+report.score # 0-1 weighted
+report.failures # list[Failure(dimension, field, expected, actual, severity)]
+report.by_dimension # dict[str, DimensionResult]
 ```
 
 ### 5 dimensões
@@ -208,9 +208,9 @@ report.by_dimension    # dict[str, DimensionResult]
 
 ---
 
-## v0.3 — Eval suite + CI + docs site 🟡
+## v0.3 — Eval suite + CI + docs site [wip]
 
-### Eval suite ❌
+### Eval suite [no]
 
 - [ ] **`benchmarks/datasets/`** — 3 datasets gold anonimizados (contratos, laudos, relatórios). 20-30 docs cada.
 - [ ] **`benchmarks/eval.py`** — runner que executa pipeline em dataset + compara output vs gold
@@ -220,7 +220,7 @@ report.by_dimension    # dict[str, DimensionResult]
 - [ ] **Report HTML** — diff visual + métricas por etapa
 - [ ] **Regression tests** — eval roda em PR, falha se cai >10% em qualquer métrica
 
-### CI ✅ (parcial)
+### CI [done] (parcial)
 
 - [x] **GitHub Actions** workflow: lint (ruff) + format (ruff format) + type (mypy) + tests (pytest com coverage)
 - [x] **Matrix** Python 3.11, 3.12, 3.13
@@ -230,7 +230,7 @@ report.by_dimension    # dict[str, DimensionResult]
 - [ ] **Dependabot** configurado
 - [ ] **CodeQL** scan de segurança
 
-### Docs site ✅ (mostly done)
+### Docs site [done] (mostly done)
 
 - [x] **mkdocs-material** site em `docs/` → GitHub Pages live em https://luizhcrs.github.io/template-engine/
 - [x] **Bilingual EN/PT-BR** via `mkdocs-static-i18n`
