@@ -10,68 +10,85 @@ title: Início
 # template-engine
 
 <p class="lead" markdown>
-Engine de normalização documental. Aprende o padrão de documentos-exemplo e converte qualquer documento-fonte pro padrão automaticamente via LLM.
+Engine de normalização documental audit-grade. Regex-first, LLM-as-judge, zero LibreOffice. Construído pra ambientes regulados onde conteúdo de doc não pode vazar.
 </p>
 
-[Comece aqui](quickstart.md){ .md-button .md-button--primary }
+[Quickstart](quickstart.md){ .md-button .md-button--primary }
 [GitHub](https://github.com/Luizhcrs/template-engine){ .md-button }
 </div>
 
-## Por quê
+## Por que existe
 
-Padronizar documentos é trabalho repetitivo, sujeito a erro, e geralmente feito por copy-paste entre `.docx`. **template-engine** aprende o padrão a partir de 1-5 documentos-exemplo (gold docs) e converte qualquer documento-fonte pro mesmo padrão automaticamente.
+Três problemas que soluções off-the-shelf não resolvem juntos:
 
-## Princípio
+- **Custo** — pagar LLM por doc quando 95% dos campos são extraíveis mecanicamente.
+- **Compliance** — regulador quer auditabilidade + garantia que dado LGPD/HIPAA não saiu pra API externa.
+- **Verificação** — "o candidato bateu com o padrão?" — texto sozinho não basta; estrutura, layout, formatos obrigatórios também.
 
-**Renderer determinístico, conteúdo via LLM.** Regras de formatação vivem em YAML; conteúdo é extraído pelo modelo. Trocar de LLM (Gemini → GPT → Claude) não muda o resultado visual.
+## Como resolve
+
+- **Hybrid mapper** — tier regex resolve o que dá; só missing vai pra LLM em uma chamada batched. Doc resolvido por regex = zero LLM tokens.
+- **`local_only=True`** raise antes de qualquer chamada remota. PII masking + audit log append-only + regex path replayable bit-a-bit.
+- **`check_conformity`** — veredicto multi-dim em texto + estrutural + visual + design + técnico. Cada dimensão score independente. Um único critical (CPF inválido, placeholder órfão, campo perdido) reprova independente do score médio.
 
 ## Pipeline
 
 ```
-extractor → preset_creator → llm_mapper → validator → renderer
+extract → schema_inference → pattern_inference → hybrid_mapper → render → semantic_diff
+                                                                                  ↓
+                                                                       ConformityReport
 ```
 
 <div class="te-feature-grid" markdown>
 
 <div class="te-feature" markdown>
-### Multi-provider
-6 provedores LLM prontos: Gemini, OpenAI, Anthropic, Groq, Ollama, OpenRouter. Adicione o seu via Protocol `LLMProvider`.
+### Regex-first
+`pattern_inference` aprende regex de 3 gold docs + exemplos de campos. 10 shapes pré-definidas + `grex` opcional. Doc resolvido por regex custa zero LLM tokens.
 </div>
 
 <div class="te-feature" markdown>
-### Engine stateless
-Recebe paths/bytes, retorna paths/bytes/dicts. Sem acoplamento com FastAPI/SQLAlchemy/auth. Plugue em qualquer app.
+### LLM como juiz, não autor
+`semantic_diff` e dimensões `text` / `design` perguntam ao LLM "alguma coisa sumiu?" e "isso bate com o padrão?". O LLM não escreve conteúdo — ele audita.
 </div>
 
 <div class="te-feature" markdown>
-### Tokens críticos preservados
-Códigos, siglas e valores técnicos preservados com precisão entre conversões. Validador detecta drift.
+### Modo local-only
+`local_only=True` em `normalize_batch` e `check_conformity` raise se qualquer LLM for passado. Garantia dura pra deployments LGPD/HIPAA-grade.
 </div>
 
 <div class="te-feature" markdown>
-### Fallback inteligente
-`LLMRouter` encadeia provedores com fallback automático em rate-limit / timeout. Orquestração consciente de custo.
+### Multi-provider com fallback
+6 providers — Gemini, OpenAI, Anthropic, Groq, Ollama, OpenRouter. `LLMRouter` encadeia com fallback automático em rate-limit / timeout.
 </div>
 
 <div class="te-feature" markdown>
-### Type-safe
-Marker `py.typed`, type hints em toda API pública. Mypy-friendly em apps downstream.
+### Stateless
+Path/bytes in, paths/bytes/dataclasses out. Sem framework web, ORM, app layer. Plug em qualquer caller.
 </div>
 
 <div class="te-feature" markdown>
-### Open source
-Apache 2.0. Issues, PRs e contribuições de novos providers bem-vindos.
+### Audit trail
+`engine.security.AuditLog` escreve JSON Lines append-only. Registra sha256 hashes — nunca conteúdo bruto.
 </div>
 
 </div>
+
+## Custo por tier (Gemini Flash)
+
+| Path | LLM calls | $/doc |
+|------|-----------|-------|
+| Regex resolve tudo | 0 | **$0.0000** |
+| Alguns campos vão pra LLM fallback | 1 | ~$0.0006 |
+| Com `semantic_diff` ligado | 2 | ~$0.0012 |
+| Com `check_conformity(text + design)` | 4 | ~$0.0024 |
 
 ## Casos de uso
 
-- Padronização de contratos jurídicos
-- Normalização de laudos técnicos
-- Migração de documentos legados para template novo
-- Compliance: forçar tipografia + preservação de tokens críticos
-- Extração estruturada de PDFs → `.docx` polido
+- Industrial: padronizar 400 laudos de manutenção pro template corporativo.
+- Jurídico: normalização de cláusulas de contrato com audit trail.
+- Governo / regulado: processamento de formulários com `local_only=True` + PII masking.
+- Migração: trazer documentos legados pro padrão corporativo novo.
+- QA: verificar se terceiro entregou docs que batem com a spec (`check_conformity`).
 
 ## Instalação rápida
 
@@ -79,7 +96,7 @@ Apache 2.0. Issues, PRs e contribuições de novos providers bem-vindos.
 pip install "template-engine[gemini]"
 ```
 
-[Continuar com Quickstart →](quickstart.md){ .md-button .md-button--primary }
+[Continue com Quickstart →](quickstart.md){ .md-button .md-button--primary }
 
 ## Licença
 

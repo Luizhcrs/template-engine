@@ -1,6 +1,6 @@
 # Quickstart
 
-End-to-end pipeline in under 60 seconds.
+End-to-end normalization in under 60 seconds.
 
 ## Install
 
@@ -22,6 +22,12 @@ End-to-end pipeline in under 60 seconds.
     pip install "template-engine[anthropic]"
     ```
 
+=== "Local-only (Ollama, no remote LLM)"
+
+    ```bash
+    pip install "template-engine[ollama]"
+    ```
+
 === "All providers"
 
     ```bash
@@ -36,57 +42,94 @@ Set your API key:
 export GEMINI_API_KEY="AIza..."
 ```
 
-## Pipeline in 4 steps
+## Normalize a directory
 
 ```python
 import asyncio
 from pathlib import Path
-from engine import (
-    create_preset, load_preset, extract, map_content, render,
-)
+from engine import normalize_batch
 from engine.llm.gemini_free import GeminiFreeProvider
 
 async def main():
-    provider = GeminiFreeProvider(api_key="AIza...")
-
-    # 1. Learn pattern from template + reference docs
-    preset_dir = await create_preset(
-        llm=provider,
+    report = await normalize_batch(
         template_path=Path("template.docx"),
-        gold_paths=[Path("gold_01.docx"), Path("gold_02.docx")],
-        dest_dir=Path("./presets/my-template"),
+        source_dir=Path("docs/"),
+        output_dir=Path("normalized/"),
+        llm=GeminiFreeProvider(api_key="AIza..."),
+        gold_docs=[open(p).read() for p in Path("gold/").glob("*.txt")],
+        field_examples={
+            "CODIGO":      ["ABC-001", "ABC-042", "ABC-099"],
+            "DATA":        ["2026-01-15", "2026-04-26", "2026-07-30"],
+            "RESPONSAVEL": ["Joao Silva", "Maria Souza", "Pedro Lima"],
+        },
     )
-
-    # 2. Load
-    preset = load_preset(preset_dir)
-
-    # 3. Map source content into structured JSON
-    doc = extract(Path("source.docx"))
-    data = await map_content(preset, doc.text, provider)
-
-    # 4. Render final .docx
-    render(preset, data, output_path=Path("out.docx"))
+    print(report.by_tier)         # {"high": 380, "medium": 15, "low": 5, "error": 0}
+    print(report.llm_call_count)  # ~25 — 380 high docs cost zero LLM
 
 asyncio.run(main())
 ```
 
-## What each step does
+## What each stage does
 
-1. **`create_preset`** calls the LLM once to analyze the template + gold docs. Generates `pattern.md`, `schema.json`, `render_ops.yaml`, `validation.yaml`.
-2. **`load_preset`** loads the bundle ready to use.
-3. **`map_content`** calls the LLM with a few-shot prompt and extracts structured JSON from the source.
-4. **`render`** applies YAML operations to the template + JSON and produces a deterministic final `.docx`.
+1. **`schema_inference`** scans the template for placeholders (`{{X}}`, `[X]`, `___`, etc) and builds a `FieldSchema` list. With `llm=` supplied, the LLM enriches each field with an inferred `field_type` / `format_hint` / `required`.
+2. **`pattern_inference`** synthesizes one regex per field from the gold docs + example values. Three tiers: predefined shapes, optional `grex`-learned, free-text fallback.
+3. **`hybrid_mapper`** runs the regex per field on each source. Fields the regex fills get `source="regex"`. Fields it can't get sent to the LLM in a single batched call. Output: `{field: MappingResult{value, source, confidence}}`.
+4. **Renderer** copies the template, substitutes the placeholder tokens with mapped values, and saves to `output_dir`.
+5. **`semantic_diff`** asks the LLM whether anything from the source went missing. Discrepancies are graded `critical` / `warning` / `info`.
+6. **Tier classification** buckets each doc into `high` / `medium` / `low` / `error`.
 
-## Validate output
+## CLI
+
+```bash
+template-engine normalize \
+  --template template.docx \
+  --source-dir docs/ \
+  --output-dir normalized/ \
+  --provider gemini \
+  --gold-doc gold1.docx --gold-doc gold2.docx --gold-doc gold3.docx \
+  --field-examples examples.json \
+  --report report.json
+```
+
+## Conformity check
+
+After normalization, verify a candidate matches the standard:
 
 ```python
-from engine import validate, calculate_confidence, confidence_label
+from engine import check_conformity
 
-result = validate(doc.text, data, preset.validation)
-score = calculate_confidence(result)
-label = confidence_label(score)
-print(f"{score:.2f} -> {label.value}")
+report = await check_conformity(
+    template_path=Path("padrao.docx"),
+    candidate_path=Path("candidato.docx"),
+    llm=provider,
+    schemas=schemas,
+    mapping=mapping,
+    dimensions=["text", "structural", "visual", "technical"],
+    threshold=0.85,
+)
+
+print(report.summary_line)
+# CONFORMANT score=0.92 threshold=0.85 failures=1 (critical=0)
+
+for dim, dr in report.by_dimension.items():
+    print(f"  {dim:<11} score={dr.score:.3f}  failures={len(dr.failures)}")
 ```
+
+CLI: `template-engine conformity --template T --candidate C --provider gemini --threshold 0.85`.
+
+## Local-only mode (LGPD/HIPAA)
+
+```python
+report = await normalize_batch(
+    template_path, source_dir, output_dir,
+    llm=None,
+    field_examples=examples,
+    gold_docs=golds,
+    local_only=True,    # raises if any LLM is supplied
+)
+```
+
+In local-only mode, only the regex tier runs. Missing fields stay missing. See [Security model](https://github.com/Luizhcrs/template-engine/blob/main/SECURITY-MODEL.md) for the operating-mode matrix and provider data residency.
 
 ## With router (fallback)
 
@@ -102,13 +145,24 @@ router = LLMRouter([
     OpenAIProvider(api_key=o_key),       # last resort
 ])
 
-# Same interface as individual providers
-data = await map_content(preset, source_text, router)
+report = await normalize_batch(template, source_dir, output_dir, llm=router, ...)
 ```
+
+## PII masking before LLM
+
+```python
+from engine.security import mask_pii, unmask
+
+masked, mask = mask_pii(source_text)
+response = await llm.generate_structured(prompt(masked), schema)
+restored = unmask(json.dumps(response), mask)
+```
+
+Detects CPF, CNPJ, email, BR phone, RG, CEP. Each unique value gets one stable token; `unmask` restores originals after the response comes back.
 
 ## Next steps
 
 - [Concepts → Pipeline](concepts/pipeline.md)
-- [Concepts → Preset anatomy](concepts/preset.md)
+- [Concepts → Architecture](concepts/architecture.md)
 - [Providers → Overview](providers/index.md)
 - [Contributing](contributing.md)

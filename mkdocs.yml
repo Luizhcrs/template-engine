@@ -126,13 +126,9 @@ plugins:
             Quickstart: Comece aqui
             Concepts: Conceitos
             Pipeline: Pipeline
-            Preset anatomy: Anatomia do preset
-            Render ops: Operações de renderização
-            Visual validation: Validação visual
-            Architecture deep-dive: Arquitetura — deep-dive
+            Architecture: Arquitetura
             Providers: Provedores LLM
             Overview: Visão geral
-            API Reference: Referência API
             Contributing: Contribuindo
 
 nav:
@@ -140,10 +136,7 @@ nav:
   - Quickstart: quickstart.md
   - Concepts:
     - Pipeline: concepts/pipeline.md
-    - Preset anatomy: concepts/preset.md
-    - Render ops: concepts/render-ops.md
-    - Visual validation: concepts/visual-validation.md
-    - Architecture deep-dive: concepts/architecture.md
+    - Architecture: concepts/architecture.md
   - Providers:
     - Overview: providers/index.md
   - Contributing: contributing.md
