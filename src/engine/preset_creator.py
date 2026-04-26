@@ -112,7 +112,7 @@ async def create_preset(
         dest_dir: diretório onde o preset será salvo
         slug: identificador único (default: dest_dir.name)
         name: nome legível (default: slug capitalizado)
-        owner: identificador opcional do dono do preset (multi-tenant)
+        owner: identificador opcional do dono do preset (free-form)
 
     Returns:
         Path do diretório do preset criado

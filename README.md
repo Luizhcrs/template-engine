@@ -84,7 +84,7 @@ asyncio.run(main())
 
 ## Architecture
 
-**Stateless.** Recebe paths/bytes, retorna paths/bytes/dicts. Sem dependência de FastAPI, SQLAlchemy ou qualquer framework de SaaS.
+**Stateless.** Recebe paths/bytes, retorna paths/bytes/dicts. Sem dependência de framework web, ORM ou camada de aplicação.
 
 **Determinístico no rendering.** LLM nunca decide forma visual. Tudo que afeta visual vive em `render_ops.yaml`. Trocar de modelo não muda saída visual.
 

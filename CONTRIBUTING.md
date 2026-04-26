@@ -108,7 +108,7 @@ my-provider = ["my-sdk>=1.0"]
 ```
 feat(extractor): add ODT support
 fix(renderer): handle empty body in write_section
-docs: clarify multi-tenant path validation
+docs: clarify path traversal validation
 test(validator): cover edge case for nested sections
 refactor(llm_mapper): extract prompt builder
 ```

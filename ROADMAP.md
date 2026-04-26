@@ -6,78 +6,106 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 
 ---
 
-## v0.1.0 — Atual (released 2026-04-25)
+## Status atual (2026-04-26)
 
-Pipeline básico funcionando:
-- Extractor `.docx` + `.pdf`
-- Preset creator (LLM gera pattern + schema + render_ops)
-- LLM mapper (prompt + few-shot + JSON Schema)
-- Validator (tokens críticos + cobertura)
-- Renderer (.docx output via render_ops)
-- 1 provider: Gemini free
-- 29 tests passing
+| Versão | Estado | Tag | Highlight |
+|---|---|---|---|
+| v0.1.0 | ✅ entregue | `v0.1.0` (2026-04-25) | Pipeline básico, Gemini provider, 29 tests |
+| v0.1.1 | ✅ entregue | `v0.1.1` (2026-04-25) | Security hardening + breaking API cleanups |
+| v0.2.0 | ✅ entregue | `v0.2.0` (2026-04-25) | Multi-provider (5 novos) + LLMRouter |
+| v0.3   | 🟡 parcial (~50%) | — | CI ✅ docs ✅ i18n ✅ · eval suite ❌ CLI ❌ |
+| v0.4+  | 📋 planejado | — | OCR + extractors + renderer expandido |
 
-**Limitações conhecidas:**
-- 1 provider só
-- Sem OCR (PDF escaneado falha)
-- Sem suporte de tabelas multi-página
-- API ainda recebe muito `Path`/`dict` solto, sem objetos tipados consistentes
-- Zero observabilidade
-- Zero CLI
+**Onde estamos hoje:** lib estável com 6 providers, router de fallback, docs bilingual EN/PT-BR, CI verde matrix py3.11/3.12/3.13. Falta principalmente eval suite + CLI + extractors avançados pra subir pra v0.3 completa.
 
 ---
 
-## v0.2 — Multi-provider LLM (foundation)
+## v0.1.0 — entregue 2026-04-25 ✅
 
-**Por quê primeiro:** sem multi-provider, lib é "Gemini wrapper". Multi-provider abre testes A/B, cost-aware routing, e independência de fornecedor.
-
-### Tasks
-
-- [ ] **`engine.llm.openai_provider`** — OpenAI (gpt-4o-mini, gpt-4o, gpt-5)
-- [ ] **`engine.llm.anthropic_provider`** — Claude (Sonnet 4.6, Opus 4.6, Haiku 4.5)
-- [ ] **`engine.llm.groq_provider`** — Groq (Llama 3.3 70B, mixtral)
-- [ ] **`engine.llm.ollama_provider`** — local (Ollama com modelo configurável)
-- [ ] **`engine.llm.openrouter_provider`** — universal (400+ modelos)
-- [ ] **`engine.llm.router`** — policy: `[primary, fallback1, fallback2]` com auto-rotation em rate limit / erro
-- [ ] **`LLMConfig`** — config tipada (max_tokens, temperature, retry_attempts, timeout)
-- [ ] **Streaming optional** — interface `generate_structured_stream` pra futuros casos
-- [ ] **Tool use uniformizado** — abstração de function calling cross-provider
-
-### Critério done
-
-- 5 providers implementados, todos passando suite de tests comum
-- Router faz fallback automático em rate limit
-- Doc + exemplo no README pra cada provider
+Pipeline básico:
+- ✅ Extractor `.docx` + `.pdf`
+- ✅ Preset creator (LLM gera pattern + schema + render_ops)
+- ✅ LLM mapper (prompt + few-shot + JSON Schema)
+- ✅ Validator (tokens críticos + cobertura)
+- ✅ Renderer (.docx output via render_ops)
+- ✅ Provider Gemini
 
 ---
 
-## v0.3 — Eval suite + CI + docs site
+## v0.1.1 — entregue 2026-04-25 ✅
 
-**Por quê:** sem eval, "qual provider é melhor" é chute. Sem CI, contribuições quebram main. Sem docs, OSS não cresce.
+Security + breaking API cleanups:
+- ✅ Path traversal hardening em `preset_loader`
+- ✅ Prompt injection delimiters em `llm_mapper` + `preset_creator`
+- ✅ `create_preset` keyword-only com defaults
+- ✅ `ConfidenceLabel` enum (HIGH/MEDIUM/LOW)
+- ✅ structlog substituiu stdlib logging
+- ✅ Gemini captura `ResourceExhausted`/`DeadlineExceeded` SDK-typed
+- ✅ `engine.__init__` exporta API pública + `__all__`
+- ✅ `py.typed` marker
+- ✅ `gemini` virou optional dep `[gemini]`
 
-### Eval suite
+---
+
+## v0.2.0 — entregue 2026-04-25 ✅
+
+Multi-provider LLM:
+- ✅ **`OpenAIProvider`** — `response_format=json_schema` strict mode
+- ✅ **`AnthropicProvider`** — tool use forçado pra coerce JSON
+- ✅ **`GroqProvider`** — JSON mode (OpenAI-compatible)
+- ✅ **`OllamaProvider`** — local via httpx
+- ✅ **`OpenRouterProvider`** — subclass de OpenAI com base_url
+- ✅ **`LLMRouter`** — fallback automático em rate-limit/timeout
+- ✅ `_retry_after_from_error` extrai header dinâmico (era hardcoded 60s)
+- ✅ Optional deps por provider: `[gemini|openai|anthropic|groq|ollama|openrouter|all]`
+- ✅ 36 tests passing (29 anteriores + 7 novos pro router)
+
+**Não entregue (movido pra v0.3+):**
+- ❌ `LLMConfig` tipada (max_tokens, temperature, retry_attempts, timeout) — providers aceitam kwargs ad-hoc
+- ❌ Streaming `generate_structured_stream` — não tinha caso de uso urgente
+- ❌ Tool use uniformizado cross-provider — Anthropic usa, OpenAI usa schema, outros injetam — dívida técnica
+
+---
+
+## v0.3 — Eval suite + CI + docs site 🟡
+
+### Eval suite ❌
 
 - [ ] **`benchmarks/datasets/`** — 3 datasets gold anonimizados (contratos, laudos, relatórios). 20-30 docs cada.
 - [ ] **`benchmarks/eval.py`** — runner que executa pipeline em dataset + compara output vs gold
 - [ ] **Métricas**: token preservation rate, schema validity, structural accuracy, latency, cost
-- [ ] **LLM-as-judge** — Claude/GPT4 avaliando saída vs gold em critérios estruturados
+- [ ] **LLM-as-judge** — Claude/GPT-4 avaliando saída vs gold em critérios estruturados
 - [ ] **CLI**: `template-engine eval --provider gemini --dataset contratos`
 - [ ] **Report HTML** — diff visual + métricas por etapa
 - [ ] **Regression tests** — eval roda em PR, falha se cai >10% em qualquer métrica
 
-### CI
+### CI ✅ (parcial)
 
-- [ ] **GitHub Actions** workflow: lint (ruff) + format (black) + type (mypy strict) + tests (pytest com coverage >80%)
-- [ ] **Matrix** Python 3.11, 3.12, 3.13
-- [ ] **Coverage badge** README
-- [ ] **Auto-publish** PyPI em tag (release-please ou semver-action)
+- [x] **GitHub Actions** workflow: lint (ruff) + format (ruff format) + type (mypy) + tests (pytest com coverage)
+- [x] **Matrix** Python 3.11, 3.12, 3.13
+- [x] **Coverage badge** README (via codecov)
+- [ ] **Windows runner** — só ubuntu hoje
+- [ ] **Auto-publish PyPI** em tag (release-please ou semver-action)
+- [ ] **Dependabot** configurado
+- [ ] **CodeQL** scan de segurança
 
-### Docs site
+### Docs site ✅ (mostly done)
 
-- [ ] **mkdocs-material** site em `docs/` → GitHub Pages
-- [ ] Pages: Quickstart, Concepts (preset/pipeline/render_ops), Providers, API Reference, Examples, Contributing
-- [ ] **Examples cookbook** — 5+ casos reais (contratos, laudos, migração legacy, RH, etc)
+- [x] **mkdocs-material** site em `docs/` → GitHub Pages live em https://luizhcrs.github.io/template-engine/
+- [x] **Bilingual EN/PT-BR** via `mkdocs-static-i18n`
+- [x] Pages: Home, Quickstart, Concepts/{pipeline,preset,render-ops}, Providers/index, Contributing
+- [x] **Custom theme**: paleta brand orange, hero card, feature grid, custom CSS
 - [ ] **API reference** auto-gerada via mkdocstrings
+- [ ] **Examples cookbook** — atualmente 3 examples (`01_quickstart`, `02_custom_provider`, `03_validation`); meta = 5+ casos reais (contratos jurídicos, laudos técnicos, migração legacy, RH, etc)
+- [ ] **Mike** — versionamento de docs por release
+- [ ] **Social cards** via mkdocs-material[imaging]
+
+### Critério done v0.3
+
+- Eval suite com ≥1 dataset rodando + métricas reproduzíveis
+- CLI básica `template-engine convert|eval`
+- mkdocstrings gerando API reference
+- 5+ examples cookbook
 
 ---
 
@@ -254,7 +282,7 @@ Não basta features. Pra ser referência:
 ## Métricas norte (12 meses)
 
 - v1.0 lançado até 2027-04-25
-- Pipeline rodando em ≥3 SaaS distintos (normadocs + 2 outros)
+- Pipeline rodando em ≥3 produtos/aplicações distintas
 - Eval suite com ≥3 datasets gold
 - ≥1k downloads/mês PyPI
 - Cited em ≥1 blog/paper técnico
