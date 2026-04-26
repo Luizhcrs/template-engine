@@ -139,16 +139,50 @@ def extract(
         console.print(Panel(preview, title="Text preview", border_style="dim"))
 
 
+@app.command(name="list-formats")
+def cmd_list_formats() -> None:
+    """List all bundled formats (Wave H)."""
+    from engine.formats import describe_formats
+
+    table = Table(title="Bundled formats", show_header=True, header_style="bold")
+    table.add_column("Name", style="bold")
+    table.add_column("Spec")
+    table.add_column("Fields")
+    table.add_column("Title")
+    for entry in describe_formats():
+        table.add_row(
+            entry["name"],
+            entry["spec"],
+            str(len(entry["fields"])),
+            entry["title"],
+        )
+    console.print(table)
+    console.print(
+        Panel(
+            "Use [bold]--format <name>[/bold] in [bold]normalize[/bold] or "
+            "[bold]conformity[/bold] to apply a bundled format.",
+            border_style="dim",
+        )
+    )
+
+
 @app.command()
 def normalize(
     template: Annotated[
-        Path, typer.Option("--template", help="Template .docx with placeholder tokens", exists=True)
-    ],
+        Path | None,
+        typer.Option("--template", help="Template .docx with placeholder tokens"),
+    ] = None,
     source_dir: Annotated[
-        Path,
-        typer.Option("--source-dir", help="Directory containing source .docx/.pdf files", exists=True),
-    ],
-    output_dir: Annotated[Path, typer.Option("--output-dir", help="Where normalized outputs go")],
+        Path | None,
+        typer.Option("--source-dir", help="Directory containing source .docx/.pdf files"),
+    ] = None,
+    output_dir: Annotated[
+        Path | None, typer.Option("--output-dir", help="Where normalized outputs go")
+    ] = None,
+    format_name: Annotated[
+        str | None,
+        typer.Option("--format", help="Use a bundled format (run list-formats to see options)"),
+    ] = None,
     provider: Annotated[
         str | None,
         typer.Option("--provider", help="LLM provider for fallback + diff (omit for regex-only)"),
@@ -177,8 +211,28 @@ def normalize(
     hybrid_mapper (regex first, LLM fallback) → token-substitution renderer →
     semantic_diff (if LLM given). Output buckets each doc into high/medium/low
     confidence tiers.
+
+    With ``--format <name>`` the bundled format provides gold docs + field
+    examples + recommended threshold; you still pass ``--template`` (the
+    standard target template) and ``--source-dir`` / ``--output-dir``.
     """
     from engine.batch import normalize_batch
+    from engine.formats import FormatNotFound, load_format
+
+    fmt = None
+    if format_name:
+        try:
+            fmt = load_format(format_name)
+        except FormatNotFound as e:
+            raise typer.BadParameter(str(e)) from e
+        console.print(f"[bold]Format:[/bold] {fmt.name} ({fmt.spec})")
+
+    if template is None or source_dir is None or output_dir is None:
+        raise typer.BadParameter("--template, --source-dir, --output-dir are required")
+    if not template.exists():
+        raise typer.BadParameter(f"--template not found: {template}")
+    if not source_dir.exists():
+        raise typer.BadParameter(f"--source-dir not found: {source_dir}")
 
     llm = None
     if provider:
@@ -190,12 +244,18 @@ def normalize(
     gold_docs_text: list[str] | None = None
     if gold_doc:
         gold_docs_text = [engine_extract(p).text for p in gold_doc]
-        console.print(f"[dim]Loaded {len(gold_docs_text)} gold doc(s)[/dim]")
+        console.print(f"[dim]Loaded {len(gold_docs_text)} gold doc(s) from --gold-doc[/dim]")
+    elif fmt is not None:
+        gold_docs_text = list(fmt.gold_docs)
+        console.print(f"[dim]Loaded {len(gold_docs_text)} gold doc(s) from format {fmt.name}[/dim]")
 
     field_examples_dict: dict[str, list[str]] | None = None
     if field_examples_json:
         field_examples_dict = json.loads(field_examples_json.read_text(encoding="utf-8"))
-        console.print(f"[dim]Loaded {len(field_examples_dict)} field example(s)[/dim]")
+        console.print(f"[dim]Loaded {len(field_examples_dict)} field example(s) from JSON[/dim]")
+    elif fmt is not None:
+        field_examples_dict = dict(fmt.field_examples)
+        console.print(f"[dim]Loaded {len(field_examples_dict)} field example(s) from format {fmt.name}[/dim]")
 
     with console.status("normalizing batch...", spinner="dots"):
         report = asyncio.run(
@@ -260,6 +320,10 @@ def normalize(
 def conformity(
     template: Annotated[Path, typer.Option("--template", help="Template .docx (gold standard)", exists=True)],
     candidate: Annotated[Path, typer.Option("--candidate", help="Candidate .docx to evaluate", exists=True)],
+    format_name: Annotated[
+        str | None,
+        typer.Option("--format", help="Use a bundled format (overrides default weights + threshold)"),
+    ] = None,
     provider: Annotated[
         str | None,
         typer.Option("--provider", help="LLM provider for text dimension (omit to skip)"),
@@ -285,8 +349,24 @@ def conformity(
     Evaluates whether a candidate document conforms to a template across up to
     five dimensions: text (LLM), structural (docx parsing), visual (ascii layout),
     design (multimodal LLM, optional), technical (format validators).
+
+    With ``--format <name>`` the bundled format provides the conformity weights
+    and recommended threshold (overridable by ``--threshold``).
     """
     from engine.conformity import check_conformity
+    from engine.formats import FormatNotFound, load_format
+
+    fmt = None
+    weights: dict[str, float] | None = None
+    if format_name:
+        try:
+            fmt = load_format(format_name)
+        except FormatNotFound as e:
+            raise typer.BadParameter(str(e)) from e
+        weights = dict(fmt.conformity_weights)
+        if threshold == 0.85:
+            threshold = fmt.recommended_threshold
+        console.print(f"[bold]Format:[/bold] {fmt.name} ({fmt.spec})")
 
     llm = None
     if provider:
@@ -307,6 +387,7 @@ def conformity(
                 visual_llm=None,
                 dimensions=dims,
                 threshold=threshold,
+                weights=weights,
             )
         )
 

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Wave H (bundled formats library)
+
+- **`engine.formats`** subpackage with 5 ready-to-use document formats. Each format ships :class:`FieldSchema` list, ``field_examples`` for ``pattern_inference``, 3 gold docs, conformity weight overrides, required headings, and a recommended threshold.
+  - **`abnt_artigo`** — ABNT NBR 6022:2018 (artigo cientifico). 8 fields: titulo, autores, resumo, palavras-chave, abstract, keywords, introducao, referencias.
+  - **`abnt_tcc`** — ABNT NBR 14724:2024 (TCC, dissertacao, tese). 11 fields: titulo, autor, orientador, instituicao, curso, ano, local, resumo, abstract, palavras-chave, keywords. Required headings: RESUMO, ABSTRACT, SUMARIO, INTRODUCAO, CONCLUSAO, REFERENCIAS.
+  - **`abnt_referencia`** — ABNT NBR 6023:2018 (referencia bibliografica). 7 fields, near-perfect threshold 0.90 — useful as a standalone validator for reference lines.
+  - **`laudo_nr12`** — NR-12 (Portaria MTE), laudo de seguranca em maquinas. 11 fields: empresa, cnpj, endereco, equipamento, tag, fabricante, NS, data, responsavel, CREA, conclusao. Conformity weights emphasize ``technical`` (0.45) since CNPJ + CREA + dates must validate.
+  - **`contrato_simples`** — contrato bilateral generico. 10 fields: titulo, contratante, cnpj_contratante, contratada, cnpj_contratada, objeto, valor, vigencia, foro, data_assinatura.
+- **`load_format(name) -> Format`**, **`list_formats() -> list[str]`**, **`describe_formats() -> list[dict]`**. Raises ``FormatNotFound`` on unknown name.
+- **CLI `template-engine list-formats`** — rich table with name / spec / field count / title.
+- **CLI `--format <name>`** flag added to `normalize` and `conformity`. When supplied, the bundled format provides gold docs + field examples (normalize) or conformity weights + recommended threshold (conformity).
+- 44 new unit tests (189 → **233 passing**) covering registry, shape sanity, gold-coverage, pattern_inference integration, and per-format quirks.
+
+### Changed
+
+- ``__version__`` bumped to ``0.6.0``.
+- README/quickstart docs add a bundled-formats example.
+
 ### Added — Wave G (security primitives for regulated deployments)
 
 - **`engine.security.mask_pii(text)`** — reversible PII masking. Replaces CPF / CNPJ / email / phone (BR) / RG / CEP with stable tokens (``<CPF_001>`` etc). Returns ``(masked_text, PIIMask)``. Repeated occurrences of the same value reuse the same token. ``mask.unmask(text)`` restores originals.

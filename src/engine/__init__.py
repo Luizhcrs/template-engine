@@ -42,6 +42,13 @@ from engine.conformity import (
     validate_uf,
 )
 from engine.extractor import ExtractedDoc, extract
+from engine.formats import (
+    Format,
+    FormatNotFound,
+    describe_formats,
+    list_formats,
+    load_format,
+)
 from engine.hybrid_mapper import MappingResult, map_hybrid
 from engine.hybrid_mapper import summarize as summarize_mapping
 from engine.pattern_inference import (
@@ -73,7 +80,7 @@ from engine.semantic_diff import (
     filter_by_severity,
 )
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     "AuditLog",
@@ -87,6 +94,8 @@ __all__ = [
     "ExtractedDoc",
     "Failure",
     "FieldSchema",
+    "Format",
+    "FormatNotFound",
     "HeadingHint",
     "InferredPattern",
     "InjectionMatch",
@@ -110,6 +119,7 @@ __all__ = [
     "check_text",
     "check_visual",
     "confidence_label",
+    "describe_formats",
     "detect_layout_features",
     "detect_layout_features_multipage",
     "detect_placeholders",
@@ -123,6 +133,8 @@ __all__ = [
     "image_to_ascii",
     "infer_field_patterns",
     "infer_template_schema",
+    "list_formats",
+    "load_format",
     "map_hybrid",
     "mask_pii",
     "normalize_batch",
