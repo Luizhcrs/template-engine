@@ -21,6 +21,11 @@ from engine.ascii_layout import (
 from engine.confidence import ConfidenceLabel, calculate_confidence, confidence_label
 from engine.extractor import ExtractedDoc, extract
 from engine.llm_mapper import map_content
+from engine.pattern_inference import (
+    InferredPattern,
+    apply_inferred,
+    infer_field_patterns,
+)
 from engine.preset_creator import create_preset
 from engine.preset_loader import (
     PresetInvalid,
@@ -53,6 +58,7 @@ __all__ = [
     "ConfidenceLabel",
     "ExtractedDoc",
     "HeadingHint",
+    "InferredPattern",
     "LayoutFeatures",
     "MultiPageLayoutFeatures",
     "PlaceholderHint",
@@ -70,6 +76,7 @@ __all__ = [
     "VisualIssue",
     "VisualValidationResult",
     "__version__",
+    "apply_inferred",
     "calculate_confidence",
     "confidence_label",
     "create_preset",
@@ -79,6 +86,7 @@ __all__ = [
     "docx_to_pngs",
     "extract",
     "image_to_ascii",
+    "infer_field_patterns",
     "list_builtin_presets",
     "list_presets_for_owner",
     "list_user_presets",
