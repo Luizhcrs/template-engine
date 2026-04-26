@@ -129,6 +129,7 @@ plugins:
             Preset anatomy: Anatomia do preset
             Render ops: Operações de renderização
             Visual validation: Validação visual
+            Architecture deep-dive: Arquitetura — deep-dive
             Providers: Provedores LLM
             Overview: Visão geral
             API Reference: Referência API
@@ -142,6 +143,7 @@ nav:
     - Preset anatomy: concepts/preset.md
     - Render ops: concepts/render-ops.md
     - Visual validation: concepts/visual-validation.md
+    - Architecture deep-dive: concepts/architecture.md
   - Providers:
     - Overview: providers/index.md
   - Contributing: contributing.md
