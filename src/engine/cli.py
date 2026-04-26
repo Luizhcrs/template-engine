@@ -264,5 +264,118 @@ def visual_validate(
     console.print(f"[dim]output image:[/dim] {result.output_image}")
 
 
+@app.command()
+def normalize(
+    template: Annotated[
+        Path, typer.Option("--template", help="Template .docx with placeholder tokens", exists=True)
+    ],
+    source_dir: Annotated[
+        Path,
+        typer.Option("--source-dir", help="Directory containing source .docx/.pdf files", exists=True),
+    ],
+    output_dir: Annotated[Path, typer.Option("--output-dir", help="Where normalized outputs go")],
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="LLM provider for fallback + diff (omit for regex-only)"),
+    ] = None,
+    model: Annotated[str | None, typer.Option("--model", help="Override model id")] = None,
+    api_key: Annotated[str | None, typer.Option("--api-key", help="API key (or use env var)")] = None,
+    gold_doc: Annotated[
+        list[Path] | None,
+        typer.Option("--gold-doc", help="Gold reference doc (repeat for each)", exists=True),
+    ] = None,
+    field_examples_json: Annotated[
+        Path | None,
+        typer.Option(
+            "--field-examples",
+            help="JSON file mapping {field_name: [example_values]}",
+            exists=True,
+        ),
+    ] = None,
+    report_path: Annotated[Path | None, typer.Option("--report", help="Where to write report.json")] = None,
+    skip_diff: Annotated[bool, typer.Option("--skip-diff", help="Skip semantic diff QA pass")] = False,
+    max_concurrent: Annotated[int, typer.Option("--max-concurrent", help="Parallel workers")] = 4,
+) -> None:
+    """Normalize a directory of source documents against a template (Wave D batch).
+
+    Pipeline: schema_inference → pattern_inference (if golds given) →
+    hybrid_mapper (regex first, LLM fallback) → token-substitution renderer →
+    semantic_diff (if LLM given). Output buckets each doc into high/medium/low
+    confidence tiers.
+    """
+    from engine.batch import normalize_batch
+
+    llm = None
+    if provider:
+        llm = _build_provider(provider, api_key, model)
+        console.print(f"[bold]Provider:[/bold] {provider} ({getattr(llm, 'model', '?')})")
+    else:
+        console.print("[bold dim]Running in regex-only mode (no LLM provider)[/bold dim]")
+
+    gold_docs_text: list[str] | None = None
+    if gold_doc:
+        gold_docs_text = [engine_extract(p).text for p in gold_doc]
+        console.print(f"[dim]Loaded {len(gold_docs_text)} gold doc(s)[/dim]")
+
+    field_examples_dict: dict[str, list[str]] | None = None
+    if field_examples_json:
+        field_examples_dict = json.loads(field_examples_json.read_text(encoding="utf-8"))
+        console.print(f"[dim]Loaded {len(field_examples_dict)} field example(s)[/dim]")
+
+    with console.status("normalizing batch...", spinner="dots"):
+        report = asyncio.run(
+            normalize_batch(
+                template_path=template,
+                source_dir=source_dir,
+                output_dir=output_dir,
+                llm=llm,
+                gold_docs=gold_docs_text,
+                field_examples=field_examples_dict,
+                enable_semantic_diff=(not skip_diff),
+                max_concurrent=max_concurrent,
+            )
+        )
+
+    tier_counts = report.by_tier
+    total = sum(tier_counts.values())
+
+    summary_table = Table(title=f"Batch summary — {total} document(s)", show_header=True, header_style="bold")
+    summary_table.add_column("Tier", style="bold")
+    summary_table.add_column("Count", justify="right")
+    summary_table.add_column("Meaning")
+    summary_table.add_row(
+        "[green]high[/green]",
+        str(tier_counts["high"]),
+        "regex resolved everything, no critical diff",
+    )
+    summary_table.add_row(
+        "[yellow]medium[/yellow]",
+        str(tier_counts["medium"]),
+        "LLM filled some fields, or warning-level diff",
+    )
+    summary_table.add_row(
+        "[red]low[/red]",
+        str(tier_counts["low"]),
+        "missing required field or critical discrepancy",
+    )
+    summary_table.add_row(
+        "[dim]error[/dim]",
+        str(tier_counts["error"]),
+        "extraction or render failure",
+    )
+    console.print(summary_table)
+    console.print(f"[dim]LLM calls: {report.llm_call_count}[/dim]")
+
+    if report_path is None:
+        report_path = output_dir / "report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(
+        json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    console.print(f"\n[bold green]OK[/bold green] report -> {report_path.resolve()}")
+    console.print(f"[bold green]OK[/bold green] outputs -> {output_dir.resolve()}")
+
+
 if __name__ == "__main__":
     app()
