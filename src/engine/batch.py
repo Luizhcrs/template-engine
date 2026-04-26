@@ -262,6 +262,7 @@ async def normalize_batch(
     gold_docs: list[str] | None = None,
     enable_semantic_diff: bool = True,
     max_concurrent: int = _DEFAULT_MAX_CONCURRENT,
+    local_only: bool = False,
 ) -> BatchReport:
     """Run the full pipeline over a directory of source docs.
 
@@ -278,10 +279,18 @@ async def normalize_batch(
             ``field_examples`` is provided.
         enable_semantic_diff: skip the post-normalization LLM diff when ``False``.
         max_concurrent: bound on parallel doc processing (default 4).
+        local_only: when ``True``, raise :class:`RefusedRemoteCallError` if any
+            LLM-bearing input is supplied. Use for regulated deployments where
+            no document content may leave the host.
 
     Returns:
         :class:`BatchReport` with per-doc outcomes and aggregate counts.
     """
+    if local_only and llm is not None:
+        from engine.security.local_only import RefusedRemoteCallError
+
+        raise RefusedRemoteCallError("normalize_batch with local_only=True received an LLM provider")
+
     output_dir.mkdir(parents=True, exist_ok=True)
 
     started = datetime.now(UTC).isoformat()

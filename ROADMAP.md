@@ -18,9 +18,11 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 | Wave A v2 | [done] entregue | `594ee1f` (2026-04-26) | grex Tier 2 — generaliza regex via digit/word conversion |
 | Wave D | [done] entregue | `126b0c0` (2026-04-26) | batch orchestrator (1 template + N docs → N normalized + report) |
 | Wave E | [done] entregue | `83cd524` (2026-04-26) | drop legacy preset/renderer/validator/visual_validator (~26% LOC -) |
-| Wave F | [done] entregue | `(pending push)` (2026-04-26) | conformity validator multi-dim (5 dimensions: texto + estrutural + visual + design + técnico) |
+| Wave F | [done] entregue | `23118f3` (2026-04-26) | conformity validator multi-dim (5 dimensions: texto + estrutural + visual + design + técnico) |
+| Wave G | [done] entregue | `(pending push)` (2026-04-26) | security primitives: PII mask, prompt injection detector, audit log, local_only enforcement, SECURITY-MODEL.md |
 | v0.3.0 | [done] tagged | `v0.3.0` (2026-04-26) | Wave A + Wave D + Wave E shipped, single Wave D path |
-| v0.4.0 | [wip] preparado | — | Wave F shipped, conformity validator + CLI; ready to tag |
+| v0.4.0 | [done] tagged | `v0.4.0` (2026-04-26) | Wave F shipped, conformity validator + CLI |
+| v0.5.0 | [wip] preparado | — | Wave G shipped, security primitives, SECURITY-MODEL.md, README rewritten |
 | v0.4+ | [plan] planejado | — | OCR + extractors + renderer expandido |
 
 **Onde estamos hoje (2026-04-26):**

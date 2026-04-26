@@ -55,6 +55,17 @@ from engine.schema_inference import (
     enrich_with_llm,
     infer_template_schema,
 )
+from engine.security import (
+    AuditLog,
+    InjectionMatch,
+    PIIMask,
+    PromptInjectionDetected,
+    RefusedRemoteCallError,
+    detect_prompt_injection,
+    mask_pii,
+    sha256_hex,
+    unmask,
+)
 from engine.semantic_diff import (
     Discrepancy,
     diff_documents,
@@ -62,9 +73,10 @@ from engine.semantic_diff import (
     filter_by_severity,
 )
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
+    "AuditLog",
     "BatchItemResult",
     "BatchReport",
     "ConfidenceLabel",
@@ -77,10 +89,14 @@ __all__ = [
     "FieldSchema",
     "HeadingHint",
     "InferredPattern",
+    "InjectionMatch",
     "LayoutFeatures",
     "MappingResult",
     "MultiPageLayoutFeatures",
+    "PIIMask",
     "PlaceholderHint",
+    "PromptInjectionDetected",
+    "RefusedRemoteCallError",
     "SectionBreak",
     "StructuralFingerprint",
     "TableHint",
@@ -97,6 +113,7 @@ __all__ = [
     "detect_layout_features",
     "detect_layout_features_multipage",
     "detect_placeholders",
+    "detect_prompt_injection",
     "diff_documents",
     "diff_texts",
     "enrich_with_llm",
@@ -107,10 +124,13 @@ __all__ = [
     "infer_field_patterns",
     "infer_template_schema",
     "map_hybrid",
+    "mask_pii",
     "normalize_batch",
+    "sha256_hex",
     "summarize_layout",
     "summarize_mapping",
     "summarize_multipage",
+    "unmask",
     "validate_br_date",
     "validate_cep",
     "validate_cpf",

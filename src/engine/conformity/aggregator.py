@@ -71,6 +71,7 @@ async def check_conformity(
     dimensions: list[str] | None = None,
     weights: dict[str, float] | None = None,
     threshold: float = DEFAULT_THRESHOLD,
+    local_only: bool = False,
 ) -> ConformityReport:
     """Compute a multi-dimensional conformity report.
 
@@ -88,6 +89,11 @@ async def check_conformity(
         weights: per-dimension weight (default: :data:`DEFAULT_WEIGHTS`).
         threshold: pass/fail cutoff (default: 0.85).
     """
+    if local_only and (llm is not None or visual_llm is not None):
+        from engine.security.local_only import RefusedRemoteCallError
+
+        raise RefusedRemoteCallError("check_conformity with local_only=True received llm or visual_llm")
+
     dims = list(dimensions) if dimensions else list(ALL_DIMENSIONS)
     w = {**DEFAULT_WEIGHTS, **(weights or {})}
 

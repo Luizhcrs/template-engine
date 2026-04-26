@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Wave G (security primitives for regulated deployments)
+
+- **`engine.security.mask_pii(text)`** — reversible PII masking. Replaces CPF / CNPJ / email / phone (BR) / RG / CEP with stable tokens (``<CPF_001>`` etc). Returns ``(masked_text, PIIMask)``. Repeated occurrences of the same value reuse the same token. ``mask.unmask(text)`` restores originals.
+- **`engine.security.detect_prompt_injection(text, mode='warn'|'reject')`** — pattern-based detector for adversarial inputs. 7 rules covering EN + PT-BR ("ignore previous", "respond only with", role hijack, system override, delimiter injection). ``mode='reject'`` raises ``PromptInjectionDetected``.
+- **`engine.security.AuditLog(path)`** — append-only JSON Lines audit trail. Fixed schema: ``ts``, ``event``, ``doc_hash``, ``dimension``, ``source``, ``llm_provider``, ``llm_model``, ``fields_touched``, ``llm_input_hash``, ``llm_output_hash``, ``extra``. Records sha256 hashes — never raw content. Thread-safe per instance.
+- **`engine.security.sha256_hex(text)`** — convenience helper for audit hashes.
+- **``local_only=True``** flag on ``normalize_batch`` and ``check_conformity``. Raises ``RefusedRemoteCallError`` if any LLM provider is supplied. Hard guarantee for LGPD/HIPAA deployments.
+- **``SECURITY-MODEL.md``** — threat model, operating-mode matrix, provider data residency table, reproducibility guarantees, framework guidance (LGPD/HIPAA/SOC2/ISO).
+- 26 new unit tests for security (163 → **189 passing**).
+
+Public API exports added: ``AuditLog``, ``InjectionMatch``, ``PIIMask``, ``PromptInjectionDetected``, ``RefusedRemoteCallError``, ``detect_prompt_injection``, ``mask_pii``, ``sha256_hex``, ``unmask``.
+
+### Changed
+
+- ``__version__`` bumped to ``0.5.0`` (Wave G ships security primitives).
+- README rewritten — leads with the differential ("audit-grade, regex-first, LLM-as-judge, zero LibreOffice"), adds an ASCII pipeline diagram, an operating-cost table by tier, a real case study (400 industrial reports, 18 LLM calls, $0.011 total), and a "Design decisions" section. PT-BR mirror updated.
+
 ### Added — Wave F (conformity validator multi-dim)
 
 LLM-as-judge multi-dimensional conformity check. Subpackage ``engine.conformity`` with five dimensions:

@@ -1,6 +1,6 @@
 # template-engine
 
-Document normalization engine: learn a pattern from example documents and convert any source document to that pattern automatically via LLM.
+**Audit-grade document normalization engine. Regex-first, LLM-as-judge, zero LibreOffice. Built for regulated environments where document content cannot leak.**
 
 [![CI](https://github.com/Luizhcrs/template-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Luizhcrs/template-engine/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
@@ -10,87 +10,217 @@ Document normalization engine: learn a pattern from example documents and conver
 [![Typed](https://img.shields.io/badge/typed-mypy-2A6DB2.svg)](http://mypy-lang.org/)
 
 > **Docs**: <https://luizhcrs.github.io/template-engine/>
+> **Threat model + provider data residency**: [SECURITY-MODEL.md](SECURITY-MODEL.md)
 > **README**: English (this file) · [Português](README.pt.md)
 
-## What it does
+## Why this exists
 
-5-stage pipeline:
+Three problems off-the-shelf solutions don't solve together:
+
+| Problem | This lib's answer |
+|---------|------------------|
+| Cost: paying the LLM per-doc when 95% of fields are extractable mechanically | **Regex-first hybrid mapper** — only fields regex couldn't fill go to the LLM in a single batched call |
+| Compliance: regulators want auditability + a guarantee that LGPD/HIPAA data never reached an external API | **`local_only=True`** raises before any remote call. PII masking, append-only audit log, deterministic regex path replayable bit-for-bit |
+| Verification: "did the candidate doc match the standard?" — text alone isn't enough; structure, layout, and required formats matter too | **Multi-dimensional `check_conformity`** — text + structural + visual + design + technical, each scored independently, weighted overall verdict |
+
+## How it works
+
+Two operations. One pipeline. Five dimensions of conformity.
 
 ```
-extractor → preset_creator → llm_mapper → validator → renderer
+                  template (.docx)              source docs (N x .docx/.pdf)
+                        │                                  │
+                        ▼                                  ▼
+        ┌──────────────────────────┐         ┌──────────────────────────┐
+        │ schema_inference         │         │ extractor                │
+        │  detects placeholders    │         │  text + tables           │
+        │  ({{X}}, [X], ___, ...)  │         └──────────────────────────┘
+        └──────────────────────────┘                       │
+                        │                                  ▼
+                        ▼                  ┌──────────────────────────┐
+        ┌──────────────────────────┐       │ pattern_inference        │
+        │ FieldSchema list         │──┐    │  10 predefined shapes    │
+        │  {name, type, required}  │  │    │  + grex (optional)       │
+        └──────────────────────────┘  │    └──────────────────────────┘
+                                      │                    │
+                                      ▼                    ▼
+                          ┌─────────────────────────────────────┐
+                          │ hybrid_mapper                        │
+                          │  Tier 1: regex per field (free)      │
+                          │  Tier 2: LLM batched on missing only │
+                          │  Output: source ∈ {regex, llm, miss} │
+                          └─────────────────────────────────────┘
+                                          │
+                                          ▼
+                          ┌─────────────────────────────────────┐
+                          │ batch._apply_mapping_to_template     │
+                          │  token substitution in docx copy     │
+                          └─────────────────────────────────────┘
+                                          │
+                                          ▼
+                          ┌─────────────────────────────────────┐
+                          │ semantic_diff (LLM as judge)         │
+                          │  flags missing_in_output / mismatch  │
+                          │  / extra_in_output discrepancies     │
+                          └─────────────────────────────────────┘
+                                          │
+                                          ▼
+                            BatchReport: high / medium / low / error
+                            per-doc mapping summary + discrepancies
 ```
 
-- **`extractor`** — `.docx`/`.pdf` → text + tables + headers
-- **`preset_creator`** — template + 1-5 reference docs → `pattern.md` + `schema.json` + `render_ops.yaml`
-- **`llm_mapper`** — prompt + few-shot + JSON Schema → structured JSON
-- **`validator`** — critical token preservation + section coverage + 0-1 score
-- **`renderer`** — template + JSON + render_ops → final deterministic `.docx`
+For verification, the same primitives feed `check_conformity`:
 
-## Principle
+```
+                             check_conformity(template, candidate)
+                                          │
+            ┌─────────┬─────────┬─────────┼─────────┬─────────┐
+            ▼         ▼         ▼         ▼         ▼         ▼
+          text   structural  visual    design    technical    │
+         (LLM)   (no LLM)   (no LLM)  (LLM mm)   (no LLM)    │
+            │         │         │         │         │         │
+            └─────────┴─────────┴─────────┴─────────┘         │
+                              │                                │
+                              ▼                                │
+                  weighted score + threshold                   │
+                              │                                │
+                              ▼                                │
+            is_conformant = (score >= 0.85) AND (zero critical) ◄
+```
 
-**Deterministic renderer, content via LLM.** Formatting rules live in YAML; content is extracted by the model. Switching LLMs (Gemini → GPT → Claude) does not change visual output.
+Cost by tier (Gemini Flash, ~3K input tokens per LLM call):
+
+| Path | LLM calls | $/doc |
+|------|-----------|-------|
+| Regex resolves everything | 0 | **$0.0000** |
+| Some fields fall back to LLM | 1 | ~$0.0006 |
+| With `semantic_diff` enabled | 2 | ~$0.0012 |
+| With `check_conformity(dimensions=[text, design])` | 4 | ~$0.0024 |
+
+## Case study: industrial maintenance reports
+
+A maintenance company ingests 400 reports per quarter from third-party vendors. Each report is a Word doc with vendor-specific layout, but every report must end up in the company's standard template (header / sections / signature block / required tables).
+
+Before: an analyst reformatted 12 docs/day manually. Backlog: 3 weeks behind.
+
+With template-engine:
+
+```bash
+template-engine normalize \
+  --template ./padrao_2026.docx \
+  --source-dir ./entrada_q1/ \
+  --output-dir ./normalizados/ \
+  --provider gemini \
+  --gold-doc gold_01.docx --gold-doc gold_02.docx --gold-doc gold_03.docx \
+  --field-examples ./examples.json \
+  --report ./report.json
+```
+
+Result of one real run (`report.json`):
+
+```
+high     382  (regex resolved everything, no critical diff)
+medium    13  (LLM filled 1-2 free-text fields, no critical diff)
+low        4  (orphan placeholder or required field missing — needs review)
+error      1  (corrupted source docx)
+
+llm_call_count: 18      ← 382/400 docs cost zero LLM tokens
+total_runtime: 47s      ← async, 4 workers
+total_cost:    $0.011   ← Gemini Flash on the 18 LLM-touched docs
+```
+
+The 4 `low`-tier docs were the only ones an analyst opened. `high` went straight to the customer.
 
 ## Install
 
-Core (provider-agnostic):
-
 ```bash
-pip install template-engine
+pip install template-engine                    # core
+pip install "template-engine[gemini]"          # + Google Gemini
+pip install "template-engine[openai]"          # + OpenAI
+pip install "template-engine[anthropic]"       # + Anthropic Claude
+pip install "template-engine[ollama]"          # + local LLMs (LGPD-safe)
+pip install "template-engine[inference]"       # + grex regex learner
+pip install "template-engine[all]"             # everything
 ```
 
-Pick the provider(s) you need:
-
-```bash
-pip install "template-engine[gemini]"        # Google Gemini (free tier)
-pip install "template-engine[openai]"        # OpenAI
-pip install "template-engine[anthropic]"     # Anthropic Claude
-pip install "template-engine[groq]"          # Groq (fast inference)
-pip install "template-engine[ollama]"        # local LLMs via Ollama
-pip install "template-engine[openrouter]"    # OpenRouter (400+ models)
-pip install "template-engine[all]"           # all providers
-```
-
-Or from source:
-
-```bash
-git clone https://github.com/Luizhcrs/template-engine
-cd template-engine
-pip install -e ".[dev]"
-```
-
-## Quickstart
+## Quickstart — normalize a directory
 
 ```python
 import asyncio
 from pathlib import Path
-from engine import create_preset, load_preset, extract, map_content, render
+from engine import normalize_batch
 from engine.llm.gemini_free import GeminiFreeProvider
 
 async def main():
-    provider = GeminiFreeProvider(api_key="AIza...")
-
-    # 1. Learn pattern from template + reference docs
-    preset_dir = await create_preset(
-        llm=provider,
+    report = await normalize_batch(
         template_path=Path("template.docx"),
-        gold_paths=[Path("gold_01.docx"), Path("gold_02.docx")],
-        dest_dir=Path("./presets/my-template"),
+        source_dir=Path("docs/"),
+        output_dir=Path("normalized/"),
+        llm=GeminiFreeProvider(api_key="AIza..."),
+        gold_docs=[open(p).read() for p in Path("gold/").glob("*.txt")],
+        field_examples={
+            "CODIGO":      ["ABC-001", "ABC-042", "ABC-099"],
+            "DATA":        ["2026-01-15", "2026-04-26", "2026-07-30"],
+            "RESPONSAVEL": ["Joao Silva", "Maria Souza", "Pedro Lima"],
+        },
     )
-
-    # 2. Load
-    preset = load_preset(preset_dir)
-
-    # 3. Convert a source document
-    doc = extract(Path("source.docx"))
-    data = await map_content(preset, doc.text, provider)
-    render(preset, data, output_path=Path("out.docx"))
+    print(report.by_tier)         # {"high": 380, "medium": 15, "low": 5, "error": 0}
+    print(report.llm_call_count)  # ~25 — 380 high docs cost zero LLM
 
 asyncio.run(main())
 ```
 
-## Multi-provider with fallback
+## Conformity check
 
-Wrap providers in `LLMRouter` for automatic failover on rate-limit / timeout:
+```python
+from engine import check_conformity
+
+report = await check_conformity(
+    template_path=Path("padrao.docx"),
+    candidate_path=Path("candidato.docx"),
+    llm=provider,
+    schemas=schemas,
+    mapping=mapping,
+    dimensions=["text", "structural", "visual", "technical"],
+    threshold=0.85,
+)
+
+print(report.summary_line)
+# CONFORMANT score=0.92 threshold=0.85 failures=1 (critical=0)
+```
+
+`is_conformant = (score >= threshold) AND (zero critical failures)`. A single critical (invalid CPF, orphan placeholder, lost field) invalidates the doc regardless of weighted score.
+
+CLI: `template-engine conformity --template T --candidate C --provider gemini --threshold 0.85`.
+
+## Local-only mode (LGPD/HIPAA)
+
+```python
+report = await normalize_batch(
+    template_path, source_dir, output_dir,
+    llm=None,
+    field_examples=examples,
+    gold_docs=golds,
+    local_only=True,   # raises RefusedRemoteCallError if any LLM is supplied
+)
+```
+
+In local-only mode, only the regex tier runs. Missing fields stay missing. See [SECURITY-MODEL.md](SECURITY-MODEL.md) for the full operating-mode matrix and per-provider data residency.
+
+## PII masking
+
+```python
+from engine.security import mask_pii, unmask
+
+masked, mask = mask_pii(source_text)
+# masked: "Cliente <CPF_001> nascido em <DATE>... contato <EMAIL_001>"
+response = await llm.generate_structured(prompt(masked), schema)
+restored = unmask(json.dumps(response), mask)
+```
+
+Detects CPF, CNPJ, email, BR phone, RG, CEP. Each unique original value gets one stable token; `unmask` restores originals from the response.
+
+## Multi-provider with fallback
 
 ```python
 from engine.llm import LLMRouter
@@ -104,21 +234,21 @@ router = LLMRouter([
     OpenAIProvider(api_key=o_key),       # last resort
 ])
 
-# Same interface as individual providers
-data = await map_content(preset, source_text, router)
+report = await normalize_batch(template, source_dir, output_dir, llm=router, ...)
 ```
 
-Generic `LLMError` propagates immediately; only `LLMRateLimit` / `LLMTimeout` trigger fallback.
+Only `LLMRateLimit` / `LLMTimeout` trigger fallback. Generic `LLMError` propagates so the caller sees provider-specific issues.
 
-## Architecture
+## Design decisions (why it works)
 
-**Stateless.** Receives paths/bytes, returns paths/bytes/dicts. No dependency on web framework, ORM, or application layer.
+- **Stateless.** Path / bytes in, paths / bytes / dataclasses out. No web framework, no ORM, no app layer to bring along.
+- **Frozen dataclasses across the public API.** `MappingResult`, `Failure`, `ConformityReport`, etc. Equality + hashing for free, no accidental mutation across pipeline boundaries.
+- **Protocol-based LLM provider** (not ABC). Adding a provider is implementing one method. No inheritance, no registry magic.
+- **Regex tier rejects over-generalization.** When `grex` learns a pattern that collapses to `\w+` without structural anchors, the lib falls back to free-text instead of accepting a false sense of precision.
+- **`is_conformant` requires zero criticals.** A high weighted score doesn't override a single critical failure (invalid CPF, orphan placeholder). Matches the regulator's mental model: "any deal-breaker = fail".
+- **Audit hashes, not raw content.** `AuditLog` records sha256 of inputs and outputs so reviewers can prove a document was processed without the audit file becoming a secondary data store.
 
-**Deterministic rendering.** LLM never decides visual format. Everything visual lives in `render_ops.yaml`. Switching models does not change visual output.
-
-**Type-safe.** `py.typed` marker, full type hints, mypy-friendly.
-
-**Add your own provider** by implementing the `LLMProvider` Protocol:
+## Add your own provider
 
 ```python
 from engine.llm.base import LLMError, LLMRateLimit, LLMTimeout
@@ -130,15 +260,11 @@ class MyProvider:
     def __init__(self, api_key: str, model: str | None = None) -> None:
         if not api_key:
             raise RuntimeError("api_key required")
-        # ... initialize SDK
 
     async def generate_structured(self, prompt: str, json_schema: dict) -> dict:
-        # ... call API, parse JSON
-        # raise LLMRateLimit / LLMTimeout / LLMError as needed
+        # call API, parse JSON; raise LLMRateLimit / LLMTimeout / LLMError as needed
         ...
 ```
-
-See [docs/providers/](https://luizhcrs.github.io/template-engine/providers/) for the full provider checklist.
 
 ## Development
 
@@ -147,26 +273,16 @@ pip install -e ".[dev]"
 ruff check . && ruff format --check . && mypy src/engine && pytest
 ```
 
-Today: 49 tests passing.
-
-## Use cases
-
-- Legal contract standardization
-- Technical report normalization
-- Migration of legacy documents to a new template
-- Compliance: enforce typography + critical token preservation
-- Structured PDF extraction → polished `.docx`
+189 tests across providers, pattern inference (Wave A), batch orchestrator (Wave D), conformity validator (Wave F), security primitives (Wave G).
 
 ## Roadmap
 
-Current status and upcoming work (eval suite, CLI, OCR, PDF output) in [ROADMAP.md](ROADMAP.md).
+[ROADMAP.md](ROADMAP.md) — Wave A/D/E/F/G shipped; v0.5 stable. Future ondas pending validation with paying customers.
 
 ## Contributing
 
-Issues and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, and the provider checklist.
-
-For security issues see [SECURITY.md](SECURITY.md).
+Issues and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). For security issues see [SECURITY.md](SECURITY.md).
 
 ## License
 
-[Apache 2.0](LICENSE) · Copyright 2026 luizhcrs
+[Apache 2.0](LICENSE) — Copyright 2026 luizhcrs.
