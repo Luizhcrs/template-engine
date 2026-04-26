@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Visual validation** — new `engine.visual_validator.validate_visual()` compares a rendered `.docx` against a gold reference using a multi-modal LLM. Pipeline: LibreOffice headless (`.docx` → PDF) + `pdf2image` (PDF → PNG) + LLM call with structured schema. Returns `VisualValidationResult` with 0-1 score, categorized issues (alignment / spacing / typography / section_order / other), severity (low/medium/high), and rendered images for inspection.
+- **`GeminiVisionProvider`** — new multi-modal provider in `engine.llm.gemini_vision`. Implements `VisualLLMProvider` Protocol. Reuses existing `[gemini]` extra (no new dep).
+- **`VisualLLMProvider`** Protocol added to `engine.llm.base` (text providers untouched).
+- **`engine.docx_to_png(path, out_dir, dpi)`** — public helper for raster previews.
+- **CLI command** `template-engine visual-validate <gold> <output> --api-key X`. Renders both, calls Gemini Vision, prints score + issues table.
+- **`[visual]` extra** — `pdf2image` + `pillow`. Install via `pip install 'template-engine[visual]'`. LibreOffice external dep documented.
+- 12 unit tests for visual_validator + GeminiVisionProvider (mock subprocess + pdf2image, no LibreOffice needed for CI).
+- New docs page `concepts/visual-validation.md` (en + `.pt.md`) covering pipeline, requirements, API, cost considerations, limitations.
+
+### Changed
+
+- `__version__` bumped to `0.3.0a1` (alpha — visual validator API may evolve before v0.3 stable).
+
 ## [0.2.1] - 2026-04-26
 
 ### Fixed

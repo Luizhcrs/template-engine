@@ -128,6 +128,7 @@ plugins:
             Pipeline: Pipeline
             Preset anatomy: Anatomia do preset
             Render ops: Operações de renderização
+            Visual validation: Validação visual
             Providers: Provedores LLM
             Overview: Visão geral
             API Reference: Referência API
@@ -140,6 +141,7 @@ nav:
     - Pipeline: concepts/pipeline.md
     - Preset anatomy: concepts/preset.md
     - Render ops: concepts/render-ops.md
+    - Visual validation: concepts/visual-validation.md
   - Providers:
     - Overview: providers/index.md
   - Contributing: contributing.md

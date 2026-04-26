@@ -26,8 +26,14 @@ from engine.preset_schemas import (
 )
 from engine.renderer import RenderError, render
 from engine.validator import ValidationResult, validate
+from engine.visual_validator import (
+    VisualIssue,
+    VisualValidationResult,
+    docx_to_png,
+    validate_visual,
+)
 
-__version__ = "0.2.1"
+__version__ = "0.3.0a1"
 
 __all__ = [
     "ConfidenceLabel",
@@ -41,10 +47,13 @@ __all__ = [
     "RenderOpsFile",
     "ValidationConfig",
     "ValidationResult",
+    "VisualIssue",
+    "VisualValidationResult",
     "__version__",
     "calculate_confidence",
     "confidence_label",
     "create_preset",
+    "docx_to_png",
     "extract",
     "list_builtin_presets",
     "list_presets_for_owner",
@@ -53,4 +62,5 @@ __all__ = [
     "map_content",
     "render",
     "validate",
+    "validate_visual",
 ]

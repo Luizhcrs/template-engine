@@ -29,6 +29,7 @@ from engine.llm_mapper import map_content
 from engine.preset_loader import load_preset
 from engine.renderer import render
 from engine.validator import validate
+from engine.visual_validator import validate_visual as engine_validate_visual
 
 app = typer.Typer(
     name="template-engine",
@@ -189,6 +190,78 @@ def convert(
         render(bundle, data, output_path=output)
 
     console.print(f"\n[bold green]OK[/bold green] -> {output.resolve()}")
+
+
+@app.command(name="visual-validate")
+def visual_validate(
+    gold: Annotated[Path, typer.Argument(help="Gold/reference .docx", exists=True)],
+    output: Annotated[Path, typer.Argument(help="Output .docx to validate", exists=True)],
+    api_key: Annotated[
+        str | None, typer.Option("--api-key", help="Gemini API key (or $GEMINI_API_KEY)")
+    ] = None,
+    model: Annotated[str | None, typer.Option("--model", help="Override Gemini model id")] = None,
+    keep_images: Annotated[
+        Path | None,
+        typer.Option("--keep-images", help="Keep rendered PNGs in this dir for inspection"),
+    ] = None,
+    dpi: Annotated[int, typer.Option("--dpi", help="Rasterization DPI")] = 150,
+) -> None:
+    """Compare two .docx visually using Gemini Vision (requires LibreOffice on PATH)."""
+    import os
+
+    key = api_key or os.environ.get("GEMINI_API_KEY", "")
+    if not key:
+        raise typer.BadParameter("--api-key required (or set $GEMINI_API_KEY)")
+
+    try:
+        from engine.llm.gemini_vision import GeminiVisionProvider
+    except ImportError as e:
+        raise typer.BadParameter(
+            "visual deps missing. Install: pip install 'template-engine[gemini,visual]'"
+        ) from e
+
+    llm = GeminiVisionProvider(api_key=key, model=model) if model else GeminiVisionProvider(api_key=key)
+    console.print(f"[bold]Visual provider:[/bold] {llm.name} ({llm.model})")
+
+    with console.status("rendering + comparing...", spinner="dots"):
+        result = asyncio.run(
+            engine_validate_visual(
+                gold_path=gold,
+                output_path=output,
+                llm=llm,
+                dpi=dpi,
+                keep_images_dir=keep_images,
+            )
+        )
+
+    color = "green" if result.score >= 0.9 else ("yellow" if result.score >= 0.7 else "red")
+    console.print(
+        Panel.fit(
+            f"[bold]Score:[/bold] [{color}]{result.score:.2f}[/{color}]\n"
+            f"[bold]Issues:[/bold] {len(result.issues)} "
+            f"(high={sum(1 for i in result.issues if i.severity == 'high')})\n\n"
+            f"{result.summary}",
+            title="Visual validation",
+            border_style=color,
+        )
+    )
+
+    if result.issues:
+        issues_table = Table(show_header=True, header_style="bold")
+        issues_table.add_column("Severity")
+        issues_table.add_column("Category")
+        issues_table.add_column("Description")
+        for issue in result.issues:
+            sev_color = {"high": "red", "medium": "yellow", "low": "dim"}[issue.severity]
+            issues_table.add_row(
+                f"[{sev_color}]{issue.severity}[/{sev_color}]",
+                issue.category,
+                issue.description,
+            )
+        console.print(issues_table)
+
+    console.print(f"\n[dim]gold image:[/dim] {result.gold_image}")
+    console.print(f"[dim]output image:[/dim] {result.output_image}")
 
 
 if __name__ == "__main__":

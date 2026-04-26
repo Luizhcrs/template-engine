@@ -7,6 +7,7 @@ from engine.llm.base import (
     LLMProvider,
     LLMRateLimit,
     LLMTimeout,
+    VisualLLMProvider,
 )
 from engine.llm.router import AllProvidersFailed, LLMRouter
 
@@ -17,4 +18,5 @@ __all__ = [
     "LLMRateLimit",
     "LLMRouter",
     "LLMTimeout",
+    "VisualLLMProvider",
 ]
