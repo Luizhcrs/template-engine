@@ -47,7 +47,7 @@ class GeminiVisionProvider:
 
     def __init__(self, api_key: str, model: str | None = None) -> None:
         if not api_key:
-            raise RuntimeError("api_key obrigatório (passe via construtor)")
+            raise RuntimeError("api_key required (pass via constructor)")
         genai.configure(api_key=api_key)  # type: ignore[attr-defined]
         if model:
             self.model = model
@@ -108,10 +108,29 @@ class GeminiVisionProvider:
 
         if not resp.candidates:
             log.error("gemini_vision.no_candidates")
-            raise LLMError("Gemini retornou resposta sem candidatos (possível filtro de segurança)")
+            raise LLMError("Gemini returned no candidates (possible safety filter)")
+
+        # Safety filter may set finish_reason != STOP even with candidates present.
+        # Accessing resp.text raises ValueError in that case.
+        candidate = resp.candidates[0]
+        finish_reason = getattr(candidate, "finish_reason", None)
+        # finish_reason values: 0=UNSPECIFIED, 1=STOP, 2=MAX_TOKENS, 3=SAFETY, 4=RECITATION, 5=OTHER
+        if finish_reason not in (None, 0, 1, "STOP", "FINISH_REASON_UNSPECIFIED"):
+            log.error("gemini_vision.blocked", finish_reason=str(finish_reason))
+            raise LLMError(f"Gemini blocked response (finish_reason={finish_reason})")
 
         try:
-            return json.loads(resp.text)
+            text = resp.text
+        except (ValueError, AttributeError) as e:
+            log.error("gemini_vision.no_text", error=str(e))
+            raise LLMError(f"Gemini returned no text: {e}") from e
+
+        try:
+            parsed = json.loads(text)
         except json.JSONDecodeError as e:
-            log.error("gemini_vision.invalid_json", text_preview=resp.text[:500])
-            raise LLMError(f"JSON inválido: {e}") from e
+            log.error("gemini_vision.invalid_json", text_preview=text[:500])
+            raise LLMError(f"Invalid JSON: {e}") from e
+
+        if not isinstance(parsed, dict):
+            raise LLMError(f"Expected JSON object, got {type(parsed).__name__}")
+        return parsed

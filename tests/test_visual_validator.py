@@ -160,7 +160,7 @@ async def test_validate_visual_missing_output_raises(fake_docx, tmp_path):
 def test_gemini_vision_rejects_missing_api_key():
     from engine.llm.gemini_vision import GeminiVisionProvider
 
-    with patch("engine.llm.gemini_vision.genai"), pytest.raises(RuntimeError, match="api_key"):
+    with patch("engine.llm.gemini_vision.genai"), pytest.raises(RuntimeError, match="api_key required"):
         GeminiVisionProvider(api_key="")
 
 
@@ -212,7 +212,9 @@ async def test_gemini_vision_returns_parsed_json(tmp_path):
     img2.write_bytes(b"\x89PNG o")
 
     fake_resp = MagicMock()
-    fake_resp.candidates = [MagicMock()]
+    cand = MagicMock()
+    cand.finish_reason = 1  # STOP
+    fake_resp.candidates = [cand]
     fake_resp.text = '{"score": 0.92, "summary": "ok", "issues": []}'
 
     with patch("engine.llm.gemini_vision.genai"):
@@ -223,3 +225,171 @@ async def test_gemini_vision_returns_parsed_json(tmp_path):
     result = await provider.compare_images("prompt", [img1, img2], {"type": "object"})
 
     assert result == {"score": 0.92, "summary": "ok", "issues": []}
+
+
+@pytest.mark.asyncio
+async def test_gemini_vision_safety_filter_finish_reason_raises(tmp_path):
+    """When finish_reason indicates safety block (3), raise LLMError before touching resp.text."""
+    from engine.llm.base import LLMError
+    from engine.llm.gemini_vision import GeminiVisionProvider
+
+    img1 = tmp_path / "g.png"
+    img2 = tmp_path / "o.png"
+    img1.write_bytes(b"\x89PNG g")
+    img2.write_bytes(b"\x89PNG o")
+
+    fake_resp = MagicMock()
+    cand = MagicMock()
+    cand.finish_reason = 3  # SAFETY
+    fake_resp.candidates = [cand]
+
+    with patch("engine.llm.gemini_vision.genai"):
+        provider = GeminiVisionProvider(api_key="test-key")
+    provider._model = MagicMock()
+    provider._model.generate_content_async = AsyncMock(return_value=fake_resp)
+
+    with pytest.raises(LLMError, match="blocked"):
+        await provider.compare_images("prompt", [img1, img2], {"type": "object"})
+
+
+@pytest.mark.asyncio
+async def test_gemini_vision_resp_text_value_error_raises(tmp_path):
+    """When resp.text raises ValueError (SDK behavior under safety), wrap in LLMError."""
+    from engine.llm.base import LLMError
+    from engine.llm.gemini_vision import GeminiVisionProvider
+
+    img1 = tmp_path / "g.png"
+    img2 = tmp_path / "o.png"
+    img1.write_bytes(b"\x89PNG g")
+    img2.write_bytes(b"\x89PNG o")
+
+    fake_resp = MagicMock()
+    cand = MagicMock()
+    cand.finish_reason = 1  # STOP, but text access still raises
+    fake_resp.candidates = [cand]
+    type(fake_resp).text = property(lambda _self: (_ for _ in ()).throw(ValueError("no text")))
+
+    with patch("engine.llm.gemini_vision.genai"):
+        provider = GeminiVisionProvider(api_key="test-key")
+    provider._model = MagicMock()
+    provider._model.generate_content_async = AsyncMock(return_value=fake_resp)
+
+    with pytest.raises(LLMError, match="no text"):
+        await provider.compare_images("prompt", [img1, img2], {"type": "object"})
+
+
+# ===== Edge cases visual_validator =====
+
+
+@pytest.mark.asyncio
+async def test_validate_visual_clamps_out_of_range_score(fake_docx, tmp_path):
+    """LLM returning score > 1 or < 0 must be clamped."""
+    output_docx = tmp_path / "output.docx"
+    output_docx.write_bytes(b"PK\x03\x04 fake")
+
+    fake_llm = AsyncMock()
+    fake_llm.compare_images.return_value = {
+        "score": 1.5,  # out of range
+        "summary": "",
+        "issues": [],
+    }
+    fake_gold_png = tmp_path / "gold" / "g.png"
+    fake_output_png = tmp_path / "output" / "o.png"
+    fake_gold_png.parent.mkdir(parents=True)
+    fake_output_png.parent.mkdir(parents=True)
+    fake_gold_png.write_bytes(b"\x89PNG")
+    fake_output_png.write_bytes(b"\x89PNG")
+
+    with patch(
+        "engine.visual_validator.docx_to_png",
+        side_effect=[fake_gold_png, fake_output_png],
+    ):
+        result = await validate_visual(
+            gold_path=fake_docx, output_path=output_docx, llm=fake_llm, keep_images_dir=tmp_path
+        )
+
+    assert result.score == 1.0
+
+
+@pytest.mark.asyncio
+async def test_validate_visual_missing_score_defaults_to_zero(fake_docx, tmp_path):
+    """LLM response without score field defaults to 0.0 (no crash)."""
+    output_docx = tmp_path / "output.docx"
+    output_docx.write_bytes(b"PK\x03\x04 fake")
+
+    fake_llm = AsyncMock()
+    fake_llm.compare_images.return_value = {"summary": "no score given", "issues": []}
+    fake_gold_png = tmp_path / "gold" / "g.png"
+    fake_output_png = tmp_path / "output" / "o.png"
+    fake_gold_png.parent.mkdir(parents=True)
+    fake_output_png.parent.mkdir(parents=True)
+    fake_gold_png.write_bytes(b"\x89PNG")
+    fake_output_png.write_bytes(b"\x89PNG")
+
+    with patch(
+        "engine.visual_validator.docx_to_png",
+        side_effect=[fake_gold_png, fake_output_png],
+    ):
+        result = await validate_visual(
+            gold_path=fake_docx, output_path=output_docx, llm=fake_llm, keep_images_dir=tmp_path
+        )
+
+    assert result.score == 0.0
+
+
+@pytest.mark.asyncio
+async def test_validate_visual_invalid_enum_coerced_to_safe_defaults(fake_docx, tmp_path):
+    """LLM returning category='layout' (not in enum) coerces to 'other'; severity invalid -> 'low'."""
+    output_docx = tmp_path / "output.docx"
+    output_docx.write_bytes(b"PK\x03\x04 fake")
+
+    fake_llm = AsyncMock()
+    fake_llm.compare_images.return_value = {
+        "score": 0.7,
+        "summary": "",
+        "issues": [
+            {"category": "layout", "severity": "critical", "description": "x"},
+            {"category": "spacing", "severity": "high", "description": "y"},
+        ],
+    }
+    fake_gold_png = tmp_path / "gold" / "g.png"
+    fake_output_png = tmp_path / "output" / "o.png"
+    fake_gold_png.parent.mkdir(parents=True)
+    fake_output_png.parent.mkdir(parents=True)
+    fake_gold_png.write_bytes(b"\x89PNG")
+    fake_output_png.write_bytes(b"\x89PNG")
+
+    with patch(
+        "engine.visual_validator.docx_to_png",
+        side_effect=[fake_gold_png, fake_output_png],
+    ):
+        result = await validate_visual(
+            gold_path=fake_docx, output_path=output_docx, llm=fake_llm, keep_images_dir=tmp_path
+        )
+
+    assert len(result.issues) == 2
+    # First issue: invalid enums coerced
+    assert result.issues[0].category == "other"
+    assert result.issues[0].severity == "low"
+    # Second: valid stays valid
+    assert result.issues[1].category == "spacing"
+    assert result.issues[1].severity == "high"
+
+
+def test_pdf_to_png_empty_list_raises(fake_docx, tmp_path):
+    """pdf2image returning [] must raise RuntimeError."""
+    fake_proc = MagicMock(returncode=0, stderr="", stdout="ok")
+
+    expected_pdf = tmp_path / "fake.pdf"
+
+    def mock_run(*args, **kwargs):
+        expected_pdf.write_bytes(b"%PDF-1.4 fake")
+        return fake_proc
+
+    with (
+        patch("engine.visual_validator.shutil.which", return_value="/usr/bin/soffice"),
+        patch("engine.visual_validator.subprocess.run", side_effect=mock_run),
+        patch("pdf2image.convert_from_path", return_value=[]),
+        pytest.raises(RuntimeError, match="no pages"),
+    ):
+        docx_to_png(fake_docx, out_dir=tmp_path)

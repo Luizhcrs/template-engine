@@ -34,6 +34,11 @@ log = structlog.get_logger(__name__)
 IssueCategory = Literal["alignment", "spacing", "typography", "section_order", "other"]
 IssueSeverity = Literal["low", "medium", "high"]
 
+_VALID_CATEGORIES: frozenset[str] = frozenset(
+    ["alignment", "spacing", "typography", "section_order", "other"]
+)
+_VALID_SEVERITIES: frozenset[str] = frozenset(["low", "medium", "high"])
+
 
 @dataclass(frozen=True)
 class VisualIssue:
@@ -220,25 +225,22 @@ async def validate_visual(
     if not output_path.exists():
         raise FileNotFoundError(f"output_path not found: {output_path}")
 
+    log.info("visual.validate.start", gold=str(gold_path), output=str(output_path))
+
+    # When keep_images_dir is set, caller owns cleanup. Otherwise we use a managed tempdir
+    # that survives the function (paths are returned in the result for inspection).
+    # Caller can clean up via shutil.rmtree(result.gold_image.parent.parent).
     work_dir = Path(keep_images_dir) if keep_images_dir else Path(tempfile.mkdtemp(prefix="te-visual-"))
     gold_dir = work_dir / "gold"
     output_dir = work_dir / "output"
 
-    log.info("visual.validate.start", gold=str(gold_path), output=str(output_path))
     gold_png = docx_to_png(gold_path, out_dir=gold_dir, dpi=dpi)
     output_png = docx_to_png(output_path, out_dir=output_dir, dpi=dpi)
 
     raw = await llm.compare_images(_PROMPT, [gold_png, output_png], _VALIDATION_SCHEMA)
 
-    issues = [
-        VisualIssue(
-            category=item["category"],
-            severity=item["severity"],
-            description=item["description"],
-        )
-        for item in raw.get("issues", [])
-    ]
-    score = float(raw.get("score", 0.0))
+    issues = _parse_issues(raw.get("issues", []))
+    score = _clamp_score(raw.get("score", 0.0))
     summary = str(raw.get("summary", ""))
 
     log.info(
@@ -256,3 +258,43 @@ async def validate_visual(
         output_image=output_png,
         raw_response=raw,
     )
+
+
+def _clamp_score(value: object) -> float:
+    """Coerce LLM score to a clean 0.0-1.0 float. Out-of-range or non-numeric -> 0.0."""
+    try:
+        score = float(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        log.warning("visual.score.invalid", raw=repr(value))
+        return 0.0
+    return max(0.0, min(1.0, score))
+
+
+def _parse_issues(items: object) -> list[VisualIssue]:
+    """Parse raw issues array, validating enums. Out-of-range values are coerced to safe defaults."""
+    if not isinstance(items, list):
+        return []
+    parsed: list[VisualIssue] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        cat_raw = str(item.get("category", "other"))
+        sev_raw = str(item.get("severity", "low"))
+        cat: IssueCategory = cat_raw if cat_raw in _VALID_CATEGORIES else "other"  # type: ignore[assignment]
+        sev: IssueSeverity = sev_raw if sev_raw in _VALID_SEVERITIES else "low"  # type: ignore[assignment]
+        if cat_raw != cat or sev_raw != sev:
+            log.warning(
+                "visual.issue.invalid_enum",
+                raw_category=cat_raw,
+                raw_severity=sev_raw,
+                coerced_category=cat,
+                coerced_severity=sev,
+            )
+        parsed.append(
+            VisualIssue(
+                category=cat,
+                severity=sev,
+                description=str(item.get("description", "")),
+            )
+        )
+    return parsed
