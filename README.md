@@ -9,7 +9,7 @@ Document normalization engine: learn a pattern from example documents and conver
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Typed](https://img.shields.io/badge/typed-mypy-2A6DB2.svg)](http://mypy-lang.org/)
 
-> **Docs**: <https://luizhcrs.github.io/template-engine/> ([English](https://luizhcrs.github.io/template-engine/) · [Português](https://luizhcrs.github.io/template-engine/pt/))
+> **Docs**: <https://luizhcrs.github.io/template-engine/>
 > **README**: English (this file) · [Português](README.pt.md)
 
 ## What it does

@@ -7,7 +7,8 @@ Engine de normalização documental: aprende um padrão a partir de documentos-e
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Release](https://img.shields.io/github/v/release/Luizhcrs/template-engine?display_name=tag&sort=semver)](https://github.com/Luizhcrs/template-engine/releases)
 
-> **Docs**: <https://luizhcrs.github.io/template-engine/pt/> · [English version](README.md)
+> **Docs**: <https://luizhcrs.github.io/template-engine/pt/>
+> **README**: Português (este arquivo) · [English](README.md)
 
 ## O que faz
 
