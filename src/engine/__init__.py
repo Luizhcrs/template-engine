@@ -13,6 +13,7 @@ from engine.preset_loader import (
     PresetInvalid,
     PresetNotFound,
     list_builtin_presets,
+    list_presets_for_owner,
     list_user_presets,
     load_preset,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "create_preset",
     "extract",
     "list_builtin_presets",
+    "list_presets_for_owner",
     "list_user_presets",
     "load_preset",
     "map_content",

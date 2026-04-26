@@ -28,7 +28,7 @@ Metadata pra tooling/display:
   "slug": "contrato-prestacao",
   "name": "Contrato de Prestação",
   "version": 1,
-  "owner_sub": "user-123",
+  "owner": "user-123",
   "locked": false,
   "created_at": "2026-04-25T17:00:00Z",
   "pattern_last_edited_at": null

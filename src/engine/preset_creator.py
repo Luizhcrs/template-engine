@@ -168,7 +168,7 @@ async def create_preset(
         slug=slug,
         name=name,
         version=1,
-        owner_sub=owner,
+        owner=owner,
         locked=False,
         created_at=datetime.now(UTC).isoformat(),
     )

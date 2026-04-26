@@ -7,8 +7,8 @@ from typing import Any
 
 import structlog
 
+from ._utils import retry_after_from_error
 from .base import LLMError, LLMRateLimit, LLMTimeout
-from .openai_provider import _retry_after_from_error
 
 try:
     from anthropic import APITimeoutError, AsyncAnthropic, RateLimitError
@@ -59,7 +59,7 @@ class AnthropicProvider:
                 messages=[{"role": "user", "content": prompt}],
             )
         except RateLimitError as e:
-            retry_after = _retry_after_from_error(e, default=60)
+            retry_after = retry_after_from_error(e, default=60)
             log.warning("anthropic.rate_limit", error=str(e), retry_after=retry_after)
             raise LLMRateLimit(retry_after=retry_after) from e
         except APITimeoutError as e:

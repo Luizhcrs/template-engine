@@ -9,7 +9,6 @@ copyright: Copyright &copy; 2026 luizhcrs · Apache 2.0
 theme:
   name: material
   language: en
-  custom_dir: docs/overrides
   font:
     text: Inter
     code: JetBrains Mono
@@ -66,9 +65,6 @@ extra:
     - name: Português (Brasil)
       link: /template-engine/pt/
       lang: pt-BR
-  version:
-    provider: mike
-    default: latest
 
 markdown_extensions:
   - abbr

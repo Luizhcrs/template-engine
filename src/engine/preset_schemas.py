@@ -3,17 +3,32 @@ from __future__ import annotations
 from pathlib import Path  # noqa: TC003 — runtime needed by Pydantic
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PresetManifest(BaseModel):
+    """Preset metadata. ``owner`` is free-form (any string identifying the preset's owner).
+
+    For backwards compatibility (≤ v0.2.0 used ``owner_sub``), reading a manifest with
+    ``owner_sub`` populates ``owner`` automatically. New manifests should write ``owner``.
+    The ``owner_sub`` alias will be removed in v0.4.
+    """
+
     slug: str
     name: str
     version: int = 1
-    owner_sub: str | None = None
+    owner: str | None = None
     locked: bool = False
     created_at: str
     pattern_last_edited_at: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_owner_sub_alias(cls, data: Any) -> Any:
+        """Accept legacy ``owner_sub`` field; promote to ``owner``."""
+        if isinstance(data, dict) and "owner" not in data and "owner_sub" in data:
+            data = {**data, "owner": data["owner_sub"]}
+        return data
 
 
 class RenderOp(BaseModel):

@@ -40,7 +40,7 @@ def test_render_empty_ops_produces_valid_docx(tmp_path):
     gold = preset_dir / "gold" / "gold-01.docx"
     bundle = PresetBundle(
         manifest=PresetManifest(
-            slug="x", name="X", version=1, owner_sub=None, locked=True, created_at="2026-01-01T00:00:00Z"
+            slug="x", name="X", version=1, owner=None, locked=True, created_at="2026-01-01T00:00:00Z"
         ),
         template_docx_path=template,
         gold_docs_paths=[gold],

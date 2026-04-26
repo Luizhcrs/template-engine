@@ -31,7 +31,7 @@ You'll get an acknowledgment within 48 hours and a status update within 5 busine
 
 ### What template-engine guards against
 
-- **Path traversal** in `preset_loader`: `user_sub` is validated, paths resolved + bounded with `is_relative_to()`.
+- **Path traversal** in `preset_loader`: `owner` (or legacy `user_sub`) is validated against `^[a-zA-Z0-9_-]{1,64}$`, paths resolved + bounded with `is_relative_to()`.
 - **Prompt injection** in `llm_mapper`/`preset_creator`: untrusted document content is delimited (`<<<UNTRUSTED_*_*>>>`) and the system instruction explicitly directs the LLM to ignore commands inside delimiters.
 - **No implicit network/filesystem I/O outside declared APIs.**
 
@@ -44,7 +44,7 @@ You'll get an acknowledgment within 48 hours and a status update within 5 busine
 
 ## Best practices for callers
 
-1. **Validate `user_sub` upstream too.** `preset_loader` enforces `^[a-zA-Z0-9_-]{1,64}$` but constraining it earlier is defense-in-depth.
+1. **Validate `owner` upstream too.** `preset_loader` enforces `^[a-zA-Z0-9_-]{1,64}$` but constraining it earlier is defense-in-depth.
 2. **Run untrusted document conversion in a separate LLM session/key** from sessions that handle confidential org data.
 3. **Set `temperature=0`** (already default) — reduces non-determinism.
 4. **Validate LLM output against `preset.schema_json`** — call `validator.validate()` and check `confidence_label()` before trusting downstream.

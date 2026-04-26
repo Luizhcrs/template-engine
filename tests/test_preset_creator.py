@@ -70,7 +70,7 @@ async def test_created_preset_loads_via_loader(tmp_path):
 
     bundle = load_preset(dest)
     assert bundle.manifest.slug == "round-trip"
-    assert bundle.manifest.owner_sub == "user-1"
+    assert bundle.manifest.owner == "user-1"
     assert bundle.manifest.locked is False
     assert len(bundle.gold_docs_paths) == 2
     assert bundle.render_ops.operations[0].op == "write_section"

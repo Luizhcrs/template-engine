@@ -103,8 +103,36 @@ def load_preset(preset_dir: Path) -> PresetBundle:
     return bundle
 
 
+def list_presets_for_owner(base_dir: Path, owner: str) -> list[Path]:
+    """List preset dirs under ``base_dir/<owner>/``.
+
+    Validates ``owner`` against ``[a-zA-Z0-9_-]{1,64}`` and resolves+bounds paths
+    to prevent traversal. Use this when you partition presets per-owner on disk.
+
+    For unpartitioned cases, use ``Path(base_dir).iterdir()`` directly.
+    """
+    _validate_safe_id(owner, "owner")
+    base_dir = Path(base_dir).resolve()
+    target = (base_dir / owner).resolve()
+    _ensure_within(target, base_dir)
+    if not target.exists():
+        return []
+    return [p for p in target.iterdir() if p.is_dir() and (p / "manifest.json").exists()]
+
+
 def list_user_presets(data_dir: Path, user_sub: str) -> list[Path]:
-    """List preset dirs for a user. Validates user_sub against safe regex and prevents path traversal."""
+    """Deprecated alias for ``list_presets_for_owner``. Will be removed in v0.4.
+
+    Note: legacy layout was ``data_dir/presets/<user_sub>/``. New layout is
+    ``base_dir/<owner>/``. This shim preserves the old layout.
+    """
+    import warnings
+
+    warnings.warn(
+        "list_user_presets is deprecated; use list_presets_for_owner. Removed in v0.4.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     _validate_safe_id(user_sub, "user_sub")
     data_dir = Path(data_dir).resolve()
     base = (data_dir / "presets" / user_sub).resolve()

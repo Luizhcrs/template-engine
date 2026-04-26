@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **CRITICAL** — `OpenAIProvider` no longer crashes with `BadRequestError: Invalid schema` when `strict=True` was incorrectly enabled by default. Strict is now opt-in (`strict=False` default); when enabled, the provider auto-normalizes the schema via `engine.llm._schema.normalize_for_strict` (recursive `additionalProperties: false` + populate `required`).
+
+### Changed
+
+- **Breaking (soft):** `PresetManifest.owner_sub` renamed to `PresetManifest.owner`. Manifests still containing `owner_sub` are auto-promoted via Pydantic `model_validator` for backwards compatibility through v0.3. The `owner_sub` field will be removed in v0.4.
+- **Deprecated:** `engine.preset_loader.list_user_presets(data_dir, user_sub)` — use `list_presets_for_owner(base_dir, owner)` instead. Old function still works but emits `DeprecationWarning`. Removal in v0.4.
+- Internal helper `_retry_after_from_error` moved from `openai_provider.py` to `engine.llm._utils.retry_after_from_error` (sibling providers no longer cross-import private symbols).
+- Removed empty `docs/overrides/` directory and orphan `version.provider: mike` from `mkdocs.yml`.
+
+### Added
+
+- `engine.llm._schema.normalize_for_strict(schema)` — recursively normalizes a JSON Schema for OpenAI strict mode compliance.
+- `engine.llm._utils.retry_after_from_error(e, default)` — extracts retry-after from response headers (`retry-after`/`Retry-After`/`x-ratelimit-reset`) or `e.retry_after` attribute.
+- 13 new unit tests for `_utils` + `_schema` (49/49 passing).
+- README reformatted in English (consistent with international audience), with multi-provider fallback section, multi-language docs link, and provider-specific install hints.
+
 ## [0.2.0] - 2026-04-25
 
 ### Added

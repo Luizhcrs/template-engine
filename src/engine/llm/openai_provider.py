@@ -7,6 +7,8 @@ from typing import Any
 
 import structlog
 
+from ._schema import normalize_for_strict
+from ._utils import retry_after_from_error
 from .base import LLMError, LLMRateLimit, LLMTimeout
 
 try:
@@ -17,29 +19,19 @@ except ImportError as e:  # pragma: no cover - optional dep
 log = structlog.get_logger(__name__)
 
 
-def _retry_after_from_error(e: Exception, default: int = 60) -> int:
-    """Extract retry-after from response headers or exception attribute, fallback to default."""
-    response = getattr(e, "response", None)
-    if response is not None:
-        headers = getattr(response, "headers", {}) or {}
-        for key in ("retry-after", "Retry-After", "x-ratelimit-reset"):
-            value = headers.get(key)
-            if value:
-                try:
-                    return int(float(value))
-                except (TypeError, ValueError):
-                    pass
-    attr = getattr(e, "retry_after", None)
-    if attr:
-        try:
-            return int(float(attr))
-        except (TypeError, ValueError):
-            pass
-    return default
-
-
 class OpenAIProvider:
-    """OpenAI provider using Chat Completions + structured outputs (json_schema response_format)."""
+    """OpenAI provider using Chat Completions + structured outputs (json_schema response_format).
+
+    Args:
+        api_key: OpenAI API key (required)
+        model: model id (default ``gpt-4o-mini``)
+        base_url: optional override (used by OpenRouterProvider)
+        timeout: request timeout in seconds (default 60)
+        strict: when True, schema is normalized for OpenAI strict mode
+            (``additionalProperties: false`` recursive + every key in ``required``).
+            Strict mode is more reliable but rejects schemas with optional fields.
+            Default: False (most permissive, compatible with arbitrary schemas).
+    """
 
     name = "openai"
     model = "gpt-4o-mini"
@@ -50,14 +42,17 @@ class OpenAIProvider:
         model: str | None = None,
         base_url: str | None = None,
         timeout: float = 60.0,
+        strict: bool = False,
     ) -> None:
         if not api_key:
             raise RuntimeError("api_key obrigatório")
         if model:
             self.model = model
+        self._strict = strict
         self._client: AsyncOpenAI = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
     async def generate_structured(self, prompt: str, json_schema: dict) -> dict[str, Any]:
+        schema_for_request = normalize_for_strict(json_schema) if self._strict else json_schema
         try:
             resp = await self._client.chat.completions.create(
                 model=self.model,
@@ -66,14 +61,14 @@ class OpenAIProvider:
                     "type": "json_schema",
                     "json_schema": {
                         "name": "structured_output",
-                        "schema": json_schema,
-                        "strict": True,
+                        "schema": schema_for_request,
+                        "strict": self._strict,
                     },
                 },
                 temperature=0,
             )
         except RateLimitError as e:
-            retry_after = _retry_after_from_error(e, default=60)
+            retry_after = retry_after_from_error(e, default=60)
             log.warning("openai.rate_limit", error=str(e), retry_after=retry_after)
             raise LLMRateLimit(retry_after=retry_after) from e
         except APITimeoutError as e:

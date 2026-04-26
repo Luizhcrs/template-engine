@@ -9,23 +9,25 @@ Document normalization engine: learn a pattern from example documents and conver
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Typed](https://img.shields.io/badge/typed-mypy-2A6DB2.svg)](http://mypy-lang.org/)
 
+> **Docs**: <https://luizhcrs.github.io/template-engine/> ([English](https://luizhcrs.github.io/template-engine/) · [Português](https://luizhcrs.github.io/template-engine/pt/))
+
 ## What it does
 
-Pipeline em 5 etapas:
+5-stage pipeline:
 
 ```
 extractor → preset_creator → llm_mapper → validator → renderer
 ```
 
-- **`extractor`** — `.docx`/`.pdf` → texto + tabelas + cabeçalhos
-- **`preset_creator`** — template + 1-5 docs de referência → `pattern.md` + `schema.json` + `render_ops.yaml`
-- **`llm_mapper`** — prompt + few-shot + JSON Schema → JSON estruturado
-- **`validator`** — tokens críticos + cobertura + score 0-1
-- **`renderer`** — template + JSON + render_ops → `.docx` final determinístico
+- **`extractor`** — `.docx`/`.pdf` → text + tables + headers
+- **`preset_creator`** — template + 1-5 reference docs → `pattern.md` + `schema.json` + `render_ops.yaml`
+- **`llm_mapper`** — prompt + few-shot + JSON Schema → structured JSON
+- **`validator`** — critical token preservation + section coverage + 0-1 score
+- **`renderer`** — template + JSON + render_ops → final deterministic `.docx`
 
-## Princípio
+## Principle
 
-**Renderer determinístico, conteúdo via LLM.** Regras de formatação vivem em YAML; conteúdo é extraído pelo modelo. Trocar de LLM (Gemini → GPT → Claude) não muda o resultado visual.
+**Deterministic renderer, content via LLM.** Formatting rules live in YAML; content is extracted by the model. Switching LLMs (Gemini → GPT → Claude) does not change visual output.
 
 ## Install
 
@@ -35,13 +37,19 @@ Core (provider-agnostic):
 pip install template-engine
 ```
 
-Com provider Gemini incluído:
+Pick the provider(s) you need:
 
 ```bash
-pip install "template-engine[gemini]"
+pip install "template-engine[gemini]"        # Google Gemini (free tier)
+pip install "template-engine[openai]"        # OpenAI
+pip install "template-engine[anthropic]"     # Anthropic Claude
+pip install "template-engine[groq]"          # Groq (fast inference)
+pip install "template-engine[ollama]"        # local LLMs via Ollama
+pip install "template-engine[openrouter]"    # OpenRouter (400+ models)
+pip install "template-engine[all]"           # all providers
 ```
 
-Ou direto do source:
+Or from source:
 
 ```bash
 git clone https://github.com/Luizhcrs/template-engine
@@ -54,27 +62,24 @@ pip install -e ".[dev]"
 ```python
 import asyncio
 from pathlib import Path
-from engine import (
-    create_preset, load_preset, extract, map_content, render,
-)
+from engine import create_preset, load_preset, extract, map_content, render
 from engine.llm.gemini_free import GeminiFreeProvider
 
 async def main():
     provider = GeminiFreeProvider(api_key="AIza...")
 
-    # 1. Aprende padrão a partir de docs de referência
+    # 1. Learn pattern from template + reference docs
     preset_dir = await create_preset(
         llm=provider,
         template_path=Path("template.docx"),
         gold_paths=[Path("gold_01.docx"), Path("gold_02.docx")],
         dest_dir=Path("./presets/my-template"),
-        # slug, name, owner são opcionais; defaults derivados de dest_dir.name
     )
 
-    # 2. Carrega preset
+    # 2. Load
     preset = load_preset(preset_dir)
 
-    # 3. Converte um documento-fonte
+    # 3. Convert a source document
     doc = extract(Path("source.docx"))
     data = await map_content(preset, doc.text, provider)
     render(preset, data, output_path=Path("out.docx"))
@@ -82,54 +87,85 @@ async def main():
 asyncio.run(main())
 ```
 
-## Architecture
+## Multi-provider with fallback
 
-**Stateless.** Recebe paths/bytes, retorna paths/bytes/dicts. Sem dependência de framework web, ORM ou camada de aplicação.
-
-**Determinístico no rendering.** LLM nunca decide forma visual. Tudo que afeta visual vive em `render_ops.yaml`. Trocar de modelo não muda saída visual.
-
-**Multi-provider.** Suporta Gemini, OpenAI, Anthropic, Groq, Ollama (local) e OpenRouter (400+ modelos) — todos via `engine.llm.base.LLMProvider` Protocol. Use `LLMRouter` pra fallback automático em rate-limit/timeout. Adicione um provider próprio assim:
+Wrap providers in `LLMRouter` for automatic failover on rate-limit / timeout:
 
 ```python
-from engine.llm.base import LLMProvider
+from engine.llm import LLMRouter
+from engine.llm.groq_provider import GroqProvider
+from engine.llm.gemini_free import GeminiFreeProvider
+from engine.llm.openai_provider import OpenAIProvider
+
+router = LLMRouter([
+    GroqProvider(api_key=g_key),         # primary: fast + cheap
+    GeminiFreeProvider(api_key=ge_key),  # fallback: free tier
+    OpenAIProvider(api_key=o_key),       # last resort
+])
+
+# Same interface as individual providers
+data = await map_content(preset, source_text, router)
+```
+
+Generic `LLMError` propagates immediately; only `LLMRateLimit` / `LLMTimeout` trigger fallback.
+
+## Architecture
+
+**Stateless.** Receives paths/bytes, returns paths/bytes/dicts. No dependency on web framework, ORM, or application layer.
+
+**Deterministic rendering.** LLM never decides visual format. Everything visual lives in `render_ops.yaml`. Switching models does not change visual output.
+
+**Type-safe.** `py.typed` marker, full type hints, mypy-friendly.
+
+**Add your own provider** by implementing the `LLMProvider` Protocol:
+
+```python
+from engine.llm.base import LLMError, LLMRateLimit, LLMTimeout
 
 class MyProvider:
     name = "my-provider"
+    model = "default"
+
+    def __init__(self, api_key: str, model: str | None = None) -> None:
+        if not api_key:
+            raise RuntimeError("api_key required")
+        # ... initialize SDK
 
     async def generate_structured(self, prompt: str, json_schema: dict) -> dict:
-        # ... sua implementação
-        return parsed_json
+        # ... call API, parse JSON
+        # raise LLMRateLimit / LLMTimeout / LLMError as needed
+        ...
 ```
+
+See [docs/providers/](https://luizhcrs.github.io/template-engine/providers/) for the full provider checklist.
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest                    # 36 tests
-pytest --cov              # com coverage
+ruff check . && ruff format --check . && mypy src/engine && pytest
 ```
+
+Today: 49 tests passing.
 
 ## Use cases
 
-- Padronização de contratos jurídicos
-- Normalização de laudos técnicos
-- Conversão de relatórios entre formatos corporativos
-- Migração de documentos legados pra template novo
-- Extração estruturada de PDFs em documentos `.docx`
+- Legal contract standardization
+- Technical report normalization
+- Migration of legacy documents to a new template
+- Compliance: enforce typography + critical token preservation
+- Structured PDF extraction → polished `.docx`
 
 ## Roadmap
 
-- [ ] OpenAI provider
-- [ ] Anthropic provider
-- [ ] Ollama provider (modelos locais)
-- [ ] PDF output além de `.docx`
-- [ ] Eval suite com benchmark de prompt + LLM rotation
-- [ ] CI com pytest
+Current status and upcoming work (eval suite, CLI, OCR, PDF output) in [ROADMAP.md](ROADMAP.md).
+
+## Contributing
+
+Issues and PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, code style, and the provider checklist.
+
+For security issues see [SECURITY.md](SECURITY.md).
 
 ## License
 
 [Apache 2.0](LICENSE) · Copyright 2026 luizhcrs
-
-## Contributing
-
-Issues e PRs bem-vindos. Pra mudanças grandes, abra uma issue antes pra discutir.
