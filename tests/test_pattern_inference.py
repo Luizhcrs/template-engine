@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 from engine.pattern_inference import (
     _aggregate_labels,
     _detect_value_shape,
     _extract_label_before,
+    _grex_available,
+    _grex_learn,
     apply_inferred,
     infer_field_patterns,
 )
@@ -43,10 +47,13 @@ def test_detect_falls_back_to_freetext():
     assert name == "freetext"
 
 
-def test_detect_mixed_examples_no_match():
-    """One example fits ISO date, other is fullname → no shared shape."""
+def test_detect_mixed_examples_falls_back_to_grex_or_freetext():
+    """One example fits ISO date, other is fullname → no Tier 1 match.
+
+    With grex (Tier 2) installed, learns a union pattern; without it, lands on freetext.
+    """
     name, _ = _detect_value_shape(["2026-04-26", "Joao Silva"])
-    assert name == "freetext"
+    assert name in {"freetext", "grex_learned"}
 
 
 # ===== _extract_label_before =====
@@ -150,6 +157,66 @@ def test_infer_pattern_coverage_zero_when_no_match():
     ip = inferred["NOME"]
     # No label found, fallback to value-shape only regex
     assert ip.coverage == 0.0
+
+
+# ===== Tier 2: grex-learned shapes =====
+
+
+_grex_skip = pytest.mark.skipif(not _grex_available(), reason="grex optional dep not installed")
+
+
+@_grex_skip
+def test_grex_learns_single_char_class():
+    """grex generalizes ['A','A','B'] -> [AB]."""
+    learned = _grex_learn(["A", "A", "B"])
+    assert learned is not None
+    assert "[AB]" in learned or "[BA]" in learned
+
+
+@_grex_skip
+def test_grex_learns_digit_pattern():
+    """ISSN-like ['2026-0042-CR','2026-0099-XR','2026-0001-AR'] gets digit conversion."""
+    learned = _grex_learn(["2026-0042-CR", "2026-0099-XR", "2026-0001-AR"])
+    assert learned is not None
+    assert r"\d" in learned
+
+
+@_grex_skip
+def test_grex_rejects_pure_literal_alternations():
+    """grex shouldn't return ``(?:foo|bar)`` alone — too literal to generalize."""
+    # 3 unrelated short words — grex would emit (?:cat|dog|fox) — rejected.
+    result = _grex_learn(["cat", "dog", "fox"])
+    assert result is None
+
+
+@_grex_skip
+def test_detect_shape_uses_grex_when_no_predefined_match():
+    """Shape ['A','A','B'] doesn't match any predefined shape — grex tier kicks in."""
+    name, fragment = _detect_value_shape(["A", "A", "B"])
+    assert name == "grex_learned"
+    assert "[AB]" in fragment or "[BA]" in fragment
+
+
+@_grex_skip
+def test_detect_shape_predefined_takes_priority_over_grex():
+    """ISO date hits Tier 1 — grex never invoked."""
+    name, _ = _detect_value_shape(["2026-04-26", "2025-12-31"])
+    assert name == "iso_date"  # NOT "grex_learned"
+
+
+@_grex_skip
+def test_grex_skipped_when_examples_too_long():
+    """Long free-text examples skip grex (would produce noise)."""
+    long_examples = [
+        "Avaliar conformidade do equipamento ABC-9 conforme ISO 9001",
+        "Avaliar conformidade do equipamento DEF-2 conforme ISO 14001",
+    ]
+    name, fragment = _detect_value_shape(long_examples)
+    assert name == "freetext"
+    assert fragment == r"[^\n]+"
+
+
+# ===== full inference end-to-end =====
 
 
 def test_apply_inferred_extracts_multiple_fields():

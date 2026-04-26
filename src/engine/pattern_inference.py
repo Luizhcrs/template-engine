@@ -2,22 +2,26 @@
 
 Replaces hardcoded ``_FIELD_PATTERNS`` dicts in POCs with mechanical inference.
 
-Algorithm (deliberately simple, no grex/LearnLib dependency):
+Algorithm (3-tier shape detection):
 
-1. **Locate examples** in gold docs (substring match).
+1. **Locate examples** in gold docs (substring match, anchored by ``: <example>``).
 2. **Extract label context**: text immediately before each match. Looks for "Label:" pattern.
 3. **Aggregate label variants** across docs (e.g. "Nome:", "Nome completo:", "Responsavel:").
-4. **Infer value shape** by checking shared structural patterns across all examples
-   (date YYYY-MM-DD, code A-9, fullname, integer, etc).
+4. **Infer value shape** — three tiers, first match wins:
+
+   a. **Pre-defined shapes**: ISO date, doc code, CPF, CEP, UF, fullname, etc.
+      Fast, well-tested, gives readable regex.
+   b. **grex-learned shape** (optional, Wave A v2): when no pre-defined shape fits,
+      ``grex.RegExpBuilder`` learns a regex from the examples (digits→\\d, alternations).
+      Much better than ``[^\\n]+`` for structured but unrecognized values.
+   c. **Free-text fallback**: ``[^\\n]+`` when neither tier produces a valid match.
+
 5. **Compose regex**: ``(?:label_alt_1|label_alt_2|...):\\s*(value_shape)``.
 
 Limitations:
 
 - Only works when label uses ``Label:`` syntax (or close variants).
-- Free-text fields fall back to ``[^\\n]+`` (greedy single-line).
-- No probabilistic generalization (grex would do better).
-
-Future work: integrate ``grex`` lib for learned-from-strings regex (Wave A v2).
+- ``grex`` is optional — install with ``pip install template-engine[inference]``.
 """
 
 from __future__ import annotations
@@ -70,6 +74,82 @@ _VALUE_SHAPES: list[tuple[str, re.Pattern, str]] = [
 _FALLBACK_SHAPE: Final[str] = r"[^\n]+"
 
 
+def _grex_available() -> bool:
+    """Lazy probe for the optional ``grex`` dependency."""
+    try:
+        import grex  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _grex_learn(examples: list[str]) -> str | None:
+    """Use grex to learn a regex from examples.
+
+    Returns a regex fragment (no anchors, no capture group) suitable for embedding
+    in the final composed regex. Returns ``None`` if grex is not installed or the
+    learned pattern is overly literal (just an alternation of full strings).
+    """
+    if not _grex_available():
+        return None
+
+    import grex
+
+    try:
+        # Try two builds:
+        #   1. digits-only conversion → preserves literal letters
+        #   2. digits + words conversion → also generalizes letter alternations
+        # Pick #2 only when it still has STRUCTURAL ANCHORS (literal hyphen,
+        # space, or ``\d``). Otherwise it collapses to a permissive ``\w+``
+        # which matches arbitrary text and ruins extraction precision.
+        b_digits = grex.RegExpBuilder.from_test_cases(examples).without_anchors().with_conversion_of_digits()
+        digits_only = b_digits.build()
+
+        b_words = (
+            grex.RegExpBuilder.from_test_cases(examples)
+            .without_anchors()
+            .with_conversion_of_digits()
+            .with_conversion_of_words()
+        )
+        with_words = b_words.build()
+
+        learned = with_words if _has_structural_anchors(with_words) else digits_only
+    except Exception as exc:
+        log.warning("pattern_inference.grex_failed", examples=examples, error=str(exc))
+        return None
+
+    # Reject pure literal alternations like ``(?:foo|bar|baz)`` — they don't
+    # generalize and ``[^\n]+`` is more useful in that case.
+    if learned and not _has_meta_class(learned):
+        return None
+
+    return learned
+
+
+def _has_meta_class(regex: str) -> bool:
+    """True iff regex contains any generalizing meta class (\\d, \\w, [AB], etc)."""
+    if r"\d" in regex or r"\w" in regex or r"\s" in regex:
+        return True
+    # Bracket char class like [AB], [a-z]
+    return bool(re.search(r"(?<!\\)\[[^\]]+\]", regex))
+
+
+def _has_structural_anchors(regex: str) -> bool:
+    """True iff regex still has literal punctuation or digit-class anchors.
+
+    Used to decide whether grex's ``with_conversion_of_words()`` over-generalized.
+    A regex like ``\\w\\w-\\d\\d-\\w`` has anchors (``-`` separators, ``\\d``);
+    ``\\w\\w\\w`` does not — it would match any 3-letter token.
+
+    Whitespace alone is NOT considered a structural anchor: ``\\w\\w\\w \\w\\w``
+    matches any two-word phrase and is too permissive for labeled extraction.
+    """
+    has_punctuation = bool(re.search(r"\\[\-./()_:;,]", regex))
+    has_digits = r"\d" in regex
+    return has_punctuation or has_digits
+
+
 @dataclass(frozen=True)
 class InferredPattern:
     """Result of inferring a regex for one field."""
@@ -100,10 +180,37 @@ def _extract_label_before(text: str, match_start: int) -> str | None:
 
 
 def _detect_value_shape(examples: list[str]) -> tuple[str, str]:
-    """Find first known shape that matches ALL examples. Returns (shape_name, regex_fragment)."""
+    """Find first known shape that matches ALL examples.
+
+    Tier 1: Pre-defined shapes (iso_date, doc_code, cpf, ...).
+    Tier 2: grex-learned shape (optional dep, generalizes via digit conversion).
+    Tier 3: ``[^\\n]+`` free-text fallback.
+
+    Returns (shape_name, regex_fragment).
+    """
+    # Tier 1
     for name, pattern, fragment in _VALUE_SHAPES:
         if all(pattern.fullmatch(ex) for ex in examples):
             return name, fragment
+
+    # Tier 2 — only attempt grex when examples look structured (no spaces or
+    # short enough to suggest a code-like value). Free-text fields skip grex.
+    if all(len(ex) <= 30 and "\n" not in ex for ex in examples):
+        learned = _grex_learn(examples)
+        if learned:
+            # Validate the learned regex actually matches every example.
+            try:
+                compiled = re.compile(learned)
+                if all(compiled.fullmatch(ex) for ex in examples):
+                    return "grex_learned", learned
+            except re.error as exc:
+                log.warning(
+                    "pattern_inference.grex_invalid_regex",
+                    pattern=learned,
+                    error=str(exc),
+                )
+
+    # Tier 3
     return "freetext", _FALLBACK_SHAPE
 
 
