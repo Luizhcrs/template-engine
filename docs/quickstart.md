@@ -91,6 +91,36 @@ template-engine normalize \
   --report report.json
 ```
 
+## Bundled formats (Wave H)
+
+5 ready-to-use formats: `abnt_artigo`, `abnt_tcc`, `abnt_referencia`, `laudo_nr12`, `contrato_simples`. Each ships schemas + gold docs + field examples + tuned conformity weights.
+
+```python
+from engine import load_format, list_formats, normalize_batch
+
+print(list_formats())
+# ['abnt_artigo', 'abnt_referencia', 'abnt_tcc', 'contrato_simples', 'laudo_nr12']
+
+fmt = load_format("laudo_nr12")
+report = await normalize_batch(
+    template_path=Path("template.docx"),
+    source_dir=Path("docs/"),
+    output_dir=Path("normalized/"),
+    field_examples=fmt.field_examples,    # auto-fill
+    gold_docs=fmt.gold_docs,              # auto-fill
+)
+```
+
+CLI:
+
+```bash
+template-engine list-formats
+template-engine normalize --format laudo_nr12 --template T --source-dir SD --output-dir OD
+template-engine conformity --format abnt_tcc --template T --candidate C --provider gemini
+```
+
+With `--format`, the format's weights and threshold become defaults (`laudo_nr12` = technical 0.45, threshold 0.90).
+
 ## Conformity check
 
 After normalization, verify a candidate matches the standard:

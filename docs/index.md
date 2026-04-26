@@ -71,6 +71,11 @@ Path / bytes in, paths / bytes / dataclasses out. No web framework, ORM, or app 
 `engine.security.AuditLog` writes append-only JSON Lines. Records sha256 hashes — never raw content.
 </div>
 
+<div class="te-feature" markdown>
+### Bundled formats
+5 ready-to-use formats: ABNT NBR 6022 / 14724 / 6023, NR-12 (laudo), contrato simples. `load_format(name)` ships schemas + golds + tuned conformity weights.
+</div>
+
 </div>
 
 ## Cost by tier (Gemini Flash)
