@@ -62,7 +62,7 @@ class PlaceholderHint:
 
 @dataclass(frozen=True)
 class LayoutFeatures:
-    """Output of layout heuristics over the ASCII grid."""
+    """Output of layout heuristics over the ASCII grid (single page)."""
 
     rows: int
     cols: int
@@ -71,6 +71,43 @@ class LayoutFeatures:
     section_breaks: list[SectionBreak] = field(default_factory=list)
     placeholders: list[PlaceholderHint] = field(default_factory=list)
     overall_density: float = 0.0  # 0-1
+
+
+@dataclass(frozen=True)
+class MultiPageLayoutFeatures:
+    """Aggregated layout features across multiple pages.
+
+    ``pages`` keeps per-page details; aggregate counts at the top level make it easy
+    to summarize whole-document features without iterating.
+    """
+
+    pages: list[LayoutFeatures]
+
+    @property
+    def page_count(self) -> int:
+        return len(self.pages)
+
+    @property
+    def total_headings(self) -> int:
+        return sum(len(p.headings) for p in self.pages)
+
+    @property
+    def total_tables(self) -> int:
+        return sum(len(p.tables) for p in self.pages)
+
+    @property
+    def total_section_breaks(self) -> int:
+        return sum(len(p.section_breaks) for p in self.pages)
+
+    @property
+    def total_placeholders(self) -> int:
+        return sum(len(p.placeholders) for p in self.pages)
+
+    @property
+    def average_density(self) -> float:
+        if not self.pages:
+            return 0.0
+        return round(sum(p.overall_density for p in self.pages) / len(self.pages), 3)
 
 
 def image_to_ascii(
@@ -454,4 +491,75 @@ def summarize_layout(features: LayoutFeatures, fmt: LayoutSummaryFormat = "text"
     parts.append(f"Placeholders: {len(features.placeholders)}")
     for p in features.placeholders[:10]:
         parts.append(f"  row={p.row} col={p.column_start} pattern={p.pattern[:20]!r}")
+    return "\n".join(parts)
+
+
+def detect_layout_features_multipage(
+    grids: list[str],
+    ramp: str = _DEFAULT_RAMP,
+) -> MultiPageLayoutFeatures:
+    """Run ``detect_layout_features`` on each grid, collect into a multi-page result.
+
+    Each entry in ``grids`` is treated as one page. Page indices are 0-based in the
+    returned ``pages`` list (page 1 of the doc -> ``pages[0]``).
+    """
+    if not grids:
+        return MultiPageLayoutFeatures(pages=[])
+    per_page = [detect_layout_features(g, ramp=ramp) for g in grids]
+    log.info(
+        "ascii_layout.multipage.features",
+        page_count=len(per_page),
+        total_headings=sum(len(p.headings) for p in per_page),
+        total_tables=sum(len(p.tables) for p in per_page),
+        total_section_breaks=sum(len(p.section_breaks) for p in per_page),
+        total_placeholders=sum(len(p.placeholders) for p in per_page),
+    )
+    return MultiPageLayoutFeatures(pages=per_page)
+
+
+def summarize_multipage(
+    features: MultiPageLayoutFeatures,
+    fmt: LayoutSummaryFormat = "text",
+) -> str:
+    """Compact summary of multi-page layout features."""
+    if fmt == "json":
+        import json
+
+        payload = {
+            "page_count": features.page_count,
+            "totals": {
+                "headings": features.total_headings,
+                "tables": features.total_tables,
+                "section_breaks": features.total_section_breaks,
+                "placeholders": features.total_placeholders,
+            },
+            "average_density": features.average_density,
+            "pages": [
+                {
+                    "page": i + 1,
+                    "rows": p.rows,
+                    "cols": p.cols,
+                    "density": p.overall_density,
+                    "headings": len(p.headings),
+                    "tables": len(p.tables),
+                    "section_breaks": len(p.section_breaks),
+                    "placeholders": len(p.placeholders),
+                }
+                for i, p in enumerate(features.pages)
+            ],
+        }
+        return json.dumps(payload, indent=2, ensure_ascii=False)
+
+    parts: list[str] = []
+    parts.append(f"Document: {features.page_count} pages, avg density={features.average_density:.2f}")
+    parts.append(
+        f"Totals — headings={features.total_headings} tables={features.total_tables} "
+        f"section_breaks={features.total_section_breaks} placeholders={features.total_placeholders}"
+    )
+    parts.append("")
+    for i, page in enumerate(features.pages, start=1):
+        parts.append(
+            f"Page {i}: H={len(page.headings)} T={len(page.tables)} "
+            f"S={len(page.section_breaks)} P={len(page.placeholders)} d={page.overall_density:.2f}"
+        )
     return "\n".join(parts)

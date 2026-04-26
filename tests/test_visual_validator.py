@@ -393,3 +393,67 @@ def test_pdf_to_png_empty_list_raises(fake_docx, tmp_path):
         pytest.raises(RuntimeError, match="no pages"),
     ):
         docx_to_png(fake_docx, out_dir=tmp_path)
+
+
+# ===== multi-page rendering =====
+
+
+def test_docx_to_pngs_returns_list_per_page(fake_docx, tmp_path):
+    """Multi-page rendering returns one PNG per page with -pNNN suffix."""
+    from engine.visual_validator import docx_to_pngs
+
+    fake_proc = MagicMock(returncode=0, stderr="", stdout="ok")
+    expected_pdf = tmp_path / "fake.pdf"
+
+    def mock_run(*args, **kwargs):
+        expected_pdf.write_bytes(b"%PDF-1.4 fake")
+        return fake_proc
+
+    fake_image1 = MagicMock()
+    fake_image2 = MagicMock()
+    fake_image3 = MagicMock()
+
+    with (
+        patch("engine.visual_validator.shutil.which", return_value="/usr/bin/soffice"),
+        patch("engine.visual_validator.subprocess.run", side_effect=mock_run),
+        patch("pdf2image.convert_from_path", return_value=[fake_image1, fake_image2, fake_image3]),
+    ):
+        pages = docx_to_pngs(fake_docx, out_dir=tmp_path, pages="all")
+
+    assert len(pages) == 3
+    # naming convention: <stem>-p001.png, -p002.png, -p003.png
+    assert pages[0].name == "fake-p001.png"
+    assert pages[1].name == "fake-p002.png"
+    assert pages[2].name == "fake-p003.png"
+    fake_image1.save.assert_called_once_with(pages[0], "PNG")
+
+
+def test_docx_to_pngs_single_page_no_suffix(fake_docx, tmp_path):
+    """Single-page result drops the -pNNN suffix for cleaner output."""
+    from engine.visual_validator import docx_to_pngs
+
+    fake_proc = MagicMock(returncode=0, stderr="", stdout="ok")
+    expected_pdf = tmp_path / "fake.pdf"
+
+    def mock_run(*args, **kwargs):
+        expected_pdf.write_bytes(b"%PDF-1.4 fake")
+        return fake_proc
+
+    fake_image = MagicMock()
+
+    with (
+        patch("engine.visual_validator.shutil.which", return_value="/usr/bin/soffice"),
+        patch("engine.visual_validator.subprocess.run", side_effect=mock_run),
+        patch("pdf2image.convert_from_path", return_value=[fake_image]),
+    ):
+        pages = docx_to_pngs(fake_docx, out_dir=tmp_path, pages=1)
+
+    assert len(pages) == 1
+    assert pages[0].name == "fake.png"  # no suffix when single page
+
+
+def test_docx_to_pngs_invalid_pages_spec_raises(fake_docx, tmp_path):
+    from engine.visual_validator import docx_to_pngs
+
+    with pytest.raises(ValueError, match="invalid pages spec"):
+        docx_to_pngs(fake_docx, out_dir=tmp_path, pages="bogus")  # type: ignore[arg-type]

@@ -239,3 +239,96 @@ def test_summarize_layout_json_format():
     assert parsed["rows"] == 10
     assert parsed["cols"] == 20
     assert parsed["headings"] == []
+
+
+# ===== multi-page =====
+
+
+def test_detect_layout_features_multipage_empty_returns_empty():
+    from engine.ascii_layout import detect_layout_features_multipage
+
+    result = detect_layout_features_multipage([])
+    assert result.page_count == 0
+    assert result.total_headings == 0
+    assert result.average_density == 0.0
+
+
+def test_detect_layout_features_multipage_aggregates_per_page():
+    from engine.ascii_layout import detect_layout_features_multipage
+
+    # page 1: heading on top
+    page1 = "\n".join(["████████████████████"] * 3 + ["                    "] * 7)
+    # page 2: blank
+    page2 = "\n".join(["                    "] * 10)
+
+    result = detect_layout_features_multipage([page1, page2])
+    assert result.page_count == 2
+    assert len(result.pages) == 2
+    assert len(result.pages[0].headings) >= 1
+    assert len(result.pages[1].headings) == 0
+
+
+def test_multipage_features_aggregate_properties():
+    from engine.ascii_layout import (
+        HeadingHint,
+        LayoutFeatures,
+        MultiPageLayoutFeatures,
+        PlaceholderHint,
+        TableHint,
+    )
+
+    p1 = LayoutFeatures(
+        rows=10,
+        cols=20,
+        headings=[HeadingHint(row=1, density=0.9, width_ratio=1.0, text_preview="x")],
+        tables=[TableHint(start_row=2, end_row=8, column_count_estimate=3)],
+        placeholders=[PlaceholderHint(row=5, pattern="____", column_start=0)],
+        overall_density=0.4,
+    )
+    p2 = LayoutFeatures(
+        rows=10,
+        cols=20,
+        headings=[HeadingHint(row=0, density=0.8, width_ratio=0.9, text_preview="y")],
+        overall_density=0.2,
+    )
+    multi = MultiPageLayoutFeatures(pages=[p1, p2])
+
+    assert multi.page_count == 2
+    assert multi.total_headings == 2
+    assert multi.total_tables == 1
+    assert multi.total_placeholders == 1
+    assert multi.average_density == 0.3
+
+
+def test_summarize_multipage_text_format():
+    from engine.ascii_layout import (
+        LayoutFeatures,
+        MultiPageLayoutFeatures,
+        summarize_multipage,
+    )
+
+    multi = MultiPageLayoutFeatures(
+        pages=[
+            LayoutFeatures(rows=60, cols=80, overall_density=0.3),
+            LayoutFeatures(rows=60, cols=80, overall_density=0.5),
+        ]
+    )
+    out = summarize_multipage(multi)
+    assert "2 pages" in out
+    assert "Page 1" in out
+    assert "Page 2" in out
+
+
+def test_summarize_multipage_json_format():
+    from engine.ascii_layout import (
+        LayoutFeatures,
+        MultiPageLayoutFeatures,
+        summarize_multipage,
+    )
+
+    multi = MultiPageLayoutFeatures(pages=[LayoutFeatures(rows=60, cols=80, overall_density=0.3)])
+    import json
+
+    parsed = json.loads(summarize_multipage(multi, fmt="json"))
+    assert parsed["page_count"] == 1
+    assert parsed["totals"]["headings"] == 0

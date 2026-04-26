@@ -8,12 +8,15 @@ from __future__ import annotations
 from engine.ascii_layout import (
     HeadingHint,
     LayoutFeatures,
+    MultiPageLayoutFeatures,
     PlaceholderHint,
     SectionBreak,
     TableHint,
     detect_layout_features,
+    detect_layout_features_multipage,
     image_to_ascii,
     summarize_layout,
+    summarize_multipage,
 )
 from engine.confidence import ConfidenceLabel, calculate_confidence, confidence_label
 from engine.extractor import ExtractedDoc, extract
@@ -40,6 +43,7 @@ from engine.visual_validator import (
     VisualIssue,
     VisualValidationResult,
     docx_to_png,
+    docx_to_pngs,
     validate_visual,
 )
 
@@ -50,6 +54,7 @@ __all__ = [
     "ExtractedDoc",
     "HeadingHint",
     "LayoutFeatures",
+    "MultiPageLayoutFeatures",
     "PlaceholderHint",
     "PresetBundle",
     "PresetInvalid",
@@ -69,7 +74,9 @@ __all__ = [
     "confidence_label",
     "create_preset",
     "detect_layout_features",
+    "detect_layout_features_multipage",
     "docx_to_png",
+    "docx_to_pngs",
     "extract",
     "image_to_ascii",
     "list_builtin_presets",
@@ -79,6 +86,7 @@ __all__ = [
     "map_content",
     "render",
     "summarize_layout",
+    "summarize_multipage",
     "validate",
     "validate_visual",
 ]

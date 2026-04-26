@@ -162,7 +162,22 @@ def _docx_to_pdf(docx_path: Path, out_dir: Path) -> Path:
 
 
 def _pdf_to_png(pdf_path: Path, out_dir: Path, dpi: int = 150) -> Path:
-    """Render the first page of a PDF to PNG. Returns the PNG path."""
+    """Render the first page of a PDF to PNG. Returns the PNG path.
+
+    For multi-page rendering, use ``_pdf_to_pngs``.
+    """
+    pages = _pdf_to_pngs(pdf_path, out_dir, dpi=dpi, first_page=1, last_page=1)
+    return pages[0]
+
+
+def _pdf_to_pngs(
+    pdf_path: Path,
+    out_dir: Path,
+    dpi: int = 150,
+    first_page: int = 1,
+    last_page: int | None = None,
+) -> list[Path]:
+    """Render PDF pages to PNGs. Returns list of paths (one per page)."""
     try:
         from pdf2image import convert_from_path
     except ImportError as e:  # pragma: no cover - optional dep
@@ -171,19 +186,36 @@ def _pdf_to_png(pdf_path: Path, out_dir: Path, dpi: int = 150) -> Path:
         ) from e
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    images = convert_from_path(str(pdf_path), dpi=dpi, first_page=1, last_page=1)
+    # Build kwargs dynamically: pdf2image accepts None for last_page at runtime
+    # ("until end"), but the type stub typing rejects None. Drop key when None.
+    kwargs: dict[str, object] = {"dpi": dpi, "first_page": first_page}
+    if last_page is not None:
+        kwargs["last_page"] = last_page
+    images = convert_from_path(str(pdf_path), **kwargs)  # type: ignore[arg-type]
     if not images:
         raise RuntimeError(f"pdf2image returned no pages for {pdf_path}")
-    png_path = out_dir / (pdf_path.stem + ".png")
-    images[0].save(png_path, "PNG")
-    log.info("visual.pdf_to_png.ok", pdf=str(pdf_path), png=str(png_path))
-    return png_path
+
+    pages: list[Path] = []
+    for idx, image in enumerate(images, start=first_page):
+        suffix = "" if len(images) == 1 else f"-p{idx:03d}"
+        png_path = out_dir / f"{pdf_path.stem}{suffix}.png"
+        image.save(png_path, "PNG")
+        pages.append(png_path)
+
+    log.info(
+        "visual.pdf_to_pngs.ok",
+        pdf=str(pdf_path),
+        pages_rendered=len(pages),
+        first=first_page,
+        last=first_page + len(pages) - 1,
+    )
+    return pages
 
 
 def docx_to_png(docx_path: Path, out_dir: Path | None = None, dpi: int = 150) -> Path:
-    """Render a ``.docx`` to a PNG image (first page).
+    """Render a ``.docx`` to a PNG image (first page only).
 
-    Public helper. Useful standalone for thumbnails or pipelines that need page rasters.
+    For multi-page rendering, use ``docx_to_pngs``.
     """
     docx_path = Path(docx_path)
     if not docx_path.exists():
@@ -191,6 +223,44 @@ def docx_to_png(docx_path: Path, out_dir: Path | None = None, dpi: int = 150) ->
     work_dir = Path(out_dir) if out_dir else Path(tempfile.mkdtemp(prefix="te-visual-"))
     pdf = _docx_to_pdf(docx_path, work_dir)
     return _pdf_to_png(pdf, work_dir, dpi=dpi)
+
+
+def docx_to_pngs(
+    docx_path: Path,
+    out_dir: Path | None = None,
+    dpi: int = 150,
+    pages: Literal["all"] | int | tuple[int, int] = "all",
+) -> list[Path]:
+    """Render a ``.docx`` to PNG images, one per page.
+
+    Args:
+        docx_path: source .docx file.
+        out_dir: output directory (temp dir if None).
+        dpi: rasterization DPI.
+        pages: ``"all"`` (default), single int (1-indexed), or ``(first, last)`` tuple.
+
+    Returns:
+        List of PNG paths in document order.
+    """
+    docx_path = Path(docx_path)
+    if not docx_path.exists():
+        raise FileNotFoundError(f"docx not found: {docx_path}")
+
+    # Validate pages spec BEFORE expensive LibreOffice call (fail fast)
+    first_page: int
+    last_page: int | None
+    if pages == "all":
+        first_page, last_page = 1, None
+    elif isinstance(pages, int):
+        first_page = last_page = pages
+    elif isinstance(pages, tuple) and len(pages) == 2:
+        first_page, last_page = pages
+    else:
+        raise ValueError(f"invalid pages spec: {pages!r}")
+
+    work_dir = Path(out_dir) if out_dir else Path(tempfile.mkdtemp(prefix="te-visual-"))
+    pdf = _docx_to_pdf(docx_path, work_dir)
+    return _pdf_to_pngs(pdf, work_dir, dpi=dpi, first_page=first_page, last_page=last_page)
 
 
 async def validate_visual(
