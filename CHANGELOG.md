@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed — Wave E (consolidation, BREAKING)
+
+Drops the legacy preset-bundle pipeline in favor of the Wave D schema-driven path. **Breaking change.** Users on the old pipeline must migrate to ``template-engine normalize``.
+
+- **Source modules dropped:** ``engine.preset_creator``, ``engine.preset_loader``, ``engine.preset_schemas``, ``engine.renderer``, ``engine.render_ops/`` (entire package), ``engine.validator``, ``engine.visual_validator``, ``engine.llm_mapper``.
+- **LLM module dropped:** ``engine.llm.gemini_vision`` and ``engine.llm.base.VisualLLMProvider`` Protocol. (Will return in Wave F under a different name for the conformity validator design dimension.)
+- **CLI commands dropped:** ``template-engine convert`` and ``template-engine visual-validate``. Replacement: ``template-engine normalize``.
+- **Optional extras dropped:** ``[visual]`` (was ``pdf2image`` + ``pillow``). New ``[poc]`` extra exposes ``pillow`` for the example POC scripts.
+- **Examples dropped:** ``examples/01_quickstart.py``, ``examples/02_custom_provider.py``, ``examples/03_validation.py``, ``examples/04_ascii_layout_poc.py``. POCs 08-14 (Wave A demos) preserved.
+- **Tests dropped:** ``test_preset_creator``, ``test_preset_loader``, ``test_renderer``, ``test_validator``, ``test_visual_validator``, ``test_llm_mapper``. Total tests: 172 → **131 passing**.
+- **Docs pages dropped:** ``concepts/preset.{md,pt.md}``, ``concepts/render-ops.{md,pt.md}``, ``concepts/visual-validation.{md,pt.md}``.
+
+### Migration guide
+
+Old pipeline → Wave D:
+
+```python
+# Before (legacy)
+from engine import create_preset, load_preset, map_content, render
+preset = await create_preset(template_path, gold_paths, llm)
+data = await map_content(preset, source_text, llm)
+render(preset, data, output_path)
+
+# After (Wave D)
+from engine import normalize_batch
+report = await normalize_batch(
+    template_path=template_path,
+    source_dir=source_dir,
+    output_dir=output_dir,
+    llm=llm,
+    gold_docs=[extract(p).text for p in gold_paths],
+    field_examples=examples_dict,
+)
+```
+
+Old CLI → new CLI:
+
+```bash
+# Before
+template-engine convert source.docx --preset preset_dir --output out.docx
+template-engine visual-validate gold.docx output.docx
+
+# After
+template-engine normalize --template template.docx --source-dir docs/ --output-dir out/
+# (visual validation returns in Wave F as part of conformity check)
+```
+
+### Changed
+
+- **`engine.confidence`** decoupled from `engine.validator`. ``calculate_confidence`` now accepts any object exposing ``critical_tokens_found/total`` and ``sections_present/required`` via a structural Protocol (no more hard import).
+- **`__version__`** bumped to ``0.3.0`` (Wave E completes the v0.3 milestone).
+- **LOC stats:** src 4594 → 3045 (-34%), tests 2655 → 1884 (-29%), total py 9897 → 7329 (-26%).
+
+
 ### Added — Wave A (regex inference)
 
 - **`engine.pattern_inference`** — `infer_field_patterns(gold_docs, field_examples) -> dict[str, InferredPattern]` synthesizes a regex per field from gold docs + example values. Three-tier value-shape detection:

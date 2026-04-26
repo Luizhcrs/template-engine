@@ -1,6 +1,6 @@
 """template-engine: document normalization engine.
 
-Pipeline: extractor -> preset_creator -> llm_mapper -> validator -> renderer
+Pipeline: extractor -> schema_inference -> hybrid_mapper -> batch -> semantic_diff
 """
 
 from __future__ import annotations
@@ -23,29 +23,11 @@ from engine.confidence import ConfidenceLabel, calculate_confidence, confidence_
 from engine.extractor import ExtractedDoc, extract
 from engine.hybrid_mapper import MappingResult, map_hybrid
 from engine.hybrid_mapper import summarize as summarize_mapping
-from engine.llm_mapper import map_content
 from engine.pattern_inference import (
     InferredPattern,
     apply_inferred,
     infer_field_patterns,
 )
-from engine.preset_creator import create_preset
-from engine.preset_loader import (
-    PresetInvalid,
-    PresetNotFound,
-    list_builtin_presets,
-    list_presets_for_owner,
-    list_user_presets,
-    load_preset,
-)
-from engine.preset_schemas import (
-    PresetBundle,
-    PresetManifest,
-    RenderOp,
-    RenderOpsFile,
-    ValidationConfig,
-)
-from engine.renderer import RenderError, render
 from engine.schema_inference import (
     FieldSchema,
     detect_placeholders,
@@ -58,16 +40,8 @@ from engine.semantic_diff import (
     diff_texts,
     filter_by_severity,
 )
-from engine.validator import ValidationResult, validate
-from engine.visual_validator import (
-    VisualIssue,
-    VisualValidationResult,
-    docx_to_png,
-    docx_to_pngs,
-    validate_visual,
-)
 
-__version__ = "0.3.0a1"
+__version__ = "0.3.0"
 
 __all__ = [
     "BatchItemResult",
@@ -82,48 +56,26 @@ __all__ = [
     "MappingResult",
     "MultiPageLayoutFeatures",
     "PlaceholderHint",
-    "PresetBundle",
-    "PresetInvalid",
-    "PresetManifest",
-    "PresetNotFound",
-    "RenderError",
-    "RenderOp",
-    "RenderOpsFile",
     "SectionBreak",
     "TableHint",
-    "ValidationConfig",
-    "ValidationResult",
-    "VisualIssue",
-    "VisualValidationResult",
     "__version__",
     "apply_inferred",
     "calculate_confidence",
     "confidence_label",
-    "create_preset",
     "detect_layout_features",
     "detect_layout_features_multipage",
     "detect_placeholders",
     "diff_documents",
     "diff_texts",
-    "docx_to_png",
-    "docx_to_pngs",
     "enrich_with_llm",
     "extract",
     "filter_by_severity",
     "image_to_ascii",
     "infer_field_patterns",
     "infer_template_schema",
-    "list_builtin_presets",
-    "list_presets_for_owner",
-    "list_user_presets",
-    "load_preset",
-    "map_content",
     "map_hybrid",
     "normalize_batch",
-    "render",
     "summarize_layout",
     "summarize_mapping",
     "summarize_multipage",
-    "validate",
-    "validate_visual",
 ]

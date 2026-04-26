@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import Protocol
 
-if TYPE_CHECKING:
-    from engine.validator import ValidationResult
+
+class _ValidationLike(Protocol):
+    """Structural shape used by :func:`calculate_confidence`.
+
+    Decoupled from any concrete ``ValidationResult`` class so this module stays
+    independent after Wave E. Any object exposing these four counters works.
+    """
+
+    critical_tokens_found: int
+    critical_tokens_total: int
+    sections_present: int
+    sections_required: int
 
 
 class ConfidenceLabel(StrEnum):
@@ -15,7 +25,7 @@ class ConfidenceLabel(StrEnum):
     LOW = "low"
 
 
-def calculate_confidence(result: ValidationResult, min_completeness: float = 0.7) -> float:
+def calculate_confidence(result: _ValidationLike, min_completeness: float = 0.7) -> float:
     """Score 0.0-1.0 derived from tokens + section completeness.
 
     Weights: 60% critical tokens, 40% required sections.

@@ -4,7 +4,7 @@ Commands:
 
 - ``template-engine info`` — version + available providers
 - ``template-engine extract <path>`` — extract text/tables from .docx/.pdf
-- ``template-engine convert <source> --preset <dir> --output <out> --provider gemini --api-key ...``
+- ``template-engine normalize`` — Wave D batch: 1 template + N source docs → N normalized
 - ``template-engine version`` — print version and exit
 """
 
@@ -23,17 +23,11 @@ from rich.panel import Panel
 from rich.table import Table
 
 from engine import __version__
-from engine.confidence import calculate_confidence, confidence_label
 from engine.extractor import extract as engine_extract
-from engine.llm_mapper import map_content
-from engine.preset_loader import load_preset
-from engine.renderer import render
-from engine.validator import validate
-from engine.visual_validator import validate_visual as engine_validate_visual
 
 app = typer.Typer(
     name="template-engine",
-    help="Document normalization engine — learn templates from examples and convert any document via LLM.",
+    help="Document normalization engine — Wave D batch orchestrator: regex first, LLM fallback.",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -146,125 +140,6 @@ def extract(
 
 
 @app.command()
-def convert(
-    source: Annotated[Path, typer.Argument(help="Source document (.docx or .pdf)", exists=True)],
-    preset: Annotated[Path, typer.Option("--preset", help="Preset directory", exists=True)],
-    output: Annotated[Path, typer.Option("--output", "-o", help="Output .docx path")],
-    provider: Annotated[str, typer.Option("--provider", help="LLM provider")] = "gemini",
-    model: Annotated[str | None, typer.Option("--model", help="Override model id")] = None,
-    api_key: Annotated[str | None, typer.Option("--api-key", help="API key (or use env var)")] = None,
-    skip_validation: Annotated[bool, typer.Option("--skip-validation", help="Skip validation step")] = False,
-) -> None:
-    """Run the full pipeline: extract → map → validate → render."""
-    bundle = load_preset(preset)
-    llm = _build_provider(provider, api_key, model)
-
-    console.print(
-        f"[bold]Provider:[/bold] {provider} ({getattr(llm, 'model', '?')})  "
-        f"[bold]Preset:[/bold] {bundle.manifest.slug}"
-    )
-
-    with console.status("[1/4] extracting source...", spinner="dots"):
-        doc = engine_extract(source)
-
-    console.print(f"  paragraphs={len(doc.paragraphs)} tables={len(doc.tables)} chars={len(doc.text)}")
-
-    with console.status("[2/4] calling LLM...", spinner="dots"):
-        data = asyncio.run(map_content(bundle, doc.text, llm))
-
-    console.print(f"  keys={list(data.keys())}")
-
-    if not skip_validation:
-        with console.status("[3/4] validating...", spinner="dots"):
-            result = validate(doc.text, data, bundle.validation)
-            score = calculate_confidence(result)
-            label = confidence_label(score)
-        color = {"high": "green", "medium": "yellow", "low": "red"}[label.value]
-        console.print(
-            f"  tokens={result.critical_tokens_found}/{result.critical_tokens_total} "
-            f"sections={result.sections_present}/{result.sections_required} "
-            f"score={score:.2f} [{color}]{label.value}[/{color}]"
-        )
-
-    with console.status("[4/4] rendering...", spinner="dots"):
-        render(bundle, data, output_path=output)
-
-    console.print(f"\n[bold green]OK[/bold green] -> {output.resolve()}")
-
-
-@app.command(name="visual-validate")
-def visual_validate(
-    gold: Annotated[Path, typer.Argument(help="Gold/reference .docx", exists=True)],
-    output: Annotated[Path, typer.Argument(help="Output .docx to validate", exists=True)],
-    api_key: Annotated[
-        str | None, typer.Option("--api-key", help="Gemini API key (or $GEMINI_API_KEY)")
-    ] = None,
-    model: Annotated[str | None, typer.Option("--model", help="Override Gemini model id")] = None,
-    keep_images: Annotated[
-        Path | None,
-        typer.Option("--keep-images", help="Keep rendered PNGs in this dir for inspection"),
-    ] = None,
-    dpi: Annotated[int, typer.Option("--dpi", help="Rasterization DPI")] = 150,
-) -> None:
-    """Compare two .docx visually using Gemini Vision (requires LibreOffice on PATH)."""
-    import os
-
-    key = api_key or os.environ.get("GEMINI_API_KEY", "")
-    if not key:
-        raise typer.BadParameter("--api-key required (or set $GEMINI_API_KEY)")
-
-    try:
-        from engine.llm.gemini_vision import GeminiVisionProvider
-    except ImportError as e:
-        raise typer.BadParameter(
-            "visual deps missing. Install: pip install 'template-engine[gemini,visual]'"
-        ) from e
-
-    llm = GeminiVisionProvider(api_key=key, model=model) if model else GeminiVisionProvider(api_key=key)
-    console.print(f"[bold]Visual provider:[/bold] {llm.name} ({llm.model})")
-
-    with console.status("rendering + comparing...", spinner="dots"):
-        result = asyncio.run(
-            engine_validate_visual(
-                gold_path=gold,
-                output_path=output,
-                llm=llm,
-                dpi=dpi,
-                keep_images_dir=keep_images,
-            )
-        )
-
-    color = "green" if result.score >= 0.9 else ("yellow" if result.score >= 0.7 else "red")
-    console.print(
-        Panel.fit(
-            f"[bold]Score:[/bold] [{color}]{result.score:.2f}[/{color}]\n"
-            f"[bold]Issues:[/bold] {len(result.issues)} "
-            f"(high={sum(1 for i in result.issues if i.severity == 'high')})\n\n"
-            f"{result.summary}",
-            title="Visual validation",
-            border_style=color,
-        )
-    )
-
-    if result.issues:
-        issues_table = Table(show_header=True, header_style="bold")
-        issues_table.add_column("Severity")
-        issues_table.add_column("Category")
-        issues_table.add_column("Description")
-        for issue in result.issues:
-            sev_color = {"high": "red", "medium": "yellow", "low": "dim"}[issue.severity]
-            issues_table.add_row(
-                f"[{sev_color}]{issue.severity}[/{sev_color}]",
-                issue.category,
-                issue.description,
-            )
-        console.print(issues_table)
-
-    console.print(f"\n[dim]gold image:[/dim] {result.gold_image}")
-    console.print(f"[dim]output image:[/dim] {result.output_image}")
-
-
-@app.command()
 def normalize(
     template: Annotated[
         Path, typer.Option("--template", help="Template .docx with placeholder tokens", exists=True)
@@ -339,7 +214,11 @@ def normalize(
     tier_counts = report.by_tier
     total = sum(tier_counts.values())
 
-    summary_table = Table(title=f"Batch summary — {total} document(s)", show_header=True, header_style="bold")
+    summary_table = Table(
+        title=f"Batch summary — {total} document(s)",
+        show_header=True,
+        header_style="bold",
+    )
     summary_table.add_column("Tier", style="bold")
     summary_table.add_column("Count", justify="right")
     summary_table.add_column("Meaning")
