@@ -10,6 +10,7 @@ Document normalization engine: learn a pattern from example documents and conver
 [![Typed](https://img.shields.io/badge/typed-mypy-2A6DB2.svg)](http://mypy-lang.org/)
 
 > **Docs**: <https://luizhcrs.github.io/template-engine/> ([English](https://luizhcrs.github.io/template-engine/) · [Português](https://luizhcrs.github.io/template-engine/pt/))
+> **README**: English (this file) · [Português](README.pt.md)
 
 ## What it does
 

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-26
+
 ### Fixed
 
 - **CRITICAL** — `OpenAIProvider` no longer crashes with `BadRequestError: Invalid schema` when `strict=True` was incorrectly enabled by default. Strict is now opt-in (`strict=False` default); when enabled, the provider auto-normalizes the schema via `engine.llm._schema.normalize_for_strict` (recursive `additionalProperties: false` + populate `required`).
@@ -24,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `engine.llm._utils.retry_after_from_error(e, default)` — extracts retry-after from response headers (`retry-after`/`Retry-After`/`x-ratelimit-reset`) or `e.retry_after` attribute.
 - 13 new unit tests for `_utils` + `_schema` (49/49 passing).
 - README reformatted in English (consistent with international audience), with multi-provider fallback section, multi-language docs link, and provider-specific install hints.
+- `README.pt.md` — Portuguese (Brazil) version of the README, mirrored from English.
 
 ## [0.2.0] - 2026-04-25
 
@@ -79,7 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Apache 2.0 license.
 - Gemini Free provider.
 
-[Unreleased]: https://github.com/Luizhcrs/template-engine/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Luizhcrs/template-engine/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/Luizhcrs/template-engine/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Luizhcrs/template-engine/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/Luizhcrs/template-engine/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Luizhcrs/template-engine/releases/tag/v0.1.0

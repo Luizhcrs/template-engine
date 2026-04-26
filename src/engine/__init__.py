@@ -27,7 +27,7 @@ from engine.preset_schemas import (
 from engine.renderer import RenderError, render
 from engine.validator import ValidationResult, validate
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "ConfidenceLabel",
