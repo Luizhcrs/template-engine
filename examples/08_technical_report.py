@@ -3,8 +3,8 @@
 Estrutura típica de laudo:
 - Header c/ 5 campos (código, revisão, data, responsável, classe)
 - Section OBJETIVO
-- Tabela PROCEDIMENTO (etapas × responsável × status)
-- Tabela HISTÓRICO DE REVISÕES (rev × data × alteração)
+- Tabela PROCEDIMENTO (etapas x responsavel x status)
+- Tabela HISTORICO DE REVISOES (rev x data x alteracao)
 - Section ASSINATURA + placeholders
 
 Caso de uso real: empresa tem 100+ laudos a emitir/ano, mesma estrutura, dados
