@@ -13,10 +13,25 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 | v0.1.0 | ✅ entregue | `v0.1.0` (2026-04-25) | Pipeline básico, Gemini provider, 29 tests |
 | v0.1.1 | ✅ entregue | `v0.1.1` (2026-04-25) | Security hardening + breaking API cleanups |
 | v0.2.0 | ✅ entregue | `v0.2.0` (2026-04-25) | Multi-provider (5 novos) + LLMRouter |
-| v0.3   | 🟡 parcial (~50%) | — | CI ✅ docs ✅ i18n ✅ · eval suite ❌ CLI ❌ |
+| v0.2.1 | ✅ entregue | `v0.2.1` (2026-04-26) | OpenAI strict fix + bilingual README, 49 tests |
+| Wave A | ✅ entregue | `3c42feb` (2026-04-26) | regex inference automatica (10 shapes pre-def + label aggregation) |
+| Wave A v2 | ✅ entregue | `594ee1f` (2026-04-26) | grex Tier 2 — generaliza regex via digit/word conversion |
+| Wave D | ✅ entregue | `126b0c0` (2026-04-26) | batch orchestrator (1 template + N docs → N normalized + report) |
+| Wave E | 🟡 planejada | — | consolidação: drop legacy preset_creator/loader/renderer/visual_validator |
+| Wave F | 🟡 planejada | — | conformity validator multi-dim (texto + estrutural + visual + design + técnico) |
+| v0.3   | 🟡 parcial (~75%) | — | CI ✅ docs ✅ Wave A ✅ Wave D ✅ · eval suite ❌ |
 | v0.4+  | 📋 planejado | — | OCR + extractors + renderer expandido |
 
-**Onde estamos hoje:** lib estável com 6 providers, router de fallback, docs bilingual EN/PT-BR, CI verde matrix py3.11/3.12/3.13. Falta principalmente eval suite + CLI + extractors avançados pra subir pra v0.3 completa.
+**Onde estamos hoje (2026-04-26):**
+
+- Lib estável com 6 providers + LLMRouter
+- Wave A entrega regex inference automatica → reduz dependencia de LLM
+- Wave A v2 adiciona grex (optional) → generaliza patterns aprendidos
+- Wave D entrega orquestrador batch — caso de uso real "1 template + N docs → N normalizados" via CLI `template-engine normalize`
+- 172 tests passing, CI verde matrix py3.11/3.12/3.13
+- Próximo: Wave E (consolidação) → Wave F (conformidade multi-dim como juiz LLM)
+
+**Tese central comprovada:** LLM como rede de segurança, não motor. 49/49 campos extraidos via regex puro em 6 designs diversos (laudo/contrato/branded/creative/minimalist/form). LLM só atua quando regex falha (Wave D hybrid_mapper) ou pra auditar conformidade final (semantic_diff).
 
 ---
 
@@ -64,6 +79,132 @@ Multi-provider LLM:
 - ❌ `LLMConfig` tipada (max_tokens, temperature, retry_attempts, timeout) — providers aceitam kwargs ad-hoc
 - ❌ Streaming `generate_structured_stream` — não tinha caso de uso urgente
 - ❌ Tool use uniformizado cross-provider — Anthropic usa, OpenAI usa schema, outros injetam — dívida técnica
+
+---
+
+## Wave A — regex inference (entregue 2026-04-26 ✅)
+
+Substitui `_FIELD_PATTERNS` hardcoded por inferência mecânica.
+
+- ✅ `engine.pattern_inference` — `infer_field_patterns(gold_docs, field_examples)` aprende regex de exemplos
+- ✅ Tier 1: 10 shapes pre-definidas (iso_date, doc_code, cpf, cep, uf, fullname, version, br_date, decimal_br, integer, month_year_pt)
+- ✅ Label aggregation via Counter — alterna múltiplos rótulos no mesmo campo
+- ✅ Wave A v2: integração `grex` (optional dep `[inference]`) — Tier 2 generaliza patterns
+- ✅ Heurística hybrid digits-only/words: aceita generalização só com structural anchors
+- ✅ POCs 08-13 refatorados — 49/49 campos extraídos sem regex hardcoded em 6 designs
+
+**Commits:** `cfc9b71` (v1) + `594ee1f` (v2). Tests: +24 (49 → 110 → 116).
+
+---
+
+## Wave D — batch orchestrator (entregue 2026-04-26 ✅)
+
+End-to-end: 1 template + N source docs → N normalized + report.json.
+
+- ✅ `engine.schema_inference` — detecta placeholders no template (5 sintaxes: mustache/bracket/chevron/named-blank/anonymous-blank), opcional LLM enrichment de field_type/format_hint/required
+- ✅ `engine.hybrid_mapper` — regex first via pattern_inference, single batched LLM call só nos missing. Output `MappingResult{value, source: regex|llm|missing, confidence}`
+- ✅ `engine.semantic_diff` — text-only LLM compare (zero LibreOffice). Discrepancies tipadas: `missing_in_output` / `value_mismatch` / `extra_in_output`. Severity: critical / warning / info
+- ✅ `engine.batch.normalize_batch()` — async paralelo, max_concurrent configurável, direct token-substitution renderer (sem PresetBundle)
+- ✅ `BatchReport.to_dict()` — JSON-serializable com per-doc mapping summary, discrepancies, tier
+- ✅ Tier classification: `high` (regex resolveu tudo, sem critical diff) / `medium` (LLM filled OR warning) / `low` (missing required OR critical) / `error`
+- ✅ CLI `template-engine normalize --template T --source-dir SD --output-dir OD --provider gemini --gold-doc G --field-examples FE.json --report R --skip-diff --max-concurrent N`
+
+**Smoke test real:** 5 docs → 5/5 high tier, ZERO LLM calls quando regex resolve. Commit: `126b0c0`. Tests: +55 (116 → 172).
+
+---
+
+## Wave E — consolidação (planejada, 1 dia)
+
+**Por quê:** lib hoje tem 2 caminhos paralelos (preset legacy vs Wave D schema). Confunde usuário e duplica manutenção.
+
+### Drops
+
+- [ ] `engine.preset_creator` — substituído por `schema_inference`
+- [ ] `engine.preset_loader` (PresetBundle, list_*_presets) — substituído por direct schema usage
+- [ ] `engine.preset_schemas` — sem consumidor após drop dos 2 acima
+- [ ] `engine.renderer` + `engine.render_ops/` — substituído por `batch._apply_mapping_to_template`
+- [ ] `engine.validator` (legacy tokens críticos) — substituído por `hybrid_mapper` confidence + `semantic_diff`
+- [ ] `engine.visual_validator` (LibreOffice obrigatório) — substituído por Wave F design dimension
+- [ ] CLI `convert` + `visual-validate` — apenas `normalize` permanece
+
+### Refactor
+
+- [ ] `examples/` (2648 LOC, 7 POCs) → repo separado `template-engine-examples`
+- [ ] `__init__.py` exports limpos (drop símbolos legacy)
+- [ ] CLI `info` ainda lista providers, mas remove menção a presets
+- [ ] CHANGELOG: marcar removals como BREAKING (bump pra v0.3.0a2 → v0.3.0)
+
+### Critério done
+
+- ~5k LOC src (de ~9.9k atual)
+- 1 caminho só: `template-engine normalize`
+- Tests passando (≥150 — alguns dos 172 atuais saem com legacy modules)
+- CHANGELOG documenta breaking changes
+- Migration guide pra quem usava `convert` + presets
+
+---
+
+## Wave F — conformity validator multi-dim (planejada, 3-5 dias)
+
+**Por quê:** o usuário pediu — LLM como juiz multi-dimensional ("este doc está sim no padrão"). Não só texto: visual + design + estrutura + técnico.
+
+### API alvo
+
+```python
+from engine.conformity import check_conformity, ConformityReport
+
+report = await check_conformity(
+    template_path="padrao.docx",
+    candidate_path="candidato.docx",
+    *,
+    llm=llm,                 # texto + design (multimodal)
+    schemas=schemas,          # pra technical_dimension
+    inferred_patterns=...,    # pra technical_dimension
+    dimensions=["text", "structural", "visual", "design", "technical"],
+)
+
+report.is_conformant   # bool
+report.score           # 0-1 weighted
+report.failures        # list[Failure(dimension, field, expected, actual, severity)]
+report.by_dimension    # dict[str, DimensionResult]
+```
+
+### 5 dimensões
+
+| Dimensão | Implementação | LLM? |
+|----------|---------------|------|
+| **text** | wraps `engine.semantic_diff` existente | sim (juiz) |
+| **structural** | NEW: parser python-docx — conta headings (níveis), tables (dimensões), sections, lists. Compara template vs candidate | não |
+| **visual** | NEW: wrapper sobre `engine.ascii_layout` — render template+candidate como PNG via PIL, extrai LayoutFeatures, compara densidade/headings/tables/placeholders | não |
+| **design** | NEW: multimodal LLM (Gemini File API) recebe os 2 docx direto, prompt comparar fonte/cor/spacing/alinhamento. SEM LibreOffice | sim (juiz) |
+| **technical** | NEW aggregator: `hybrid_mapper` output + format validators (CPF dígito verificador, CEP dígitos, ISO date validade, email, etc) + zero-orphan check (`{{X}}` não substituídos) | não |
+
+### Componentes novos
+
+- [ ] `engine.conformity.text` — wraps semantic_diff
+- [ ] `engine.conformity.structural` — `_count_structural_elements(docx)` + comparator
+- [ ] `engine.conformity.visual` — render docx → PIL → ascii_layout → diff features
+- [ ] `engine.conformity.design` — multimodal upload via provider, prompt + structured schema
+- [ ] `engine.conformity.technical` — format validators (cpf_valid, cep_valid, iso_date_valid, etc)
+- [ ] `engine.conformity.aggregator` — `check_conformity()` top-level, weighted score
+- [ ] `engine.conformity.report` — `ConformityReport` + `Failure` dataclasses
+- [ ] CLI: `template-engine conformity --template T --candidate C --provider gemini`
+- [ ] Integration com `batch.py`: `BatchReport.items[i].conformity` opcional
+
+### Tests alvo
+
+- Cada dimensão isolada (5 grupos, ~10 tests cada = 50)
+- Aggregator integration (10 tests)
+- CLI smoke (5 tests)
+- **Total: ~65 novos tests**
+
+### Critério done
+
+- 5 dimensões funcionando + tests
+- CLI `conformity` shipping + docs
+- Smoke test real: doc conforme passa, doc com problema visual flagado
+- batch_orchestrator integra report (opcional via flag `--check-conformity`)
+- v0.3.0 bump
 
 ---
 

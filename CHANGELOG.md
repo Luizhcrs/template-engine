@@ -7,20 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
+### Added — Wave A (regex inference)
 
-- **Visual validation** — new `engine.visual_validator.validate_visual()` compares a rendered `.docx` against a gold reference using a multi-modal LLM. Pipeline: LibreOffice headless (`.docx` → PDF) + `pdf2image` (PDF → PNG) + LLM call with structured schema. Returns `VisualValidationResult` with 0-1 score, categorized issues (alignment / spacing / typography / section_order / other), severity (low/medium/high), and rendered images for inspection.
-- **`GeminiVisionProvider`** — new multi-modal provider in `engine.llm.gemini_vision`. Implements `VisualLLMProvider` Protocol. Reuses existing `[gemini]` extra (no new dep).
+- **`engine.pattern_inference`** — `infer_field_patterns(gold_docs, field_examples) -> dict[str, InferredPattern]` synthesizes a regex per field from gold docs + example values. Three-tier value-shape detection:
+  1. **Predefined shapes** (Tier 1): `iso_date`, `br_date`, `doc_code`, `cpf`, `cep`, `uf`, `decimal_br`, `integer`, `version`, `fullname`, `month_year_pt`.
+  2. **grex-learned shapes** (Tier 2, optional dep `[inference]`): `RegExpBuilder.from_test_cases(...).with_conversion_of_digits().with_conversion_of_words()` — generalizes `\d` and `\w` while preserving structural anchors (literal hyphens / digit classes). Hybrid policy rejects pure literal alternations (`(?:cat|dog|fox)`) and over-permissive `\w+` whose only anchor is whitespace.
+  3. **Free-text fallback** (Tier 3): `[^\n]+` when neither tier produces a meaningful regex.
+- **`apply_inferred(inferred, text) -> dict[str, str]`** — applies the synthesized regexes to a new document.
+- **POCs 08-13 refactored** — `_FIELD_PATTERNS` hardcoded substituído por `infer_field_patterns(_GOLD_DOCS, _FIELD_EXAMPLES)`. 49/49 fields extracted across 6 designs (laudo / contrato / branded / creative / minimalist / form). Zero LLM in extraction path.
+- **`[inference]` extra** — `grex>=1.0,<2`. Install via `pip install 'template-engine[inference]'`.
+- 24 new unit tests for pattern_inference (110 → 116 total).
+
+### Added — Wave D (batch orchestrator)
+
+- **`engine.schema_inference`** — `detect_placeholders(template_text) -> list[FieldSchema]` recognizes 5 placeholder syntaxes: mustache `{{X}}`, single brace `{X}`, bracket `[X]`, chevron `<<X>>`, named-blank `__X__`, anonymous-blank `___`. Optional `enrich_with_llm(schemas, llm)` calls LLM per field to infer `field_type`, `format_hint`, `required` from surrounding context. `infer_template_schema(template_path, llm=...)` is the top-level entry point.
+- **`engine.hybrid_mapper`** — `map_hybrid(schemas, inferred_patterns, source_text, llm=None)` runs regex first via `apply_inferred`; the missing fields are batched into a single LLM call (when `llm` is supplied) with a focused prompt + dynamic JSON Schema. Output: `dict[str, MappingResult]` with `value`, `source ∈ {regex, llm, missing}`, `confidence ∈ [0,1]`, optional `notes`. Helper `summarize(results)` returns aggregate stats.
+- **`engine.semantic_diff`** — `diff_documents(source_path, output_path, llm=...)` and `diff_texts(source_text, output_text, llm=...)` ask the LLM to surface `missing_in_output` / `value_mismatch` / `extra_in_output` discrepancies with `critical` / `warning` / `info` severity. Text-only — no LibreOffice required. `filter_by_severity(...)` for downstream filtering.
+- **`engine.batch`** — `normalize_batch(template_path, source_dir, output_dir, llm=..., gold_docs=..., field_examples=..., enable_semantic_diff=..., max_concurrent=...)` end-to-end orchestrator. Async parallel processing with `asyncio.Semaphore`. Direct token-substitution renderer (`_apply_mapping_to_template`) avoids the legacy preset bundle. Returns `BatchReport` with per-doc `BatchItemResult` (mapping, discrepancies, tier, error). Tier classification: `high` (regex resolved everything, no critical diff) / `medium` (LLM filled or warning-level diff) / `low` (missing required field or critical diff) / `error`. `BatchReport.to_dict()` is JSON-serializable for `report.json`.
+- **CLI `template-engine normalize`** — wires the full pipeline. Flags: `--template`, `--source-dir`, `--output-dir`, `--provider` (omit for regex-only), `--gold-doc` (repeatable), `--field-examples` (JSON file), `--report`, `--skip-diff`, `--max-concurrent`. Prints rich summary table by tier, writes `report.json`.
+- 55 new unit tests across schema_inference (19) + hybrid_mapper (12) + semantic_diff (12) + batch (12). Total: 116 → **172 passing**.
+
+### Added — Visual validation (legacy, to be deprecated in Wave E)
+
+- **Visual validation** — `engine.visual_validator.validate_visual()` compares a rendered `.docx` against a gold reference using a multi-modal LLM. Pipeline: LibreOffice headless (`.docx` → PDF) + `pdf2image` (PDF → PNG) + LLM call with structured schema. Returns `VisualValidationResult` with 0-1 score, categorized issues (alignment / spacing / typography / section_order / other), severity (low/medium/high), and rendered images for inspection.
+- **`GeminiVisionProvider`** — multi-modal provider in `engine.llm.gemini_vision`. Implements `VisualLLMProvider` Protocol. Reuses existing `[gemini]` extra (no new dep).
 - **`VisualLLMProvider`** Protocol added to `engine.llm.base` (text providers untouched).
 - **`engine.docx_to_png(path, out_dir, dpi)`** — public helper for raster previews.
-- **CLI command** `template-engine visual-validate <gold> <output> --api-key X`. Renders both, calls Gemini Vision, prints score + issues table.
-- **`[visual]` extra** — `pdf2image` + `pillow`. Install via `pip install 'template-engine[visual]'`. LibreOffice external dep documented.
-- 12 unit tests for visual_validator + GeminiVisionProvider (mock subprocess + pdf2image, no LibreOffice needed for CI).
-- New docs page `concepts/visual-validation.md` (en + `.pt.md`) covering pipeline, requirements, API, cost considerations, limitations.
+- **CLI command** `template-engine visual-validate <gold> <output> --api-key X`.
+- **`[visual]` extra** — `pdf2image` + `pillow`.
 
 ### Changed
 
-- `__version__` bumped to `0.3.0a1` (alpha — visual validator API may evolve before v0.3 stable).
+- `__version__` bumped to `0.3.0a1` (alpha — Wave D + visual validator APIs may evolve before v0.3 stable).
+- Pipeline core continues to require **zero LibreOffice**. Only `visual_validator` legacy uses it; replacement (Wave F design dimension via direct multimodal upload) is in roadmap.
 
 ## [0.2.1] - 2026-04-26
 
