@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import structlog
+
 from engine.render_ops.sections import write_table
+
+log = structlog.get_logger(__name__)
 
 
 def _next_revision(history: list[dict], rev_col: str) -> str:
@@ -39,6 +43,7 @@ def write_auto_migration(ctx: dict, params: dict) -> None:
 
     history = list(content.get(source_key, []) or [])
     new_rev = _next_revision(history, columns[0])
+    log.info("render_ops.migration.rev", new_rev=new_rev, prior_count=len(history))
     history.append(
         {
             columns[0]: new_rev,

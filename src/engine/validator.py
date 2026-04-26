@@ -4,8 +4,12 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+import structlog
+
 if TYPE_CHECKING:
     from engine.preset_schemas import ValidationConfig
+
+log = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -22,7 +26,8 @@ class ValidationResult:
 def _extract_tokens(text: str, regex: str) -> list[str]:
     try:
         return re.findall(regex, text)
-    except re.error:
+    except re.error as e:
+        log.warning("validator.invalid_regex_skipped", regex=regex, error=str(e))
         return []
 
 
@@ -67,7 +72,7 @@ def validate(source_text: str, content: dict, config: ValidationConfig) -> Valid
 
     ok = (found_crit == total_crit) and (len(sec_missing) == 0)
 
-    return ValidationResult(
+    result = ValidationResult(
         ok=ok,
         critical_tokens_total=total_crit,
         critical_tokens_found=found_crit,
@@ -76,3 +81,12 @@ def validate(source_text: str, content: dict, config: ValidationConfig) -> Valid
         critical_tokens_missing=critical_missing,
         sections_missing=sec_missing,
     )
+    log.info(
+        "validator.run",
+        ok=ok,
+        tokens=f"{found_crit}/{total_crit}",
+        sections=f"{result.sections_present}/{result.sections_required}",
+        missing_tokens=len(critical_missing),
+        missing_sections=len(sec_missing),
+    )
+    return result

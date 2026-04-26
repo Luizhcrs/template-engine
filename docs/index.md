@@ -18,8 +18,8 @@ Padronizar documentos é trabalho repetitivo, propenso a erro, e geralmente feit
 
 ## Comece
 
-[Quickstart →](quickstart.md){: .md-button .md-button--primary }
-[Conceitos →](concepts/pipeline.md){: .md-button }
+[Quickstart](quickstart.md){: .md-button .md-button--primary }
+[GitHub](https://github.com/Luizhcrs/template-engine){: .md-button }
 
 ## License
 

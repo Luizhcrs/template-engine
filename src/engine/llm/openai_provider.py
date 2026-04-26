@@ -17,6 +17,27 @@ except ImportError as e:  # pragma: no cover - optional dep
 log = structlog.get_logger(__name__)
 
 
+def _retry_after_from_error(e: Exception, default: int = 60) -> int:
+    """Extract retry-after from response headers or exception attribute, fallback to default."""
+    response = getattr(e, "response", None)
+    if response is not None:
+        headers = getattr(response, "headers", {}) or {}
+        for key in ("retry-after", "Retry-After", "x-ratelimit-reset"):
+            value = headers.get(key)
+            if value:
+                try:
+                    return int(float(value))
+                except (TypeError, ValueError):
+                    pass
+    attr = getattr(e, "retry_after", None)
+    if attr:
+        try:
+            return int(float(attr))
+        except (TypeError, ValueError):
+            pass
+    return default
+
+
 class OpenAIProvider:
     """OpenAI provider using Chat Completions + structured outputs (json_schema response_format)."""
 
@@ -46,14 +67,15 @@ class OpenAIProvider:
                     "json_schema": {
                         "name": "structured_output",
                         "schema": json_schema,
-                        "strict": False,
+                        "strict": True,
                     },
                 },
                 temperature=0,
             )
         except RateLimitError as e:
-            log.warning("openai.rate_limit", error=str(e))
-            raise LLMRateLimit(retry_after=60) from e
+            retry_after = _retry_after_from_error(e, default=60)
+            log.warning("openai.rate_limit", error=str(e), retry_after=retry_after)
+            raise LLMRateLimit(retry_after=retry_after) from e
         except APITimeoutError as e:
             log.warning("openai.timeout", error=str(e))
             raise LLMTimeout() from e

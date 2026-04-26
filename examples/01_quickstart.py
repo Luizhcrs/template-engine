@@ -58,7 +58,7 @@ async def main() -> None:
     print("[4/4] renderizando .docx final...")
     render(preset, data, output_path=output_doc)
 
-    print(f"\n✓ saída: {output_doc.resolve()}")
+    print(f"\n[OK] saída: {output_doc.resolve()}")
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from typing import Any
 import structlog
 
 from .base import LLMError, LLMRateLimit, LLMTimeout
+from .openai_provider import _retry_after_from_error
 
 try:
     from groq import APITimeoutError, AsyncGroq, RateLimitError
@@ -50,8 +51,9 @@ class GroqProvider:
                 temperature=0,
             )
         except RateLimitError as e:
-            log.warning("groq.rate_limit", error=str(e))
-            raise LLMRateLimit(retry_after=60) from e
+            retry_after = _retry_after_from_error(e, default=60)
+            log.warning("groq.rate_limit", error=str(e), retry_after=retry_after)
+            raise LLMRateLimit(retry_after=retry_after) from e
         except APITimeoutError as e:
             log.warning("groq.timeout", error=str(e))
             raise LLMTimeout() from e

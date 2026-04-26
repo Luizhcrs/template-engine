@@ -1,10 +1,14 @@
+import structlog
 from docx.oxml.ns import qn
+
+log = structlog.get_logger(__name__)
 
 
 def _find_heading(doc, heading_text: str):
     for p in doc.paragraphs:
         if p.text.strip().upper() == heading_text.upper() and p.style.name.startswith("Heading"):
             return p
+    log.warning("render_ops.heading_not_found", heading=heading_text)
     return None
 
 

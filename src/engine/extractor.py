@@ -4,10 +4,13 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import pdfplumber
+import structlog
 from docx import Document
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+log = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -29,11 +32,22 @@ class ExtractedDoc:
 
 def extract(path: Path) -> ExtractedDoc:
     ext = path.suffix.lower()
+    log.info("extractor.start", path=str(path), ext=ext)
     if ext == ".docx":
-        return _extract_docx(path)
-    if ext == ".pdf":
-        return _extract_pdf(path)
-    raise ValueError(f"Formato não suportado: {ext}")
+        result = _extract_docx(path)
+    elif ext == ".pdf":
+        result = _extract_pdf(path)
+    else:
+        log.warning("extractor.unsupported_format", path=str(path), ext=ext)
+        raise ValueError(f"Formato não suportado: {ext}")
+    log.info(
+        "extractor.ok",
+        path=str(path),
+        paragraphs=len(result.paragraphs),
+        tables=len(result.tables),
+        chars=len(result.text),
+    )
+    return result
 
 
 def _extract_docx(path: Path) -> ExtractedDoc:

@@ -37,16 +37,6 @@ theme:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
-  - Concepts:
-    - Pipeline: concepts/pipeline.md
-    - Preset anatomy: concepts/preset.md
-    - Render ops: concepts/render-ops.md
-  - Providers:
-    - Overview: providers/index.md
-    - Gemini: providers/gemini.md
-    - Custom provider: providers/custom.md
-  - API Reference: api.md
-  - Contributing: contributing.md
 
 markdown_extensions:
   - admonition

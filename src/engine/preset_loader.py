@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 
+import structlog
 import yaml
 
 from engine.preset_schemas import (
@@ -12,6 +13,8 @@ from engine.preset_schemas import (
     RenderOpsFile,
     ValidationConfig,
 )
+
+log = structlog.get_logger(__name__)
 
 
 class PresetNotFound(Exception):
@@ -27,6 +30,7 @@ _SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 def _validate_safe_id(value: str, field_name: str) -> None:
     if not _SAFE_ID_RE.match(value):
+        log.warning("preset_loader.invalid_id", field=field_name, value=value)
         raise ValueError(f"{field_name} inválido: deve casar com [a-zA-Z0-9_-]{{1,64}}, recebido {value!r}")
 
 
@@ -35,6 +39,7 @@ def _ensure_within(child: Path, base: Path) -> Path:
     child_resolved = child.resolve()
     base_resolved = base.resolve()
     if not child_resolved.is_relative_to(base_resolved):
+        log.warning("preset_loader.path_traversal_blocked", child=str(child), base=str(base))
         raise ValueError(f"path escapa do base: {child} não está dentro de {base}")
     return child_resolved
 
@@ -80,7 +85,7 @@ def load_preset(preset_dir: Path) -> PresetBundle:
     if validation_path.exists():
         validation = ValidationConfig(**yaml.safe_load(validation_path.read_text(encoding="utf-8")))
 
-    return PresetBundle(
+    bundle = PresetBundle(
         manifest=manifest,
         template_docx_path=template,
         gold_docs_paths=golds,
@@ -89,6 +94,13 @@ def load_preset(preset_dir: Path) -> PresetBundle:
         render_ops=render_ops,
         validation=validation,
     )
+    log.info(
+        "preset_loader.loaded",
+        slug=manifest.slug,
+        gold_count=len(golds),
+        ops_count=len(render_ops.operations),
+    )
+    return bundle
 
 
 def list_user_presets(data_dir: Path, user_sub: str) -> list[Path]:

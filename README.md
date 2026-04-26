@@ -5,9 +5,9 @@ Document normalization engine: learn a pattern from example documents and conver
 [![CI](https://github.com/Luizhcrs/template-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Luizhcrs/template-engine/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![PyPI version](https://img.shields.io/pypi/v/template-engine.svg)](https://pypi.org/project/template-engine/)
+[![Release](https://img.shields.io/github/v/release/Luizhcrs/template-engine?display_name=tag&sort=semver)](https://github.com/Luizhcrs/template-engine/releases)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Typed](https://img.shields.io/badge/typed-mypy_strict-2A6DB2.svg)](http://mypy-lang.org/)
+[![Typed](https://img.shields.io/badge/typed-mypy-2A6DB2.svg)](http://mypy-lang.org/)
 
 ## What it does
 
@@ -88,7 +88,7 @@ asyncio.run(main())
 
 **Determinístico no rendering.** LLM nunca decide forma visual. Tudo que afeta visual vive em `render_ops.yaml`. Trocar de modelo não muda saída visual.
 
-**Multi-provider.** Atualmente suporta Gemini. Adicione providers implementando `engine.llm.base.LLMProvider`:
+**Multi-provider.** Suporta Gemini, OpenAI, Anthropic, Groq, Ollama (local) e OpenRouter (400+ modelos) — todos via `engine.llm.base.LLMProvider` Protocol. Use `LLMRouter` pra fallback automático em rate-limit/timeout. Adicione um provider próprio assim:
 
 ```python
 from engine.llm.base import LLMProvider
@@ -105,7 +105,7 @@ class MyProvider:
 
 ```bash
 pip install -e ".[dev]"
-pytest                    # 29 tests
+pytest                    # 36 tests
 pytest --cov              # com coverage
 ```
 

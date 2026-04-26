@@ -43,11 +43,11 @@ def main() -> None:
     print(f"label:            {label.value}")
 
     if label == ConfidenceLabel.HIGH:
-        print("\n→ confiança alta. Pode publicar direto.")
+        print("\n-> confiança alta. Pode publicar direto.")
     elif label == ConfidenceLabel.MEDIUM:
-        print("\n→ confiança média. Recomendado revisão humana.")
+        print("\n-> confiança média. Recomendado revisão humana.")
     else:
-        print("\n→ confiança baixa. Refazer ou ajustar prompt.")
+        print("\n-> confiança baixa. Refazer ou ajustar prompt.")
 
 
 if __name__ == "__main__":
