@@ -1,0 +1,275 @@
+/* template-engine — custom Material theme polish */
+
+:root {
+  --te-brand: #ff7a2a;
+  --te-brand-soft: rgba(255, 122, 42, 0.08);
+  --te-radius: 10px;
+  --md-primary-fg-color: #ff7a2a;
+  --md-primary-fg-color--light: #ff8b43;
+  --md-primary-fg-color--dark: #e0691e;
+  --md-accent-fg-color: #ff7a2a;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #ff8b43;
+  --md-primary-fg-color--light: #ff9a5a;
+  --md-primary-fg-color--dark: #e0691e;
+  --md-accent-fg-color: #ff8b43;
+  --md-default-bg-color: #0f1115;
+  --md-typeset-a-color: #ff9a5a;
+}
+
+/* ===== Typography ===== */
+
+.md-typeset {
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  letter-spacing: -0.015em;
+  font-weight: 600;
+}
+
+.md-typeset h1 {
+  font-size: 2.4rem;
+  line-height: 1.15;
+  margin-bottom: 1rem;
+}
+
+.md-typeset h2 {
+  margin-top: 2.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset code {
+  font-size: 0.85em;
+  background: var(--md-default-fg-color--lightest);
+  border-radius: 4px;
+  padding: 0.05em 0.4em;
+}
+
+/* ===== Hero card on homepage ===== */
+
+.te-hero {
+  position: relative;
+  padding: 2.8rem 2rem 2.2rem;
+  border-radius: var(--te-radius);
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 0%, rgba(255, 122, 42, 0.12), transparent 70%),
+    var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.te-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(17, 24, 39, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 24, 39, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse 60% 50% at 50% 30%, #000 40%, transparent 75%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+[data-md-color-scheme="slate"] .te-hero::before {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+}
+
+.te-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.te-hero h1 {
+  font-size: 2.6rem;
+  margin: 0 0 0.6rem;
+  background: linear-gradient(180deg, var(--md-default-fg-color) 0%, var(--md-default-fg-color--light) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.te-hero p.lead {
+  font-size: 1.05rem;
+  color: var(--md-default-fg-color--light);
+  max-width: 38rem;
+  line-height: 1.55;
+  margin: 0 0 1.4rem;
+}
+
+.te-hero .badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.te-hero .badges span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 500;
+  font-family: "JetBrains Mono", monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--te-brand-soft);
+  color: var(--te-brand);
+  border: 1px solid rgba(255, 122, 42, 0.25);
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+}
+
+/* ===== Feature grid ===== */
+
+.te-feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 1.6rem 0;
+}
+
+.te-feature {
+  background: var(--md-default-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: var(--te-radius);
+  padding: 1.2rem;
+  transition: border-color 0.15s, transform 0.15s;
+}
+
+.te-feature:hover {
+  border-color: var(--te-brand);
+  transform: translateY(-2px);
+}
+
+.te-feature h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: 0;
+  padding: 0;
+}
+
+.te-feature p {
+  margin: 0;
+  font-size: 0.83rem;
+  color: var(--md-default-fg-color--light);
+  line-height: 1.55;
+}
+
+/* ===== Code blocks ===== */
+
+.md-typeset pre > code {
+  border-radius: var(--te-radius);
+  border: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-typeset .highlight {
+  border-radius: var(--te-radius);
+}
+
+/* ===== Buttons ===== */
+
+.md-typeset .md-button--primary {
+  background: var(--te-brand);
+  border-color: var(--te-brand);
+  color: #fff;
+  font-weight: 600;
+}
+
+.md-typeset .md-button--primary:hover {
+  background: var(--md-primary-fg-color--light);
+  border-color: var(--md-primary-fg-color--light);
+}
+
+.md-typeset .md-button {
+  border-radius: var(--te-radius);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+/* ===== Header ===== */
+
+.md-header {
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  box-shadow: none;
+}
+
+[data-md-color-scheme="default"] .md-header {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+}
+
+.md-header__title {
+  font-weight: 600;
+}
+
+.md-tabs {
+  background: var(--md-default-bg-color);
+  border-bottom: 1px solid var(--md-default-fg-color--lightest);
+  color: var(--md-default-fg-color);
+}
+
+/* ===== Admonitions ===== */
+
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: var(--te-radius);
+  font-size: 0.78rem;
+}
+
+/* ===== Footer ===== */
+
+.md-footer {
+  background: var(--md-default-bg-color);
+  color: var(--md-default-fg-color);
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+
+.md-footer-meta {
+  background: transparent;
+  border-top: 1px solid var(--md-default-fg-color--lightest);
+}
+
+/* ===== Tables ===== */
+
+.md-typeset table:not([class]) {
+  border-radius: var(--te-radius);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  overflow: hidden;
+}
+
+.md-typeset table:not([class]) th {
+  background: var(--md-default-fg-color--lightest);
+  font-weight: 600;
+}
+
+/* ===== Sidebar / nav ===== */
+
+.md-nav__title {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.md-nav__item .md-nav__link--active {
+  color: var(--te-brand);
+  font-weight: 600;
+}
+
+/* ===== Search ===== */
+
+.md-search__form {
+  border-radius: var(--te-radius);
+}

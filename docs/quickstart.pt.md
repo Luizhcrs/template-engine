@@ -1,10 +1,10 @@
-# Quickstart
+# Comece aqui
 
-End-to-end pipeline in under 60 seconds.
+Pipeline ponta-a-ponta em menos de 60 segundos.
 
-## Install
+## Instalação
 
-=== "Gemini (default)"
+=== "Gemini (padrão)"
 
     ```bash
     pip install "template-engine[gemini]"
@@ -22,7 +22,7 @@ End-to-end pipeline in under 60 seconds.
     pip install "template-engine[anthropic]"
     ```
 
-=== "All providers"
+=== "Todos providers"
 
     ```bash
     pip install "template-engine[all]"
@@ -30,13 +30,13 @@ End-to-end pipeline in under 60 seconds.
 
 ## Setup
 
-Set your API key:
+Defina sua API key:
 
 ```bash
 export GEMINI_API_KEY="AIza..."
 ```
 
-## Pipeline in 4 steps
+## Pipeline em 4 passos
 
 ```python
 import asyncio
@@ -49,7 +49,7 @@ from engine.llm.gemini_free import GeminiFreeProvider
 async def main():
     provider = GeminiFreeProvider(api_key="AIza...")
 
-    # 1. Learn pattern from template + reference docs
+    # 1. Aprende padrão a partir do template + docs de referência
     preset_dir = await create_preset(
         llm=provider,
         template_path=Path("template.docx"),
@@ -57,27 +57,27 @@ async def main():
         dest_dir=Path("./presets/my-template"),
     )
 
-    # 2. Load
+    # 2. Carrega
     preset = load_preset(preset_dir)
 
-    # 3. Map source content into structured JSON
+    # 3. Mapeia conteúdo do source em JSON estruturado
     doc = extract(Path("source.docx"))
     data = await map_content(preset, doc.text, provider)
 
-    # 4. Render final .docx
+    # 4. Renderiza .docx final
     render(preset, data, output_path=Path("out.docx"))
 
 asyncio.run(main())
 ```
 
-## What each step does
+## O que cada passo faz
 
-1. **`create_preset`** calls the LLM once to analyze the template + gold docs. Generates `pattern.md`, `schema.json`, `render_ops.yaml`, `validation.yaml`.
-2. **`load_preset`** loads the bundle ready to use.
-3. **`map_content`** calls the LLM with a few-shot prompt and extracts structured JSON from the source.
-4. **`render`** applies YAML operations to the template + JSON and produces a deterministic final `.docx`.
+1. **`create_preset`** chama o LLM 1x para analisar template + gold docs. Gera `pattern.md`, `schema.json`, `render_ops.yaml`, `validation.yaml`.
+2. **`load_preset`** carrega o bundle pronto pra uso.
+3. **`map_content`** chama o LLM com prompt few-shot e extrai JSON estruturado do source.
+4. **`render`** aplica as operações YAML sobre o template + JSON e produz `.docx` final determinístico.
 
-## Validate output
+## Validar saída
 
 ```python
 from engine import validate, calculate_confidence, confidence_label
@@ -88,7 +88,7 @@ label = confidence_label(score)
 print(f"{score:.2f} -> {label.value}")
 ```
 
-## With router (fallback)
+## Com router (fallback)
 
 ```python
 from engine.llm import LLMRouter
@@ -97,18 +97,18 @@ from engine.llm.gemini_free import GeminiFreeProvider
 from engine.llm.openai_provider import OpenAIProvider
 
 router = LLMRouter([
-    GroqProvider(api_key=g_key),         # fast + cheap
-    GeminiFreeProvider(api_key=ge_key),  # free fallback
-    OpenAIProvider(api_key=o_key),       # last resort
+    GroqProvider(api_key=g_key),         # rápido + barato
+    GeminiFreeProvider(api_key=ge_key),  # fallback grátis
+    OpenAIProvider(api_key=o_key),       # último recurso
 ])
 
-# Same interface as individual providers
+# Mesma interface dos providers individuais
 data = await map_content(preset, source_text, router)
 ```
 
-## Next steps
+## Próximos passos
 
-- [Concepts → Pipeline](concepts/pipeline.md)
-- [Concepts → Preset anatomy](concepts/preset.md)
-- [Providers → Overview](providers/index.md)
-- [Contributing](contributing.md)
+- [Conceitos → Pipeline](concepts/pipeline.md)
+- [Conceitos → Anatomia do preset](concepts/preset.md)
+- [Providers → Visão geral](providers/index.md)
+- [Contribuindo](contributing.md)
