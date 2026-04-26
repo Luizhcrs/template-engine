@@ -10,6 +10,8 @@ from engine.ascii_layout import (
     PlaceholderHint,
     TableHint,
     _detect_tables,
+    _detect_tables_via_columns,
+    _merge_table_hints,
     _row_density,
     _row_width_ratio,
     detect_layout_features,
@@ -165,6 +167,47 @@ def test_detect_tables_finds_uniform_density_band():
     assert len(hints) >= 1
     assert hints[0].start_row == 2
     assert hints[0].end_row >= 7
+
+
+def test_detect_tables_via_columns_finds_sparse_table():
+    """Sparse table (border-only, empty cells) — vertical edges align."""
+    # Synthetic: 3 vertical dense lines at columns 5, 15, 30 spanning rows 2-10
+    lines = []
+    for r in range(15):
+        line = list("                                  ")  # 34 spaces
+        if 2 <= r <= 10:
+            for c in (5, 15, 30):
+                line[c] = "█"
+        lines.append("".join(line))
+
+    hints = _detect_tables_via_columns(lines)
+    assert len(hints) >= 1
+    assert hints[0].column_count_estimate >= 3
+    assert hints[0].start_row >= 2
+    assert hints[0].end_row >= 8
+
+
+def test_detect_tables_via_columns_too_few_columns_returns_empty():
+    """Single vertical line is not a table — needs >= min_columns."""
+    lines = []
+    for r in range(15):
+        line = list("                ")
+        if 2 <= r <= 10:
+            line[5] = "█"
+        lines.append("".join(line))
+
+    assert _detect_tables_via_columns(lines, min_columns=2) == []
+
+
+def test_merge_table_hints_combines_overlapping():
+    """Dense + sparse detectors may both fire on same table — merge."""
+    a = TableHint(start_row=2, end_row=8, column_count_estimate=0)
+    b = TableHint(start_row=5, end_row=12, column_count_estimate=3)
+    merged = _merge_table_hints([a, b])
+    assert len(merged) == 1
+    assert merged[0].start_row == 2
+    assert merged[0].end_row == 12
+    assert merged[0].column_count_estimate == 3
 
 
 # ===== summarize_layout =====

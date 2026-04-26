@@ -220,7 +220,9 @@ def detect_layout_features(ascii_grid: str, ramp: str = _DEFAULT_RAMP) -> Layout
     if blank_run >= _SECTION_BREAK_BLANK_ROWS:
         section_breaks.append(SectionBreak(row=rows - blank_run, blank_run_length=blank_run))
 
-    tables = _detect_tables(densities)
+    tables_dense = _detect_tables(densities)
+    tables_sparse = _detect_tables_via_columns(lines, ramp=ramp)
+    tables = _merge_table_hints(tables_dense + tables_sparse)
 
     log.info(
         "ascii_layout.features",
@@ -228,6 +230,8 @@ def detect_layout_features(ascii_grid: str, ramp: str = _DEFAULT_RAMP) -> Layout
         cols=cols,
         headings=len(headings),
         tables=len(tables),
+        tables_dense=len(tables_dense),
+        tables_sparse=len(tables_sparse),
         section_breaks=len(section_breaks),
         placeholders=len(placeholders),
         overall_density=round(overall_density, 3),
@@ -245,7 +249,11 @@ def detect_layout_features(ascii_grid: str, ramp: str = _DEFAULT_RAMP) -> Layout
 
 
 def _detect_tables(densities: list[float]) -> list[TableHint]:
-    """Find runs of >=4 rows with similar density (low variance) — likely table bands."""
+    """Find runs of >=4 rows with similar density (low variance) — likely full table bands.
+
+    Catches dense tables (filled cells). For sparse tables (borders only, empty cells),
+    use ``_detect_tables_via_columns`` which scans vertical edges.
+    """
     hints: list[TableHint] = []
     if len(densities) < _TABLE_MIN_RUN:
         return hints
@@ -267,13 +275,127 @@ def _detect_tables(densities: list[float]) -> list[TableHint]:
                 TableHint(
                     start_row=start,
                     end_row=end,
-                    column_count_estimate=0,  # column edge detection in v2
+                    column_count_estimate=0,
                 )
             )
             start = end + 1
         else:
             start += 1
     return hints
+
+
+def _detect_tables_via_columns(
+    lines: list[str],
+    ramp: str = _DEFAULT_RAMP,
+    min_height: int = 5,
+    min_columns: int = 2,
+    edge_strictness: Literal["dense", "any-non-light"] = "any-non-light",
+) -> list[TableHint]:
+    """Detect sparse tables (border-only, empty cells) by scanning vertical edges.
+
+    Algorithm:
+    1. For each column index, count contiguous runs of "edge" chars (vertical lines).
+    2. A column with a run >= min_height = candidate table edge.
+    3. >= min_columns aligned candidates within proximity = table band.
+
+    edge_strictness:
+        - "dense": only chars in first half of ramp (matches solid lines).
+        - "any-non-light": any char except space or last ramp char (matches thin/aliased borders).
+        Default "any-non-light" is more permissive — works for resized images where 1px borders
+        anti-alias to mid-tones.
+    """
+    if not lines:
+        return []
+    cols = max(len(line) for line in lines)
+    if cols == 0:
+        return []
+
+    if edge_strictness == "dense":
+        edge_chars = set(ramp[: max(1, len(ramp) // 2)])
+    else:
+        # Any non-light character = potential edge
+        light_char = ramp[-1]
+        edge_chars = set(ramp) - {light_char, " "}
+
+    # For each column, find longest contiguous vertical run of edge chars
+    col_runs: list[tuple[int, int, int]] = []
+    for c in range(cols):
+        run_start = -1
+        run_len = 0
+        best_run = (-1, -1, 0)
+        for r, line in enumerate(lines):
+            char = line[c] if c < len(line) else " "
+            if char in edge_chars:
+                if run_len == 0:
+                    run_start = r
+                run_len += 1
+                if run_len > best_run[2]:
+                    best_run = (run_start, r, run_len)
+            else:
+                run_len = 0
+        if best_run[2] >= min_height:
+            col_runs.append((c, best_run[0], best_run[1]))
+
+    if len(col_runs) < min_columns:
+        return []
+
+    # Cluster column runs that overlap vertically (same band)
+    col_runs.sort(key=lambda r: r[0])
+    bands: list[list[tuple[int, int, int]]] = []
+    for run in col_runs:
+        c, start, end = run
+        placed = False
+        for band in bands:
+            # overlap: max start <= min end
+            band_start = max(b[1] for b in band)
+            band_end = min(b[2] for b in band)
+            if max(band_start, start) <= min(band_end, end):
+                band.append(run)
+                placed = True
+                break
+        if not placed:
+            bands.append([run])
+
+    # Bands with >= min_columns vertical edges = tables
+    hints: list[TableHint] = []
+    for band in bands:
+        if len(band) < min_columns:
+            continue
+        start_row = max(b[1] for b in band)
+        end_row = min(b[2] for b in band)
+        if end_row - start_row + 1 < min_height:
+            continue
+        hints.append(
+            TableHint(
+                start_row=start_row,
+                end_row=end_row,
+                column_count_estimate=len(band),
+            )
+        )
+    return hints
+
+
+def _merge_table_hints(hints: list[TableHint]) -> list[TableHint]:
+    """Merge overlapping/adjacent table hints from dense + sparse detectors.
+
+    Two hints overlap if their row ranges intersect or touch. Result preserves
+    the max column_count_estimate (sparse detector's output is preferred when present).
+    """
+    if not hints:
+        return []
+    sorted_hints = sorted(hints, key=lambda h: h.start_row)
+    merged: list[TableHint] = [sorted_hints[0]]
+    for h in sorted_hints[1:]:
+        last = merged[-1]
+        if h.start_row <= last.end_row + 1:
+            merged[-1] = TableHint(
+                start_row=last.start_row,
+                end_row=max(last.end_row, h.end_row),
+                column_count_estimate=max(last.column_count_estimate, h.column_count_estimate),
+            )
+        else:
+            merged.append(h)
+    return merged
 
 
 def _dedupe_placeholders(placeholders: list[PlaceholderHint]) -> list[PlaceholderHint]:
