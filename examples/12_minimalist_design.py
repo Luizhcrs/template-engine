@@ -14,7 +14,6 @@ Run:
 from __future__ import annotations
 
 import argparse
-import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +21,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from engine.ascii_layout import detect_layout_features, image_to_ascii
+from engine.pattern_inference import apply_inferred, infer_field_patterns
 
 
 def _font(size: int) -> ImageFont.ImageFont:
@@ -160,26 +160,66 @@ class ReplicationResult:
     fields_total: int
 
 
-_FIELD_PATTERNS: dict[str, re.Pattern] = {
-    "NUMERO": re.compile(r"Numero da edicao:\s*(\d+)", re.I),
-    "ANO": re.compile(r"Ano de publicacao:\s*(\d{4})", re.I),
-    "TITULO": re.compile(r"Titulo:\s*([A-Z][\w\s]+)", re.I),
-    "SUBTITULO": re.compile(r"Subtitulo:\s*([a-z][\w\s]+)", re.I),
-    "AUTOR": re.compile(r"Autor:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)", re.I),
-    "PUBLICADO": re.compile(r"Data publicada:\s*(\d{4}-\d{2}-\d{2})", re.I),
-    "PAGINAS": re.compile(r"Total de paginas:\s*(\d+)", re.I),
-    "CORPO_TEXTO": re.compile(r"Corpo principal:\s*\n([^\n]+)", re.I),
-    "REFERENCIA": re.compile(r"Referencia bibliografica:\s*([A-Z0-9\-\s]+)", re.I),
+_GOLD_DOCS = [
+    "\n".join(_SOURCE_LINES),
+    """Briefing minimalista 2025
+
+Numero da edicao: 03
+Ano de publicacao: 2025
+
+Titulo: Silencio Visivel
+Subtitulo: meditacao em camadas
+
+Autor: Yuki Sato
+Data publicada: 2025-09-12
+Total de paginas: 96
+
+Corpo principal:
+A pausa entre linhas conta a historia oculta.
+
+Referencia bibliografica: ISBN 978-85-0023-1
+""",
+    """Briefing minimalista 2026
+
+Numero da edicao: 12
+Ano de publicacao: 2026
+
+Titulo: Linha Branca
+Subtitulo: tipografia ausente
+
+Autor: Mei Watanabe
+Data publicada: 2026-09-04
+Total de paginas: 220
+
+Corpo principal:
+O contorno define o espaco mais que o preenchimento.
+
+Referencia bibliografica: ISBN 978-85-0099-7
+""",
+]
+
+_FIELD_EXAMPLES = {
+    "NUMERO": ["07", "03", "12"],
+    "ANO": ["2026", "2025", "2026"],
+    "TITULO": ["Vazio Pleno", "Silencio Visivel", "Linha Branca"],
+    "SUBTITULO": ["ensaio sobre o nada", "meditacao em camadas", "tipografia ausente"],
+    "AUTOR": ["Hiroshi Tanaka", "Yuki Sato", "Mei Watanabe"],
+    "PUBLICADO": ["2026-04-26", "2025-09-12", "2026-09-04"],
+    "PAGINAS": ["144", "96", "220"],
+    "CORPO_TEXTO": [
+        "O espaco em branco e o protagonista esquecido.",
+        "A pausa entre linhas conta a historia oculta.",
+        "O contorno define o espaco mais que o preenchimento.",
+    ],
+    "REFERENCIA": ["ISBN 978-85-0042-0", "ISBN 978-85-0023-1", "ISBN 978-85-0099-7"],
 }
+
+_INFERRED = infer_field_patterns(gold_docs=_GOLD_DOCS, field_examples=_FIELD_EXAMPLES)
 
 
 def replicate(template_phs: dict[str, str], source_text: str) -> ReplicationResult:
-    extracted: dict[str, str] = {}
-    for k, pat in _FIELD_PATTERNS.items():
-        m = pat.search(source_text)
-        if m:
-            extracted[k] = m.group(1).strip()
-    return ReplicationResult(extracted, len(extracted), len(_FIELD_PATTERNS))
+    extracted = apply_inferred(_INFERRED, source_text)
+    return ReplicationResult(extracted, len(extracted), len(_FIELD_EXAMPLES))
 
 
 def main() -> None:

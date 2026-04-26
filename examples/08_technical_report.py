@@ -17,7 +17,6 @@ Run:
 from __future__ import annotations
 
 import argparse
-import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +24,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from engine.ascii_layout import detect_layout_features, image_to_ascii
+from engine.pattern_inference import apply_inferred, infer_field_patterns
 
 
 def _font(size: int) -> ImageFont.ImageFont:
@@ -263,7 +263,7 @@ def make_replica(path: Path, data: dict[str, str], w: int = 800, h: int = 1200) 
     img.save(path, "PNG")
 
 
-# ===== Replication via regex puro =====
+# ===== Replication via regex INFERIDO (Wave A) =====
 
 
 @dataclass
@@ -273,22 +273,51 @@ class ReplicationResult:
     placeholders_total: int
 
 
-_FIELD_PATTERNS: dict[str, re.Pattern] = {
-    "CODIGO": re.compile(r"Codigo do laudo:\s*([A-Z]+-\d{4}-\d{3})", re.I),
-    "REVISAO": re.compile(r"Revisao corrente:\s*(\d{2})", re.I),
-    "DATA": re.compile(r"Data de emissao:\s*(\d{4}-\d{2}-\d{2})", re.I),
-    "RESPONSAVEL": re.compile(r"Engenheiro responsavel:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)", re.I),
-    "CLASSE": re.compile(r"Classe operacional:\s*([A-Z])\b", re.I),
-    "OBJETIVO_TEXTO": re.compile(r"Sobre o objetivo:\s*\n([^\n]+)", re.I),
+# Gold docs: 3 variantes do mesmo padrao (mesma estrutura, valores diferentes)
+_GOLD_DOCS = [
+    "\n".join(_SOURCE_LINES),
+    """REGISTRO INTERNO - 15/01/2026
+
+Codigo do laudo: LAUDO-2026-001
+Revisao corrente: 02
+Data de emissao: 2026-01-15
+Engenheiro responsavel: Ana Carolina Souza
+Classe operacional: A
+
+Sobre o objetivo:
+Inspecionar bomba centrifuga conforme NBR 16280.
+""",
+    """REGISTRO INTERNO - 30/07/2026
+
+Codigo do laudo: LAUDO-2026-099
+Revisao corrente: 01
+Data de emissao: 2026-07-30
+Engenheiro responsavel: Pedro Henrique Lima
+Classe operacional: B
+
+Sobre o objetivo:
+Avaliar valvula de seguranca SF-12 conforme ASME VIII.
+""",
+]
+
+_FIELD_EXAMPLES = {
+    "CODIGO": ["LAUDO-2026-042", "LAUDO-2026-001", "LAUDO-2026-099"],
+    "REVISAO": ["03", "02", "01"],
+    "DATA": ["2026-04-26", "2026-01-15", "2026-07-30"],
+    "RESPONSAVEL": ["Maria Souza", "Ana Carolina Souza", "Pedro Henrique Lima"],
+    "CLASSE": ["A", "A", "B"],
+    "OBJETIVO_TEXTO": [
+        "Avaliar conformidade do equipamento ABC-9 conforme ISO 9001.",
+        "Inspecionar bomba centrifuga conforme NBR 16280.",
+        "Avaliar valvula de seguranca SF-12 conforme ASME VIII.",
+    ],
 }
+
+_INFERRED = infer_field_patterns(gold_docs=_GOLD_DOCS, field_examples=_FIELD_EXAMPLES)
 
 
 def replicate(template_phs: dict[str, str], source_text: str) -> ReplicationResult:
-    extracted: dict[str, str] = {}
-    for key, pattern in _FIELD_PATTERNS.items():
-        m = pattern.search(source_text)
-        if m:
-            extracted[key] = m.group(1).strip()
+    extracted = apply_inferred(_INFERRED, source_text)
     filled = sum(1 for k in template_phs if k in extracted)
     return ReplicationResult(
         extracted_data=extracted,

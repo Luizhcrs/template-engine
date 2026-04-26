@@ -14,7 +14,6 @@ Run:
 from __future__ import annotations
 
 import argparse
-import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +21,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from engine.ascii_layout import detect_layout_features, image_to_ascii
+from engine.pattern_inference import apply_inferred, infer_field_patterns
 
 C_BG = (15, 15, 25)
 C_NEON = (180, 100, 255)
@@ -185,27 +185,69 @@ class ReplicationResult:
     fields_total: int
 
 
-_FIELD_PATTERNS: dict[str, re.Pattern] = {
-    "TITLE": re.compile(r"Titulo da edicao:\s*([A-Z][\w\s]+)", re.I),
-    "EDICAO": re.compile(r"Edicao numero:\s*(\d+)", re.I),
-    "DATA": re.compile(r"Data de publicacao:\s*(\d{4}-\d{2}-\d{2})", re.I),
-    "DESTAQUE_TEXTO": re.compile(r"Texto destaque:\s*\n([^\n]+)", re.I),
-    "AUTOR_NOME": re.compile(r"Autor responsavel:\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)", re.I),
-    "QUOTE": re.compile(r"Citacao principal:\s*\n([^\n]+)", re.I),
-    "ISSN": re.compile(r"ISSN:\s*(\S+)", re.I),
+_GOLD_DOCS = [
+    "\n".join(_SOURCE_LINES),
+    """Briefing editorial 2025-12
+
+Titulo da edicao: Linhas e Curvas
+Edicao numero: 035
+Data de publicacao: 2025-12-10
+
+Texto destaque:
+Quinze projetos de tipografia experimental analisados.
+
+Autor responsavel: Lucas Pereira
+
+Citacao principal:
+A forma e a primeira linguagem do design.
+
+ISSN: 2025-0035-CR
+""",
+    """Briefing editorial 2026-08
+
+Titulo da edicao: Cores Vivas
+Edicao numero: 050
+Data de publicacao: 2026-08-22
+
+Texto destaque:
+Especial sobre paletas em ambientes virtuais imersivos.
+
+Autor responsavel: Carla Mendes
+
+Citacao principal:
+Cor e emocao codificada em comprimento de onda.
+
+ISSN: 2026-0050-CR
+""",
+]
+
+_FIELD_EXAMPLES = {
+    "TITLE": ["Quebrando Padroes", "Linhas e Curvas", "Cores Vivas"],
+    "EDICAO": ["042", "035", "050"],
+    "DATA": ["2026-04-26", "2025-12-10", "2026-08-22"],
+    "DESTAQUE_TEXTO": [
+        "Trinta projetos de design generativo no semestre.",
+        "Quinze projetos de tipografia experimental analisados.",
+        "Especial sobre paletas em ambientes virtuais imersivos.",
+    ],
+    "AUTOR_NOME": ["Marina Costa", "Lucas Pereira", "Carla Mendes"],
+    "QUOTE": [
+        "O futuro pertence aos que reinventam.",
+        "A forma e a primeira linguagem do design.",
+        "Cor e emocao codificada em comprimento de onda.",
+    ],
+    "ISSN": ["2026-0042-CR", "2025-0035-CR", "2026-0050-CR"],
 }
+
+_INFERRED = infer_field_patterns(gold_docs=_GOLD_DOCS, field_examples=_FIELD_EXAMPLES)
 
 
 def replicate(template_phs: dict[str, str], source_text: str) -> ReplicationResult:
-    extracted: dict[str, str] = {}
-    for k, pat in _FIELD_PATTERNS.items():
-        m = pat.search(source_text)
-        if m:
-            extracted[k] = m.group(1).strip()
+    extracted = apply_inferred(_INFERRED, source_text)
     return ReplicationResult(
         extracted_data=extracted,
         fields_filled=len(extracted),
-        fields_total=len(_FIELD_PATTERNS),
+        fields_total=len(_FIELD_EXAMPLES),
     )
 
 

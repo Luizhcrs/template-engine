@@ -18,7 +18,6 @@ Run:
 from __future__ import annotations
 
 import argparse
-import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,6 +25,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from engine.ascii_layout import detect_layout_features, image_to_ascii
+from engine.pattern_inference import apply_inferred, infer_field_patterns
 
 # ===== Brand palette =====
 BRAND_PRIMARY = (255, 122, 42)  # laranja
@@ -274,25 +274,59 @@ class ReplicationResult:
     fields_total: int
 
 
-_FIELD_PATTERNS: dict[str, re.Pattern] = {
-    "CODIGO": re.compile(r"Codigo do relatorio:\s*([A-Z]+-\d{4}-\d{2})", re.I),
-    "PERIODO": re.compile(r"Periodo de cobertura:\s*([a-z]+/\d{4})", re.I),
-    "VERSAO": re.compile(r"Versao corrente:\s*(\d+\.\d+)", re.I),
-    "RESUMO_TEXTO": re.compile(r"Resumo geral:\s*\n([^\n]+)", re.I),
-    "OBSERVACOES": re.compile(r"Observacoes finais:\s*\n([^\n]+)", re.I),
+_GOLD_DOCS = [
+    "\n".join(_SOURCE_LINES),
+    """Briefing mensal - 28/02/2026
+
+Codigo do relatorio: REL-2026-02
+Periodo de cobertura: fevereiro/2026
+Versao corrente: 1.0
+
+Resumo geral:
+Mes estavel, sem alteracoes significativas em indicadores.
+
+Observacoes finais:
+Manter monitoramento.
+""",
+    """Briefing mensal - 30/06/2026
+
+Codigo do relatorio: REL-2026-06
+Periodo de cobertura: junho/2026
+Versao corrente: 2.1
+
+Resumo geral:
+Crescimento de 8 porcento sobre periodo anterior.
+
+Observacoes finais:
+Reforcar estrategia de marketing.
+""",
+]
+
+_FIELD_EXAMPLES = {
+    "CODIGO": ["REL-2026-04", "REL-2026-02", "REL-2026-06"],
+    "PERIODO": ["abril/2026", "fevereiro/2026", "junho/2026"],
+    "VERSAO": ["1.2", "1.0", "2.1"],
+    "RESUMO_TEXTO": [
+        "Trimestre superou meta em 12 porcento, foco em reducao de custos.",
+        "Mes estavel, sem alteracoes significativas em indicadores.",
+        "Crescimento de 8 porcento sobre periodo anterior.",
+    ],
+    "OBSERVACOES": [
+        "Recomenda-se manter estrategia atual e revisar fornecedores no Q3.",
+        "Manter monitoramento.",
+        "Reforcar estrategia de marketing.",
+    ],
 }
+
+_INFERRED = infer_field_patterns(gold_docs=_GOLD_DOCS, field_examples=_FIELD_EXAMPLES)
 
 
 def replicate(template_phs: dict[str, str], source_text: str) -> ReplicationResult:
-    extracted: dict[str, str] = {}
-    for k, pat in _FIELD_PATTERNS.items():
-        m = pat.search(source_text)
-        if m:
-            extracted[k] = m.group(1).strip()
+    extracted = apply_inferred(_INFERRED, source_text)
     return ReplicationResult(
         extracted_data=extracted,
         fields_filled=len(extracted),
-        fields_total=len(_FIELD_PATTERNS),
+        fields_total=len(_FIELD_EXAMPLES),
     )
 
 
@@ -358,7 +392,7 @@ def main() -> None:
     print("=" * 80)
     print("CAMPOS REPLICADOS (regex puro, ZERO LLM)")
     print("=" * 80)
-    for k in _FIELD_PATTERNS:
+    for k in _FIELD_EXAMPLES:
         v = rep.extracted_data.get(k, "(NOT FOUND)")
         print(f"  {k:<18} -> {v}")
     print()

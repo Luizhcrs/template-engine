@@ -51,8 +51,8 @@ _VALUE_SHAPES: list[tuple[str, re.Pattern, str]] = [
     ("version", re.compile(r"\d+\.\d+(?:\.\d+)?"), r"\d+\.\d+(?:\.\d+)?"),
     (
         "fullname",
-        re.compile(r"[A-Z][a-z]+(?:\s+(?:da|de|do|dos|das|e|von|van)?\s*[A-Z][a-z]+)+"),
-        r"[A-Z][a-z]+(?:\s+(?:da|de|do|dos|das|e|von|van)?\s*[A-Z][a-z]+)+",
+        re.compile(r"[A-Z][a-z]+(?:[ \t]+(?:da|de|do|dos|das|e|von|van)?[ \t]*[A-Z][a-z]+)+"),
+        r"[A-Z][a-z]+(?:[ \t]+(?:da|de|do|dos|das|e|von|van)?[ \t]*[A-Z][a-z]+)+",
     ),
     (
         "month_year_pt",
@@ -137,18 +137,19 @@ def infer_field_patterns(
             continue
 
         # 1. Find each example in gold docs, collect label contexts
+        # Require the example to be preceded by ": " (colon + whitespace) and
+        # followed by a word/line boundary — avoids spurious matches when the
+        # example is a short substring of unrelated content (e.g. "A" inside "LAUDO").
         labels: list[str] = []
         for ex in examples:
+            ex_pattern = re.compile(rf":\s*{re.escape(ex)}(?=\s|$|[.,;)])")
             for doc in gold_docs:
-                idx = 0
-                while True:
-                    pos = doc.find(ex, idx)
-                    if pos == -1:
-                        break
-                    label = _extract_label_before(doc, pos)
+                for m in ex_pattern.finditer(doc):
+                    # value start = where the example actually begins in the doc
+                    value_start = m.end() - len(ex)
+                    label = _extract_label_before(doc, value_start)
                     if label:
                         labels.append(label)
-                    idx = pos + len(ex)
 
         unique_labels = _aggregate_labels(labels)
 

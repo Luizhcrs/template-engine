@@ -15,7 +15,6 @@ Run:
 from __future__ import annotations
 
 import argparse
-import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +26,7 @@ from engine.ascii_layout import (
     image_to_ascii,
     summarize_multipage,
 )
+from engine.pattern_inference import apply_inferred, infer_field_patterns
 
 
 def _font(size: int) -> ImageFont.ImageFont:
@@ -332,32 +332,84 @@ class ReplicationResult:
     fields_total: int
 
 
-_FIELD_PATTERNS: dict[str, re.Pattern] = {
-    "CONTRATO_N": re.compile(r"Numero do contrato:\s*([A-Z]+-\d{4}-\d{4})", re.I),
-    "DATA": re.compile(r"Data de assinatura:\s*(\d{4}-\d{2}-\d{2})", re.I),
-    "LOCAL": re.compile(r"Local de assinatura:\s*([A-Z][\w\-]+)", re.I),
-    "CONTRATANTE": re.compile(r"Contratante:\s*([A-Z][\w\s.&]+(?:Ltda|S\.A\.|ME|EIRELI))", re.I),
-    "CONTRATADA": re.compile(r"Contratada:\s*([A-Z][\w\s.&]+(?:Ltda|S\.A\.|ME|EIRELI))", re.I),
-    "OBJETO_DESCRICAO": re.compile(r"Objeto do contrato:\s*\n([^\n]+)", re.I),
-    "VALOR": re.compile(r"Valor total:\s*R\$\s*([\d.,]+)", re.I),
-    "VIGENCIA": re.compile(r"Vigencia:\s*([^\.]+)", re.I),
-    "RESCISAO_TEXTO": re.compile(r"Rescisao:\s*([^\n]+)", re.I),
-    "FORO": re.compile(r"Foro eleito:\s*comarca de\s*([A-Z][\w\-]+)", re.I),
+# Gold variants pra inferencia
+_GOLD_DOCS = [
+    "\n".join(_SOURCE_LINES),
+    """Solicitacao de contrato - 12/02/2026
+
+Numero do contrato: CT-2026-0019
+Data de assinatura: 2026-02-12
+Local de assinatura: Sao-Paulo
+
+Partes envolvidas:
+Contratante: Globex Comercio Ltda
+Contratada: Initech Servicos ME
+
+Objeto do contrato:
+Desenvolvimento de plataforma web sob demanda.
+
+Valor total: R$ 120.000,00
+Vigencia: 18 meses a partir da assinatura.
+
+Rescisao: rescisao mediante notificacao 60 dias antes.
+Foro eleito: comarca de Sao-Paulo.
+""",
+    """Solicitacao de contrato - 05/06/2026
+
+Numero do contrato: CT-2026-0078
+Data de assinatura: 2026-06-05
+Local de assinatura: Belo-Horizonte
+
+Partes envolvidas:
+Contratante: Hooli Industrias Ltda
+Contratada: Pied Piper ME
+
+Objeto do contrato:
+Consultoria em otimizacao de processos industriais.
+
+Valor total: R$ 78.500,00
+Vigencia: 6 meses renovaveis.
+
+Rescisao: rescindivel a qualquer momento por escrito.
+Foro eleito: comarca de Belo-Horizonte.
+""",
+]
+
+_FIELD_EXAMPLES = {
+    "CONTRATO_N": ["CT-2026-0042", "CT-2026-0019", "CT-2026-0078"],
+    "DATA": ["2026-04-26", "2026-02-12", "2026-06-05"],
+    "LOCAL": ["Recife-PE", "Sao-Paulo", "Belo-Horizonte"],
+    "CONTRATANTE": ["ACME Industria Ltda", "Globex Comercio Ltda", "Hooli Industrias Ltda"],
+    "CONTRATADA": ["TechServ Solucoes ME", "Initech Servicos ME", "Pied Piper ME"],
+    "OBJETO_DESCRICAO": [
+        "Prestacao de servicos de auditoria tecnica em sistemas de gestao.",
+        "Desenvolvimento de plataforma web sob demanda.",
+        "Consultoria em otimizacao de processos industriais.",
+    ],
+    "VALOR": ["45.000,00", "120.000,00", "78.500,00"],
+    "VIGENCIA": [
+        "12 meses a partir da assinatura",
+        "18 meses a partir da assinatura",
+        "6 meses renovaveis",
+    ],
+    "RESCISAO_TEXTO": [
+        "ambas as partes podem rescindir com aviso previo de 30 dias.",
+        "rescisao mediante notificacao 60 dias antes.",
+        "rescindivel a qualquer momento por escrito.",
+    ],
+    "FORO": ["Recife-PE", "Sao-Paulo", "Belo-Horizonte"],
 }
 
-_TOTAL_FIELDS = list(_FIELD_PATTERNS.keys())
+_INFERRED = infer_field_patterns(gold_docs=_GOLD_DOCS, field_examples=_FIELD_EXAMPLES)
+_TOTAL_FIELDS = list(_FIELD_EXAMPLES.keys())
 
 
 def replicate(source_text: str) -> ReplicationResult:
-    extracted: dict[str, str] = {}
-    for k, pat in _FIELD_PATTERNS.items():
-        m = pat.search(source_text)
-        if m:
-            extracted[k] = m.group(1).strip()
+    extracted = apply_inferred(_INFERRED, source_text)
     return ReplicationResult(
         extracted_data=extracted,
         fields_filled=len(extracted),
-        fields_total=len(_FIELD_PATTERNS),
+        fields_total=len(_FIELD_EXAMPLES),
     )
 
 

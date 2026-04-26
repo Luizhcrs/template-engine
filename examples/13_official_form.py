@@ -14,7 +14,6 @@ Run:
 from __future__ import annotations
 
 import argparse
-import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +21,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from engine.ascii_layout import detect_layout_features, image_to_ascii
+from engine.pattern_inference import apply_inferred, infer_field_patterns
 
 
 def _font(size: int) -> ImageFont.ImageFont:
@@ -273,29 +273,71 @@ class ReplicationResult:
     fields_total: int
 
 
-_FIELD_PATTERNS: dict[str, re.Pattern] = {
-    "FORM_N": re.compile(r"Formulario numero:\s*([A-Z]+-\d{4}-\d{4})", re.I),
-    "PROTOCOLO": re.compile(r"Protocolo unico:\s*([A-Z]+-\d+)", re.I),
-    "NOME": re.compile(r"Nome completo:\s*([A-Z][\w\s]+)", re.I),
-    "CPF": re.compile(r"CPF:\s*(\d{3}\.\d{3}\.\d{3}-\d{2})", re.I),
-    "RG": re.compile(r"RG:\s*([\d\.\-]+)", re.I),
-    "DATA_NASC": re.compile(r"Data de nascimento:\s*(\d{4}-\d{2}-\d{2})", re.I),
-    "RUA": re.compile(r"Rua:\s*([A-Z][\w\s]+)", re.I),
-    "NUMERO_END": re.compile(r"Numero:\s*(\d+)", re.I),
-    "CIDADE": re.compile(r"Cidade:\s*([A-Z][a-z]+)", re.I),
-    "UF": re.compile(r"UF:\s*([A-Z]{2})", re.I),
-    "CEP": re.compile(r"CEP:\s*(\d{5}-\d{3})", re.I),
-    "DATA_ASSINATURA": re.compile(r"Data da assinatura:\s*(\d{4}-\d{2}-\d{2})", re.I),
+_GOLD_DOCS = [
+    "\n".join(_SOURCE_LINES),
+    """Cadastro recebido - 2026-01-10
+
+Formulario numero: F-2026-0007
+Protocolo unico: PROT-12345678
+
+Dados pessoais:
+Nome completo: Maria de Fatima Lima
+CPF: 987.654.321-00
+RG: 98.765.432-1
+Data de nascimento: 1990-07-22
+
+Endereco residencial:
+Rua: Rua das Flores
+Numero: 567
+Cidade: Curitiba
+UF: PR
+CEP: 80010-000
+
+Data da assinatura: 2026-01-10
+""",
+    """Cadastro recebido - 2026-09-15
+
+Formulario numero: F-2026-0150
+Protocolo unico: PROT-55667788
+
+Dados pessoais:
+Nome completo: Carlos Eduardo Santos
+CPF: 555.444.333-22
+RG: 33.222.111-0
+Data de nascimento: 1978-11-03
+
+Endereco residencial:
+Rua: Avenida Paulista
+Numero: 2001
+Cidade: Sao
+UF: SP
+CEP: 01310-200
+
+Data da assinatura: 2026-09-15
+""",
+]
+
+_FIELD_EXAMPLES = {
+    "FORM_N": ["F-2026-0042", "F-2026-0007", "F-2026-0150"],
+    "PROTOCOLO": ["PROT-99887766", "PROT-12345678", "PROT-55667788"],
+    "NOME": ["Joao da Silva Santos", "Maria de Fatima Lima", "Carlos Eduardo Santos"],
+    "CPF": ["123.456.789-00", "987.654.321-00", "555.444.333-22"],
+    "RG": ["12.345.678-9", "98.765.432-1", "33.222.111-0"],
+    "DATA_NASC": ["1985-03-15", "1990-07-22", "1978-11-03"],
+    "RUA": ["Avenida Boa Viagem", "Rua das Flores", "Avenida Paulista"],
+    "NUMERO_END": ["1234", "567", "2001"],
+    "CIDADE": ["Recife", "Curitiba", "Sao"],
+    "UF": ["PE", "PR", "SP"],
+    "CEP": ["51011-000", "80010-000", "01310-200"],
+    "DATA_ASSINATURA": ["2026-04-26", "2026-01-10", "2026-09-15"],
 }
+
+_INFERRED = infer_field_patterns(gold_docs=_GOLD_DOCS, field_examples=_FIELD_EXAMPLES)
 
 
 def replicate(template_phs: dict[str, str], source_text: str) -> ReplicationResult:
-    extracted: dict[str, str] = {}
-    for k, pat in _FIELD_PATTERNS.items():
-        m = pat.search(source_text)
-        if m:
-            extracted[k] = m.group(1).strip()
-    return ReplicationResult(extracted, len(extracted), len(_FIELD_PATTERNS))
+    extracted = apply_inferred(_INFERRED, source_text)
+    return ReplicationResult(extracted, len(extracted), len(_FIELD_EXAMPLES))
 
 
 def main() -> None:
