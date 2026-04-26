@@ -5,6 +5,16 @@ Pipeline: extractor -> preset_creator -> llm_mapper -> validator -> renderer
 
 from __future__ import annotations
 
+from engine.ascii_layout import (
+    HeadingHint,
+    LayoutFeatures,
+    PlaceholderHint,
+    SectionBreak,
+    TableHint,
+    detect_layout_features,
+    image_to_ascii,
+    summarize_layout,
+)
 from engine.confidence import ConfidenceLabel, calculate_confidence, confidence_label
 from engine.extractor import ExtractedDoc, extract
 from engine.llm_mapper import map_content
@@ -38,6 +48,9 @@ __version__ = "0.3.0a1"
 __all__ = [
     "ConfidenceLabel",
     "ExtractedDoc",
+    "HeadingHint",
+    "LayoutFeatures",
+    "PlaceholderHint",
     "PresetBundle",
     "PresetInvalid",
     "PresetManifest",
@@ -45,6 +58,8 @@ __all__ = [
     "RenderError",
     "RenderOp",
     "RenderOpsFile",
+    "SectionBreak",
+    "TableHint",
     "ValidationConfig",
     "ValidationResult",
     "VisualIssue",
@@ -53,14 +68,17 @@ __all__ = [
     "calculate_confidence",
     "confidence_label",
     "create_preset",
+    "detect_layout_features",
     "docx_to_png",
     "extract",
+    "image_to_ascii",
     "list_builtin_presets",
     "list_presets_for_owner",
     "list_user_presets",
     "load_preset",
     "map_content",
     "render",
+    "summarize_layout",
     "validate",
     "validate_visual",
 ]
