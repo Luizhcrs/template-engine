@@ -62,7 +62,7 @@ from engine.semantic_diff import (
     filter_by_severity,
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "BatchItemResult",
