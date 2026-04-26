@@ -4,7 +4,7 @@ title: Início
 
 <div class="te-hero" markdown>
 <div class="badges" markdown>
-<span>v0.2.0</span> <span>Apache 2.0</span> <span>Python 3.11+</span>
+[![Release](https://img.shields.io/github/v/release/Luizhcrs/template-engine?display_name=tag&sort=semver&color=ff7a2a&label=release)](https://github.com/Luizhcrs/template-engine/releases) <span>Apache 2.0</span> <span>Python 3.11+</span>
 </div>
 
 # template-engine
