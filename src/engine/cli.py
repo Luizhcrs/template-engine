@@ -256,5 +256,114 @@ def normalize(
     console.print(f"[bold green]OK[/bold green] outputs -> {output_dir.resolve()}")
 
 
+@app.command()
+def conformity(
+    template: Annotated[Path, typer.Option("--template", help="Template .docx (gold standard)", exists=True)],
+    candidate: Annotated[Path, typer.Option("--candidate", help="Candidate .docx to evaluate", exists=True)],
+    provider: Annotated[
+        str | None,
+        typer.Option("--provider", help="LLM provider for text dimension (omit to skip)"),
+    ] = None,
+    model: Annotated[str | None, typer.Option("--model", help="Override model id")] = None,
+    api_key: Annotated[str | None, typer.Option("--api-key", help="API key (or use env var)")] = None,
+    dimensions: Annotated[
+        str,
+        typer.Option(
+            "--dimensions",
+            help="Comma-separated subset of: text,structural,visual,design,technical",
+        ),
+    ] = "text,structural,visual,design,technical",
+    threshold: Annotated[
+        float, typer.Option("--threshold", help="Pass/fail cutoff for is_conformant")
+    ] = 0.85,
+    json_path: Annotated[
+        Path | None, typer.Option("--json", help="Where to write the conformity report JSON")
+    ] = None,
+) -> None:
+    """Multi-dimensional conformity check (Wave F).
+
+    Evaluates whether a candidate document conforms to a template across up to
+    five dimensions: text (LLM), structural (docx parsing), visual (ascii layout),
+    design (multimodal LLM, optional), technical (format validators).
+    """
+    from engine.conformity import check_conformity
+
+    llm = None
+    if provider:
+        llm = _build_provider(provider, api_key, model)
+        console.print(f"[bold]Provider:[/bold] {provider} ({getattr(llm, 'model', '?')})")
+    else:
+        console.print("[bold dim]No LLM provider — text + design dimensions will be skipped[/bold dim]")
+
+    dims = [d.strip() for d in dimensions.split(",") if d.strip()]
+    console.print(f"[dim]Dimensions: {', '.join(dims)}[/dim]")
+
+    with console.status("checking conformity...", spinner="dots"):
+        report = asyncio.run(
+            check_conformity(
+                template_path=template,
+                candidate_path=candidate,
+                llm=llm,
+                visual_llm=None,
+                dimensions=dims,
+                threshold=threshold,
+            )
+        )
+
+    verdict_color = "green" if report.is_conformant else "red"
+    console.print(
+        Panel.fit(
+            f"[bold]{'CONFORMANT' if report.is_conformant else 'NON_CONFORMANT'}[/bold]\n"
+            f"Score: [{verdict_color}]{report.score:.3f}[/{verdict_color}] (threshold: {report.threshold:.2f})\n"
+            f"Failures: {len(report.failures)} (critical: {len(report.critical_failures)})",
+            title="Conformity verdict",
+            border_style=verdict_color,
+        )
+    )
+
+    table = Table(title="Per-dimension scores", show_header=True, header_style="bold")
+    table.add_column("Dimension", style="bold")
+    table.add_column("Score", justify="right")
+    table.add_column("Failures", justify="right")
+    table.add_column("Status")
+    for name, dr in report.by_dimension.items():
+        if dr.skipped:
+            status = f"[dim]skipped: {dr.skip_reason}[/dim]"
+        elif dr.score >= 0.95:
+            status = "[green]ok[/green]"
+        elif dr.score >= 0.7:
+            status = "[yellow]warning[/yellow]"
+        else:
+            status = "[red]critical[/red]"
+        table.add_row(name, f"{dr.score:.3f}", str(len(dr.failures)), status)
+    console.print(table)
+
+    if report.failures:
+        fail_table = Table(title="Failures", show_header=True, header_style="bold")
+        fail_table.add_column("Dimension")
+        fail_table.add_column("Field")
+        fail_table.add_column("Severity")
+        fail_table.add_column("Note")
+        for f in report.failures[:25]:
+            sev_color = {"critical": "red", "warning": "yellow", "info": "dim"}.get(f.severity, "white")
+            fail_table.add_row(
+                f.dimension,
+                f.field_or_excerpt,
+                f"[{sev_color}]{f.severity}[/{sev_color}]",
+                f.note,
+            )
+        console.print(fail_table)
+        if len(report.failures) > 25:
+            console.print(f"[dim]... +{len(report.failures) - 25} more (see --json)[/dim]")
+
+    if json_path:
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(
+            json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        console.print(f"[dim]report -> {json_path.resolve()}[/dim]")
+
+
 if __name__ == "__main__":
     app()

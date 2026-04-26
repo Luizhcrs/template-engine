@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Wave F (conformity validator multi-dim)
+
+LLM-as-judge multi-dimensional conformity check. Subpackage ``engine.conformity`` with five dimensions:
+
+- **text** — wraps ``engine.semantic_diff``. Score derived from severity counts. LLM call.
+- **structural** — ``python-docx`` parsing. Counts headings by level, tables, sections, list paragraphs. Pure deterministic, zero LLM.
+- **visual** — synthetic-render via PIL + ``ascii_layout`` fingerprint compare. Skipped gracefully when Pillow is absent. Zero LLM, no LibreOffice.
+- **design** — multimodal LLM compare via new ``ConformityVisualProvider`` Protocol. Receives both ``.docx`` paths directly (no PNG render, no LO). Skipped when no provider supplied.
+- **technical** — required-field check + format validators (``cpf``, ``cep``, ``iso_date``, ``br_date``, ``email``, ``phone_br``, ``uf``) + zero-orphan-placeholder check. Pure deterministic.
+
+Top-level entry: ``engine.conformity.check_conformity(template_path, candidate_path, *, llm, visual_llm, schemas, mapping, candidate_text, dimensions, weights, threshold)`` returns a :class:`ConformityReport`.
+
+**``is_conformant`` rule:** ``score >= threshold`` AND zero critical failures. A single critical (invalid CPF, orphan placeholder, lost field) invalidates the doc regardless of average.
+
+CLI: ``template-engine conformity --template T --candidate C --provider gemini --dimensions text,structural,visual,design,technical --threshold 0.85 --json report.json``. Rich tables show per-dimension score + verdict + failure list.
+
+32 new tests (131 → **163 passing**).
+
+Public exports added to ``engine``: ``ConformityReport``, ``ConformityVisualProvider``, ``DimensionResult``, ``Failure``, ``StructuralFingerprint``, ``check_conformity``, ``check_text``, ``check_structural``, ``check_visual``, ``check_design``, ``check_technical``, ``find_orphan_placeholders``, ``validate_cpf``, ``validate_cep``, ``validate_iso_date``, ``validate_br_date``, ``validate_email``, ``validate_phone_br``, ``validate_uf``.
+
 ### Removed — Wave E (consolidation, BREAKING)
 
 Drops the legacy preset-bundle pipeline in favor of the Wave D schema-driven path. **Breaking change.** Users on the old pipeline must migrate to ``template-engine normalize``.

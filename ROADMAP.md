@@ -17,9 +17,10 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 | Wave A | [done] entregue | `3c42feb` (2026-04-26) | regex inference automatica (10 shapes pre-def + label aggregation) |
 | Wave A v2 | [done] entregue | `594ee1f` (2026-04-26) | grex Tier 2 — generaliza regex via digit/word conversion |
 | Wave D | [done] entregue | `126b0c0` (2026-04-26) | batch orchestrator (1 template + N docs → N normalized + report) |
-| Wave E | [done] entregue | `(pending push)` (2026-04-26) | drop legacy preset/renderer/validator/visual_validator (~26% LOC ↓) |
-| Wave F | [wip] planejada | — | conformity validator multi-dim (texto + estrutural + visual + design + técnico) |
-| v0.3.0 | [done] entregue | `(pending tag)` (2026-04-26) | Wave A + Wave D + Wave E shipped, single Wave D path |
+| Wave E | [done] entregue | `83cd524` (2026-04-26) | drop legacy preset/renderer/validator/visual_validator (~26% LOC -) |
+| Wave F | [done] entregue | `(pending push)` (2026-04-26) | conformity validator multi-dim (5 dimensions: texto + estrutural + visual + design + técnico) |
+| v0.3.0 | [done] tagged | `v0.3.0` (2026-04-26) | Wave A + Wave D + Wave E shipped, single Wave D path |
+| v0.4.0 | [wip] preparado | — | Wave F shipped, conformity validator + CLI; ready to tag |
 | v0.4+ | [plan] planejado | — | OCR + extractors + renderer expandido |
 
 **Onde estamos hoje (2026-04-26):**
