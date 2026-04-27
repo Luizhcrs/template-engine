@@ -389,6 +389,7 @@ async def build_mapping_plan(
     *,
     llm: LLMProvider,
     max_retries: int = 1,
+    template_images: list[str] | None = None,
 ) -> MappingPlan:
     """Issue a batched LLM call and return the parsed plan.
 
@@ -401,7 +402,7 @@ async def build_mapping_plan(
     On total failure (provider error, schema mismatch) returns an empty
     :class:`MappingPlan` so the caller can fall back to the rules path.
     """
-    plan = await _build_initial_plan(template, source, llm=llm)
+    plan = await _build_initial_plan(template, source, llm=llm, template_images=template_images)
 
     for attempt in range(max_retries):
         gaps = _detect_plan_gaps(plan, template, source)
@@ -425,6 +426,7 @@ async def _build_initial_plan(
     source: SourceStructure,
     *,
     llm: LLMProvider,
+    template_images: list[str] | None = None,
 ) -> MappingPlan:
     import json
     from datetime import UTC, datetime
@@ -439,11 +441,25 @@ async def _build_initial_plan(
         .replace("{source_json}", source_json[:60000])
         .replace("{today}", today)
     )
+    if template_images:
+        prompt += (
+            "\n\nThe TEMPLATE has been rendered to PNG image(s) attached "
+            "below — use the visual layout to disambiguate merged cells, "
+            "table geometry, headings vs body slots. Combine the visual "
+            "with the structural JSON above to fill EVERY fillable cell."
+        )
 
     schema = _build_schema(template)
 
     try:
-        response = await llm.generate_structured(prompt, schema)
+        if template_images:
+            response = await llm.generate_structured(  # type: ignore[call-arg]
+                prompt,
+                schema,
+                image_urls=template_images,
+            )
+        else:
+            response = await llm.generate_structured(prompt, schema)
     except Exception as exc:
         log.warning("section_mapper.auto_mapper.llm_failed", error=str(exc))
         return MappingPlan()

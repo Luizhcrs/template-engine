@@ -410,7 +410,26 @@ async def _run_llm_mode(
             log.info("section_mapper.plan_cache.hit", key=cache_key.filename)
 
     if plan is None:
-        plan = await build_mapping_plan(template_struct, source_struct, llm=llm)
+        # Render the template to PNG pages and attach as multimodal
+        # input. The LLM disambiguates merged cells, table geometry
+        # and embedded logos far better when it can see the layout.
+        template_image_urls: list[str] = []
+        try:
+            from engine.section_mapper.template_renderer import render_pages
+
+            pages = render_pages(template_path, max_pages=3)
+            template_image_urls = [p.as_data_url() for p in pages]
+            if template_image_urls:
+                log.info("section_mapper.template_rendered", pages=len(template_image_urls))
+        except Exception as exc:
+            log.info("section_mapper.template_render_skipped", error=str(exc))
+
+        plan = await build_mapping_plan(
+            template_struct,
+            source_struct,
+            llm=llm,
+            template_images=template_image_urls or None,
+        )
         if (
             use_cache
             and cache_key is not None

@@ -77,19 +77,75 @@ class SourceStructure:
         }
 
 
-def profile_source(source_path: Path) -> SourceStructure:
-    """Walk *source_path* and return a :class:`SourceStructure`."""
-    sections = _profile_sections(source_path)
-    tables = _profile_tables(source_path)
-    glued, spaced = _profile_header_text(source_path)
-    body_paragraphs = _profile_body_paragraphs(source_path)
+def profile_source(source: object) -> SourceStructure:
+    """Walk a source document and return a :class:`SourceStructure`.
+
+    *source* may be:
+
+    - ``Path`` / ``str`` — file path on disk (most common).
+    - ``bytes`` / ``bytearray`` / ``BytesIO`` — raw docx bytes; written
+      to a temp file before profiling.
+    - URL string starting with ``http://`` or ``https://`` — downloaded
+      to a temp file first.
+    - existing :class:`SourceStructure` — passed through unchanged
+      (idempotent re-profiling).
+    """
+    resolved = _resolve_source_path(source)
+    sections = _profile_sections(resolved)
+    tables = _profile_tables(resolved)
+    glued, spaced = _profile_header_text(resolved)
+    body_paragraphs = _profile_body_paragraphs(resolved)
     return SourceStructure(
-        source_path=str(source_path),
+        source_path=str(resolved),
         sections=sections,
         tables=tables,
         header_text_glued=glued,
         header_text_spaced=spaced,
         body_paragraphs=body_paragraphs,
+    )
+
+
+def _resolve_source_path(source: object) -> "Path":  # noqa: UP037 - quoted for runtime
+    """Coerce *source* to a Path on disk.
+
+    Bytes / streams / URLs are written to a NamedTemporaryFile that
+    survives the call (caller never sees the temp file).
+    """
+    import io
+    import tempfile
+    import urllib.request
+    from pathlib import Path as _Path
+
+    if isinstance(source, SourceStructure):
+        return _Path(source.source_path)
+
+    if isinstance(source, _Path):
+        return source
+
+    if isinstance(source, str):
+        if source.startswith(("http://", "https://")):
+            with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+                with urllib.request.urlopen(source, timeout=60) as resp:
+                    tmp.write(resp.read())
+                return _Path(tmp.name)
+        return _Path(source)
+
+    if isinstance(source, (bytes, bytearray)):
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+            tmp.write(bytes(source))
+            return _Path(tmp.name)
+
+    if isinstance(source, io.IOBase):
+        data = source.read()
+        if isinstance(data, str):
+            data = data.encode("utf-8")
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp:
+            tmp.write(data)
+            return _Path(tmp.name)
+
+    raise TypeError(
+        f"profile_source: unsupported source type {type(source).__name__!r}; "
+        f"expected Path/str/bytes/BytesIO/URL"
     )
 
 

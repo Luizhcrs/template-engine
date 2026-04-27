@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.8] - 2026-04-27 — Multimodal LLM + polymorphic source input
+
+### Added — multimodal LLM (visual layout)
+
+Mega-table layouts (Corentocantins-style POPs) confuse the LLM when
+it only sees structural JSON: identical text repeats across 8 merged
+columns and the model can't tell apart heading rows vs body slots.
+
+This release renders the template as PNG images and attaches them to
+the LLM prompt:
+
+- New module `engine.section_mapper.template_renderer` —
+  ``render_pages(docx_path)`` runs ``docx2pdf`` (Word COM on Windows
+  / Pages on macOS) to produce a PDF, then PyMuPDF (``fitz``) to
+  render each PDF page as a PNG. Returns ``list[PageImage]`` with
+  base64 data-URLs ready for the OpenAI vision API.
+- ``OpenAIProvider.generate_structured`` gains an ``image_urls`` kwarg
+  — when supplied, builds a multimodal user message
+  (``[{type: text}, {type: image_url}, ...]``).
+- ``build_mapping_plan`` accepts ``template_images: list[str] | None``;
+  when present, the prompt instructs the model to combine the visual
+  layout with the structural JSON.
+- ``_run_llm_mode`` orchestrator auto-renders up to 3 pages of the
+  template and attaches them to every LLM call. Silently skipped when
+  ``docx2pdf`` or ``fitz`` are missing (logged at info level).
+
+Both deps are optional; install via ``pip install docx2pdf pymupdf``
+on Windows / macOS where Word or Pages is available.
+
+### Added — polymorphic source input
+
+``profile_source`` now accepts:
+
+- ``Path`` / ``str`` — file path on disk (existing behaviour).
+- ``bytes`` / ``bytearray`` — raw docx bytes; written to a
+  ``NamedTemporaryFile`` before profiling.
+- ``BytesIO`` / any ``io.IOBase`` — read & buffered to temp file.
+- URL string starting with ``http://`` / ``https://`` — downloaded
+  via ``urllib.request`` to a temp file (60 s timeout).
+- existing ``SourceStructure`` — passed through (idempotent).
+
+Existing API stays compatible because ``Path`` and ``str`` paths fall
+through to the original code path. Callers that already have docx
+bytes in memory (FastAPI uploads, S3 reads) no longer need to write a
+file first.
+
+### Result on Corentocantins (multimodal active, gpt-4o)
+
+Same coverage as v0.10.7 for the first call (header_subs filled,
+title cells filled, signature row filled). The merged-cell body
+slots (rows 2-7 with imperative help text) remain template-default
+even with the visual; this is a prompt-engineering target for the
+next iteration.
+
+The infrastructure for multimodal is in place — adding more focused
+prompts ("for each cell with imperative `(Descrição...)` text in
+parentheses, emit a cell_fill that REPLACES that cell's text") is
+the cheap follow-up.
+
 ## [0.10.7] - 2026-04-27 — Cell-level fill (mega-table layouts)
 
 Mega-table templates (Corentocantins-style POPs where the entire

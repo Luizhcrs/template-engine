@@ -51,12 +51,27 @@ class OpenAIProvider:
         self._strict = strict
         self._client: AsyncOpenAI = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
 
-    async def generate_structured(self, prompt: str, json_schema: dict) -> dict[str, Any]:
+    async def generate_structured(
+        self,
+        prompt: str,
+        json_schema: dict,
+        *,
+        image_urls: list[str] | None = None,
+    ) -> dict[str, Any]:
         schema_for_request = normalize_for_strict(json_schema) if self._strict else json_schema
+
+        if image_urls:
+            content_parts: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+            for url in image_urls:
+                content_parts.append({"type": "image_url", "image_url": {"url": url}})
+            messages: list[dict[str, Any]] = [{"role": "user", "content": content_parts}]
+        else:
+            messages = [{"role": "user", "content": prompt}]
+
         try:
-            resp = await self._client.chat.completions.create(
+            resp = await self._client.chat.completions.create(  # type: ignore[call-overload]
                 model=self.model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
