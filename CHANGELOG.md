@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-04-27 — Wave M prompt validated against OpenAI gpt-4o
+
+First end-to-end run of the LLM mode against a real provider on the
+Engeman dados.docx pair surfaced two prompt-quality bugs that the
+unit tests could not catch:
+
+### Fixed — header substitutions kept the placeholder prefix
+
+The first version of the prompt told the LLM to "pick a value FROM the
+SOURCE", which the model interpreted as "output only the value". So
+``Rev. 00`` became ``01`` (instead of ``Rev. 01``), ``Aprovado:``
+became ``Fabiano Roberto Gomes Arce`` (without the ``Aprovado:``
+prefix), and so on.
+
+The header field gets REPLACED in place by the substitution, so the
+prefix has to be part of the replacement. The prompt now states this
+explicitly with worked examples:
+
+- ``"Rev. 00"`` → ``"Rev. 01"`` (keep the prefix, change only the
+  number)
+- ``"Elaborado:"`` → ``"Elaborado: Marcos Britto"``
+- ``"Data:"`` → ``"Data: 2026-04-27"`` (use TODAY)
+
+### Fixed — responsibility-table sub-headers + X marks
+
+For tables shaped ``["Atividades", "Responsabilidade",
+"Responsabilidade"]`` (duplicate primary header, sub-header row carries
+``["", "Gerente Setorial", "Supervisores"]``), the LLM was leaving X
+columns empty. The prompt now:
+
+- Shows the exact shape ``{"Atividades": "Aprovar...", "Gerente
+  Setorial": "X", "Supervisores": ""}``.
+- Mandates ``sub_headers`` output when the primary row has duplicates.
+- Spells out that each "Compete à gerência" / "Compete aos
+  supervisores" paragraph from the source becomes one row.
+
+### Fixed — `.format()` KeyError on JSON-shaped prompt examples
+
+The prompt body now contains literal JSON examples with curly braces
+(``{"Rev.": "00"}``). ``str.format()`` choked on those. Replaced with
+explicit ``.replace("{template_json}", ...)`` chain so braces inside
+examples pass through.
+
+### Result on Engeman dados.docx
+
+LLM-mode output now matches DOcStream's reference:
+
+| Aspect | rules-mode (v0.9.7) | llm-mode (v0.10.1) | DOcStream |
+| --- | --- | --- | --- |
+| Header doc code | ✓ | ✓ | ✓ |
+| Rev. number | Rev. 01 | Rev. 01 | Rev. 01 |
+| Elaborado / Aprovado / Data with prefix | ✓ | ✓ | ✓ |
+| (TITULO) | PARTIDA DA ÁREA DE SÍNTESE | PARTIDA DA ÁREA DE SÍNTESE | PARTIDA DA ÁREA DE SÍNTESE |
+| Sub-section markers (6.1, 6.2.1) | preserved | preserved | preserved |
+| Letter sequences (a, b, c) reset | ✓ | ✓ | ✓ |
+| Responsabilidade table X marks | gerência / supervisores split | same | same |
+| Histórico table | source + migração row | source + migração row | source + migração row |
+
+LLM-mode reaches DOcStream parity **with zero hardcoded vendor logic**
+on the Engeman pair. Same code is expected to handle other vendors
+without rule-table extension.
+
+Cost: one ~3500-token prompt + ~2000-token response = ~$0.05 with gpt-4o
+or ~$0.001 with Gemini Flash 2.5.
+
 ## [0.10.0] - 2026-04-27 — Wave M (LLM-driven full-doc mapping)
 
 The Wave L pipeline relied on hardcoded vendor heuristics: Engeman
