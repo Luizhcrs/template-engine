@@ -27,6 +27,7 @@ before shipping the rendered docx.
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
@@ -135,7 +136,7 @@ def map_sections(
     """Synchronous entry point — string and embeddings modes only."""
     target_sections = parse_docx(template_path)
     source_text = extract(source_path).text
-    source_sections = parse_text(source_text)
+    source_sections = _dedupe_sections_by_richest(parse_text(source_text))
 
     target_names = [s.name for s in target_sections]
     matches = _select_matches(
@@ -193,7 +194,7 @@ async def map_sections_async(
     ``string`` and ``embeddings``."""
     target_sections = parse_docx(template_path)
     source_text = extract(source_path).text
-    source_sections = parse_text(source_text)
+    source_sections = _dedupe_sections_by_richest(parse_text(source_text))
 
     target_names = [s.name for s in target_sections]
     if similarity_mode == "llm" and llm is not None:
@@ -232,12 +233,57 @@ async def map_sections_async(
     )
 
 
+def _dedupe_sections_by_richest(
+    sections: list[TextSection],
+) -> list[TextSection]:
+    """When the same heading appears multiple times (PDF table of contents +
+    body section), keep only the occurrence with the most content. PDFs
+    routinely reproduce headings in a TOC where the "content" between two
+    consecutive TOC entries is empty or nearly empty.
+    """
+    by_name: dict[str, TextSection] = {}
+    for s in sections:
+        existing = by_name.get(s.name)
+        if existing is None or len(s.content.strip()) > len(existing.content.strip()):
+            by_name[s.name] = s
+    # Preserve original order of the first occurrence
+    seen: set[str] = set()
+    out: list[TextSection] = []
+    for s in sections:
+        if s.name in seen:
+            continue
+        seen.add(s.name)
+        out.append(by_name[s.name])
+    return out
+
+
+_FOOTER_MARKERS = re.compile(
+    r"(?im)^\s*(?:"
+    r"FORM\.[\w./-]+"
+    r"|REPRODUCAO\s+PROIBIDA"
+    r"|REPRODUÇÃO\s+PROIBIDA"
+    r"|FL\.\s*\d+\s*/\s*\d+"
+    r"|INTERNA\s+P[áa]gina\s+\d+\s+de\s+\d+"
+    r"|Refer[êe]ncias\s+e\s+Anexos"
+    r"|Dados\s+da\s+Refer[êe]ncia"
+    r")"
+)
+
+
+def _trim_at_footer(content: str) -> str:
+    """Cut section content at the first footer / annex marker line."""
+    m = _FOOTER_MARKERS.search(content)
+    if m is None:
+        return content
+    return content[: m.start()].rstrip()
+
+
 def _build_content_map(
     source_sections: list[TextSection],
     matches: list[HeadingMatch],
 ) -> dict[str, str]:
     """Group matched source content under each target heading."""
-    by_source = {s.name: s.content for s in source_sections}
+    by_source = {s.name: _trim_at_footer(s.content) for s in source_sections}
     grouped: dict[str, list[str]] = {}
     for m in matches:
         if m.target_name is None:
@@ -245,5 +291,8 @@ def _build_content_map(
         content = by_source.get(m.source_name, "")
         if not content.strip():
             continue
-        grouped.setdefault(m.target_name, []).append(content)
+        # Avoid duplicating the same content under the same target
+        existing = grouped.get(m.target_name, [])
+        if content not in existing:
+            grouped.setdefault(m.target_name, []).append(content)
     return {k: "\n\n".join(v) for k, v in grouped.items()}

@@ -120,14 +120,44 @@ def _detect_heading(paragraph_text: str, style_name: str | None) -> tuple[str, s
         return _normalize_heading(title), number, level
 
     # All-caps unnumbered heading — template style ("OBJETIVO", "APLICACAO").
-    # Heuristic: 3-80 chars, ALL upper, no inner punctuation that screams
-    # body-text. We refuse lines that contain a colon (label syntax) or
-    # end with a digit (form fields) to lower false-positive rate.
+    # Heuristic guards against false positives. Each rule is documented
+    # because each was a real failure mode caught against industrial doc
+    # samples — DO NOT relax without adding a regression test first.
     m = _ALLCAPS_HEADING_RE.match(text)
-    if m and ":" not in text and not text.rstrip().endswith(tuple("0123456789")):
-        return _normalize_heading(text), None, 1
+    if not m:
+        return None
 
-    return None
+    stripped = text.strip()
+
+    # body-text label syntax ("Empresa: ACME")
+    if ":" in stripped:
+        return None
+    # form fields ending in digit ("PROTOCOLO 12345")
+    if stripped[-1].isdigit():
+        return None
+
+    letters_only = re.sub(r"[^A-Za-z]", "", stripped)
+    has_space = " " in stripped
+    slash_or_dash_count = stripped.count("/") + stripped.count("-")
+
+    # short acronym ("PE", "NA", "CFM"): 4 letters or fewer + no space
+    if not has_space and len(letters_only) < 5:
+        return None
+    # compound code ("FAFEN-SE/PR/AM"): 2+ separators
+    if slash_or_dash_count >= 2:
+        return None
+    # version / revision label ("REV. 02", "VERSAO 1.0"): single token + dot/digit-bearing
+    if not has_space and any(ch in stripped for ch in ".-_"):
+        return None
+    # heading should not be excessively long — body sentences sometimes are
+    # all-caps ("ATTENTION: NEVER OPERATE THIS EQUIPMENT WITHOUT...")
+    if len(stripped) > 60:
+        return None
+    # heading shouldn't be a parenthetical aside ("(TITULO)", "(NOTAS)")
+    if stripped.startswith("(") and stripped.endswith(")"):
+        return None
+
+    return _normalize_heading(stripped), None, 1
 
 
 def parse_text(text: str) -> list[TextSection]:

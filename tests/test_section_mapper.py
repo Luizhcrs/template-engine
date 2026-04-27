@@ -363,5 +363,226 @@ def test_heading_match_dataclass_is_frozen():
         m.score = 0.5  # type: ignore[misc]
 
 
+# ===== regression: bugs caught on first real-world run =====
+
+
+def test_regression_acronym_with_slash_is_not_a_heading():
+    """A line like ``FAFEN-SE/PR/AM`` is uppercase but it is a CODE, not a
+    heading. The all-caps detector must reject it.
+
+    Found 2026-04-27 against an Engeman procedure source: ``FAFEN-SE/PR/AM``
+    was being parsed as a section heading, which left the real APLICAÇÃO
+    section content empty.
+    """
+    text = """1. APLICACAO
+
+FAFEN-SE/PR/AM
+
+2. OUTRA SECAO
+
+corpo"""
+    sections = parse_text(text)
+    names = [s.name for s in sections]
+    assert "APLICACAO" in names
+    # FAFEN-SE/PR/AM must NOT have created a section of its own
+    assert "FAFEN SE PR AM" not in names
+    aplicacao = next(s for s in sections if s.name == "APLICACAO")
+    assert "FAFEN-SE/PR/AM" in aplicacao.content
+
+
+def test_regression_short_acronym_is_not_a_heading():
+    """``IT`` or ``PE`` alone is not a heading even though it's all-caps."""
+    text = """OBJETIVO
+
+PE
+
+corpo do objetivo"""
+    sections = parse_text(text)
+    names = [s.name for s in sections]
+    assert "OBJETIVO" in names
+    assert "PE" not in names
+
+
+def test_regression_pdf_toc_and_body_dedupe_to_richest():
+    """PDF-extracted text typically lists every heading TWICE — once in the
+    table of contents (no body) and once in the actual document. The
+    orchestrator must keep only the body version.
+    """
+    from engine.section_mapper.orchestrator import _dedupe_sections_by_richest
+    from engine.section_mapper.parser import TextSection
+
+    sections = [
+        TextSection("OBJETIVO", "1. OBJETIVO", "1", 1, ""),  # TOC line
+        TextSection("APLICACAO", "2. APLICAÇÃO", "2", 1, ""),  # TOC line
+        TextSection("OBJETIVO", "1. OBJETIVO", "1", 1, "real body content here"),
+        TextSection("APLICACAO", "2. APLICAÇÃO", "2", 1, "real aplicação content"),
+    ]
+    out = _dedupe_sections_by_richest(sections)
+    by_name = {s.name: s for s in out}
+    assert "OBJETIVO" in by_name and "APLICACAO" in by_name
+    assert by_name["OBJETIVO"].content == "real body content here"
+    assert by_name["APLICACAO"].content == "real aplicação content"
+    # Order preserved — first occurrence wins for ordering
+    assert [s.name for s in out] == ["OBJETIVO", "APLICACAO"]
+
+
+def test_regression_footer_markers_are_trimmed():
+    """Section content shouldn't bleed into the document footer / annex
+    metadata. ``FORM.003/...``, ``Página X de Y``, ``Referências e Anexos``
+    are all section terminators.
+    """
+    from engine.section_mapper.orchestrator import _trim_at_footer
+
+    raw = """linha 1 do conteudo
+linha 2 do conteudo
+INTERNA Página 3 de 3
+Dados da Referência
+PE-3FSE-00220 v00.00
+Padrão sem anexos."""
+    cleaned = _trim_at_footer(raw)
+    assert "linha 1" in cleaned
+    assert "linha 2" in cleaned
+    assert "INTERNA Página 3 de 3" not in cleaned
+    assert "Dados da Referência" not in cleaned
+
+
+def test_regression_form_marker_trims_content():
+    from engine.section_mapper.orchestrator import _trim_at_footer
+
+    raw = """conteudo real
+
+FORM.003/REV.03/APROV.MES/06/05/2024
+REPRODUÇÃO PROIBIDA"""
+    cleaned = _trim_at_footer(raw)
+    assert cleaned.strip() == "conteudo real"
+
+
+def test_regression_same_content_not_duplicated_under_target():
+    """When dedupe keeps a single source section, the output should not
+    contain the same content twice if the matcher pairs multiple source
+    headings to the same target."""
+    from engine.section_mapper.orchestrator import _build_content_map
+    from engine.section_mapper.parser import TextSection
+    from engine.section_mapper.similarity import HeadingMatch
+
+    sources = [
+        TextSection("OBJETIVO", "1. OBJETIVO", "1", 1, "objetivo do procedimento"),
+        TextSection("FINALIDADE", "2. FINALIDADE", "2", 1, "objetivo do procedimento"),
+    ]
+    matches = [
+        HeadingMatch("OBJETIVO", "OBJETIVO", 1.0, "exact"),
+        HeadingMatch("FINALIDADE", "OBJETIVO", 1.0, "synonym"),
+    ]
+    out = _build_content_map(sources, matches)
+    # Same content from two source headings should appear ONCE under target
+    assert out["OBJETIVO"] == "objetivo do procedimento"
+    # Not "objetivo do procedimento\n\nobjetivo do procedimento"
+    assert out["OBJETIVO"].count("objetivo do procedimento") == 1
+
+
+def test_regression_render_into_empty_paragraph_creates_run(tmp_path):
+    """Empty body paragraphs (``add_paragraph("")``) have NO ``<w:t>`` —
+    setting text via XPath alone fails silently. Renderer must handle this.
+
+    Found 2026-04-27 in the Wave L smoke test against an industrial
+    template that ships paragraph slots empty.
+    """
+    p = tmp_path / "tpl.docx"
+    out = tmp_path / "out.docx"
+    doc = Document()
+    doc.add_paragraph("Objetivo", style="Heading 1")
+    doc.add_paragraph("")  # empty body slot
+    doc.add_paragraph("Aplicação", style="Heading 1")
+    doc.add_paragraph("")
+    doc.save(str(p))
+
+    sections = parse_docx(p)
+    render_section_content(
+        p,
+        out,
+        docx_sections=sections,
+        content_by_target={"OBJETIVO": "primeiro conteudo", "APLICACAO": "segundo conteudo"},
+    )
+
+    out_doc = Document(str(out))
+    paragraphs = [pp.text for pp in out_doc.paragraphs if pp.text.strip()]
+    assert "primeiro conteudo" in paragraphs
+    assert "segundo conteudo" in paragraphs
+
+
+def test_hardening_long_uppercase_sentence_not_a_heading():
+    """A long all-caps sentence (warning text) is not a heading."""
+    text = """OBJETIVO
+
+ATENCAO NUNCA OPERE ESTE EQUIPAMENTO SEM INSPECAO PREVIA DE SEGURANCA E AUTORIZACAO ESCRITA
+
+corpo"""
+    sections = parse_text(text)
+    names = [s.name for s in sections]
+    assert "OBJETIVO" in names
+    # The long warning line must not become a section
+    assert all("ATENCAO" not in n for n in names if n != "OBJETIVO")
+
+
+def test_hardening_revision_label_not_a_heading():
+    """``REV. 02``, ``VERSAO 1.0`` and similar revision labels are metadata,
+    not section headings."""
+    text = """OBJETIVO
+
+corpo
+
+REV. 02
+
+mais corpo"""
+    sections = parse_text(text)
+    names = [s.name for s in sections]
+    # REV.02 / REV 02 should not be a section
+    assert all("REV" not in n.split() for n in names if n not in ("OBJETIVO",))
+
+
+def test_hardening_parenthesized_label_not_a_heading():
+    """``(TITULO)``, ``(NOTAS)`` are placeholders / labels, not headings."""
+    text = """1. OBJETIVO
+
+(TITULO)
+
+corpo da seção"""
+    sections = parse_text(text)
+    obj = next(s for s in sections if s.name == "OBJETIVO")
+    # (TITULO) should remain inside content, not split out
+    assert "(TITULO)" in obj.content
+
+
+def test_hardening_label_with_colon_not_a_heading():
+    """``EMPRESA: ACME`` is a labeled field, not a heading."""
+    text = """1. OBJETIVO
+
+EMPRESA: ACME LTDA
+
+corpo"""
+    sections = parse_text(text)
+    obj = next(s for s in sections if s.name == "OBJETIVO")
+    assert "EMPRESA: ACME" in obj.content
+
+
+def test_regression_template_with_unnumbered_uppercase_headings(tmp_path):
+    """Industrial templates routinely use unnumbered all-caps headings:
+    ``"OBJETIVO"`` not ``"1. OBJETIVO"``. Parser must detect both."""
+    p = tmp_path / "tpl.docx"
+    doc = Document()
+    doc.add_paragraph("OBJETIVO")
+    doc.add_paragraph("")
+    doc.add_paragraph("APLICAÇÃO")
+    doc.add_paragraph("")
+    doc.add_paragraph("HISTÓRICO")
+    doc.save(str(p))
+
+    sections = parse_docx(p)
+    names = [s.name for s in sections]
+    assert "OBJETIVO" in names
+    assert "APLICACAO" in names
+    assert "HISTORICO" in names
+
+
 # Path import kept at runtime so pytest fixture annotations resolve
 _ = Path
