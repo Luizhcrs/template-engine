@@ -676,11 +676,7 @@ def _build_fillable_cells_checklist(template: TemplateStructure) -> str:
                 continue
             seen.add(key)
             cols = [c.col for c in cells if c.text.strip() == key]
-            cols_repr = (
-                f"col={cols[0]}"
-                if len(cols) == 1
-                else f"cols=[{cols[0]}..{cols[-1]}]"
-            )
+            cols_repr = f"col={cols[0]}" if len(cols) == 1 else f"cols=[{cols[0]}..{cols[-1]}]"
             current = key.replace("\n", " ")[:140]
             lines.append(
                 f"- (table={ti}, row={ri}, {cols_repr}) current={current!r} "
