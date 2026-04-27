@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-04-27
+
+### Changed — section_mapper goes zero-config
+
+- `similarity_mode` default flipped from `"string"` to `"auto"`. Auto runs string first, falls back to embeddings (when the optional `[embeddings]` extra is installed) when target coverage is < 60%. The async path adds an LLM tier when a provider is supplied AND the heuristic chain still falls short.
+- New `auto_tables=True` default (both sync and async). Walks the template, detects canonical empty tables (Histórico Rev/Data/Alteração) and synthesizes a sane `TableSpec` so callers don't need to configure them. User-supplied specs still win over auto-detected ones (matched by header set).
+- New module `engine.section_mapper.auto_tables` exports `detect_default_specs(template_path)` and `merge_specs(auto, user)`.
+- Synonym table expanded to cover wording variations seen on the first real-world Engeman pair: `ABRANGENCIA`, `DETALHAMENTO`, `REGISTROS`, `RESPONSABILIDADES AUTORIDADES`, `HISTORICO DE REVISAO`, `DEFINICOES SIGLAS`.
+
+Result on Engeman dados.docx with zero config: mapped **7/8** (was 5/8 with manual synonym additions); empty Histórico table auto-filled with default first row.
+
 ### Added — Wave L (section_mapper for structural templates)
 
 New subpackage `engine.section_mapper` covers the case the existing pipeline did not: templates that ship with named-but-empty sections (no `{{X}}` placeholders) and rely on heading hierarchy + tables. Validated against an industrial procedure template (Engeman / NR-style) that the Wave D `normalize_batch` could not handle.
