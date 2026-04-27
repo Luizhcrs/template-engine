@@ -137,6 +137,7 @@ nav:
   - Concepts:
     - Pipeline: concepts/pipeline.md
     - Architecture: concepts/architecture.md
+    - Section mapper: concepts/section_mapper.md
   - Providers:
     - Overview: providers/index.md
   - Contributing: contributing.md

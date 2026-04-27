@@ -97,6 +97,28 @@ Cost by tier (Gemini Flash, ~3K input tokens per LLM call):
 | With `semantic_diff` enabled | 2 | ~$0.0012 |
 | With `check_conformity(dimensions=[text, design])` | 4 | ~$0.0024 |
 
+## Section-mapper pipeline (Wave L)
+
+For **structural** templates that ship with named-but-empty sections (industrial procedures, NR-12/13, ABNT-shaped academic) and rely on heading hierarchy + tables instead of `{{X}}` tokens, use `engine.section_mapper.map_sections`:
+
+```python
+from pathlib import Path
+from engine.section_mapper import map_sections
+
+report = map_sections(
+    template_path=Path("template.docx"),
+    source_path=Path("source.docx"),
+    output_path=Path("output.docx"),
+    # similarity_mode="auto" + auto_tables=True are the defaults
+)
+
+print(f"mapped {report.mapped_count} sections; {report.tables_filled} tables filled")
+```
+
+End-to-end on Engeman dados.docx with zero config: 7/8 sections mapped, header populated (`IT.PRO.URE.387.0005`, `Rev. 01`, `Elaborado: ...`, `(PARTIDA DA ÁREA DE SÍNTESE)`), Histórico table extracted from source revisions, Responsabilidade table populated from `Compete à gerência` / `Compete aos supervisores` paragraphs.
+
+See [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) for the full pipeline (parser → numbering resolver → similarity matcher → renderer with line-kind decoration → tables → header filler).
+
 ## Typical batch run
 
 ```bash

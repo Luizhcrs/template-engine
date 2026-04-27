@@ -32,11 +32,20 @@ engine/
 │   ├── design.py            ConformityVisualProvider Protocol + check_design
 │   ├── technical.py         format validators (cpf/cep/iso/...) + orphan check
 │   └── aggregator.py        check_conformity top-level + score ponderado
-└── security/
-    ├── pii.py               mask_pii / unmask + PIIMask
-    ├── injection.py         detect_prompt_injection + 7 regras regex
-    ├── audit.py             AuditLog (JSONL append-only) + sha256_hex
-    └── local_only.py        RefusedRemoteCallError
+├── security/
+│   ├── pii.py               mask_pii / unmask + PIIMask
+│   ├── injection.py         detect_prompt_injection + 7 regras regex
+│   ├── audit.py             AuditLog (JSONL append-only) + sha256_hex
+│   └── local_only.py        RefusedRemoteCallError
+└── section_mapper/
+    ├── parser.py            parse_docx (template) / parse_docx_source (numbering-aware)
+    ├── numbering.py         NumberingResolver (lê word/numbering.xml, renderiza markers)
+    ├── similarity.py        match_string / match_embeddings / match_llm + sinônimos
+    ├── renderer.py          render_section_content (decoração por tipo + prune vazios)
+    ├── table_filler.py      fill_tables (header-set match + subheaders)
+    ├── auto_tables.py       detect_default_specs_with_source (Histórico + Resp da fonte)
+    ├── header_filler.py     extract_source_metadata + fill_template_header
+    └── orchestrator.py      map_sections / map_sections_async + SectionMappingReport
 ```
 
 ## Grafo de dependências
@@ -68,6 +77,7 @@ DAG, sem ciclos. Cada módulo tem 1 responsabilidade.
 - **Validators:** `validate_cpf`, `validate_cep`, `validate_iso_date`, `validate_br_date`, `validate_email`, `validate_phone_br`, `validate_uf`.
 - **Segurança:** `mask_pii`, `unmask`, `detect_prompt_injection`, `AuditLog`, `RefusedRemoteCallError`, `sha256_hex`.
 - **Layout:** `image_to_ascii`, `detect_layout_features`, `summarize_layout`.
+- **Section mapper:** `map_sections`, `map_sections_async`, `SectionMappingReport`, `TableSpec`, `HeadingMatch`, `NumberingResolver`, `parse_docx_source`, `extract_source_metadata`, `fill_template_header`. Veja a página dedicada [Section mapper](section_mapper.pt.md).
 
 Todos os tipos públicos são frozen dataclasses ou Protocols — sem herança, sem mutação.
 

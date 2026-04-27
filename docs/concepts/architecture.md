@@ -32,11 +32,20 @@ engine/
 │   ├── design.py            ConformityVisualProvider Protocol + check_design
 │   ├── technical.py         format validators (cpf/cep/iso/...) + orphan check
 │   └── aggregator.py        check_conformity top-level + weighted score
-└── security/
-    ├── pii.py               mask_pii / unmask + PIIMask
-    ├── injection.py         detect_prompt_injection + 7 regex rules
-    ├── audit.py             AuditLog (append-only JSONL) + sha256_hex
-    └── local_only.py        RefusedRemoteCallError
+├── security/
+│   ├── pii.py               mask_pii / unmask + PIIMask
+│   ├── injection.py         detect_prompt_injection + 7 regex rules
+│   ├── audit.py             AuditLog (append-only JSONL) + sha256_hex
+│   └── local_only.py        RefusedRemoteCallError
+└── section_mapper/
+    ├── parser.py            parse_docx (template) / parse_docx_source (numbering-aware)
+    ├── numbering.py         NumberingResolver (reads word/numbering.xml, renders markers)
+    ├── similarity.py        match_string / match_embeddings / match_llm + synonym table
+    ├── renderer.py          render_section_content (line-kind decoration + empty-prune)
+    ├── table_filler.py      fill_tables (header-set match + subheaders)
+    ├── auto_tables.py       detect_default_specs_with_source (Histórico + Resp from source)
+    ├── header_filler.py     extract_source_metadata + fill_template_header
+    └── orchestrator.py      map_sections / map_sections_async + SectionMappingReport
 ```
 
 ## Dependency graph
@@ -55,6 +64,13 @@ conformity.{text, structural, visual, design, technical} ─→ conformity.aggre
                                                           ConformityReport
 
 security.{pii, injection, audit, local_only} ─→ used wherever LLM calls happen
+
+section_mapper.{parser, numbering, similarity, renderer, table_filler,
+                auto_tables, header_filler}
+                                ↓
+                  section_mapper.orchestrator (map_sections / map_sections_async)
+                                ↓
+                      SectionMappingReport
 ```
 
 DAG, no cycles. Each module owns one responsibility.
@@ -68,6 +84,7 @@ DAG, no cycles. Each module owns one responsibility.
 - **Validators:** `validate_cpf`, `validate_cep`, `validate_iso_date`, `validate_br_date`, `validate_email`, `validate_phone_br`, `validate_uf`.
 - **Security:** `mask_pii`, `unmask`, `detect_prompt_injection`, `AuditLog`, `RefusedRemoteCallError`, `sha256_hex`.
 - **Layout:** `image_to_ascii`, `detect_layout_features`, `summarize_layout`.
+- **Section mapper:** `map_sections`, `map_sections_async`, `SectionMappingReport`, `TableSpec`, `HeadingMatch`, `NumberingResolver`, `parse_docx_source`, `extract_source_metadata`, `fill_template_header`. See the dedicated [Section mapper](section_mapper.md) page.
 
 All public types are frozen dataclasses or Protocols — no inheritance, no mutation.
 
