@@ -25,6 +25,7 @@ Schema fields:
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import threading
@@ -66,10 +67,8 @@ class AuditLog:
     def __del__(self) -> None:
         # Defensive close — long-running servers that forget `with` would leak
         # the file descriptor otherwise. Swallow any error during shutdown.
-        try:
+        with contextlib.suppress(Exception):
             self.close()
-        except Exception:
-            pass
 
     def log_event(
         self,

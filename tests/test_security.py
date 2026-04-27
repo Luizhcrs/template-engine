@@ -222,7 +222,7 @@ def test_pii_phone_with_keyword_prefix_not_misclassified_as_cpf():
     """Wave K #6: bare 11-digit blocks (mobile phones) used to mask as CPF
     because CPF's bare-digit alternative ran first.
     """
-    masked, mask = mask_pii("Telefone: 81999999999")
+    masked, _mask = mask_pii("Telefone: 81999999999")
     assert "<PHONE_001>" in masked
     assert "<CPF_001>" not in masked
 
@@ -282,7 +282,6 @@ async def test_normalize_batch_audit_records_item_lifecycle(tmp_path):
     src = tmp_path / "src"
     out = tmp_path / "out"
     src.mkdir()
-    Document().add_paragraph("{{X}}").part  # placeholder
     doc = Document()
     doc.add_paragraph("Codigo: {{X}}")
     doc.save(str(template))

@@ -141,7 +141,8 @@ async def check_conformity(
     # claim — score=1.0 from an empty evaluation is meaningless.
     evaluable_count = sum(1 for dr in by_dim.values() if not dr.skipped)
     if evaluable_count == 0 and by_dim:
-        flat_failures = list(flat_failures) + [
+        flat_failures = [
+            *flat_failures,
             Failure(
                 dimension="aggregator",
                 field_or_excerpt="all_dimensions_skipped",
@@ -149,7 +150,7 @@ async def check_conformity(
                 actual="zero evaluable dimensions",
                 severity="critical",
                 note="every requested dimension was skipped (missing LLM, missing inputs, etc)",
-            )
+            ),
         ]
         has_critical = True
 
