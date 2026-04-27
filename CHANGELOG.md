@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-04-27
+
+### Fixed — paragraph styling for sub-headings + notes
+
+In Word the v0.9.4 output looked dense and visually flat: every line in
+a section inherited the anchor body slot's plain-Normal style, so
+sub-section markers like ``6.1. Condições Gerais`` and
+``6.2.1. Ações Preliminares`` rendered as ordinary body text without
+bold or spacing — the document read as a wall of paragraphs instead of
+a hierarchy.
+
+The renderer now classifies each inserted line by its prefix and
+applies the right style:
+
+- ``6.1. Foo`` (one dotted level) → ``Ttulo2`` style + bold run.
+- ``6.2.1. Bar`` (two or three dotted levels) → ``Ttulo3`` + bold run.
+- ``Nota: ...`` / ``Nota 1: ...`` / ``Nota1: ...`` → italic run.
+- Anything else (list items, body sentences) → unchanged.
+
+Word's ``Ttulo2`` / ``Ttulo3`` (Brazilian-PT Heading 2/3) carry their
+own spacing-before / -after, so sub-headings now sit in proper visual
+breaks instead of glued to the surrounding paragraphs.
+
+When a clone inherits style or emphasis from the previous line, the
+renderer resets it before applying the next line's decoration, so a
+heading isn't propagated into the body line that follows.
+
+### Tests
+
+6 new unit tests covering line-kind detection (sub-heading,
+sub-sub-heading, nota, body, value-with-dot non-matching), plus an
+end-to-end assertion that ``Ttulo2`` / ``Ttulo3`` show up in the output
+XML when sub-headings are present.
+
+**348 passing** (342 → 348).
+
 ## [0.9.4] - 2026-04-27
 
 ### Fixed — vertical-gap regression

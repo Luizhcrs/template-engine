@@ -850,6 +850,77 @@ def test_classify_history_columns_returns_none_when_no_change_col():
     assert _classify_history_columns(["FOO", "BAR"]) is None
 
 
+# ===== renderer line-kind detection + decoration =====
+
+
+def test_detect_line_kind_subheading():
+    from engine.section_mapper.renderer import _detect_line_kind
+
+    assert _detect_line_kind("6.1. Condições Gerais") == "subheading"
+    assert _detect_line_kind("5.2. Compete aos supervisores") == "subheading"
+
+
+def test_detect_line_kind_subsubheading():
+    from engine.section_mapper.renderer import _detect_line_kind
+
+    assert _detect_line_kind("6.2.1. Ações Preliminares") == "subsubheading"
+    assert _detect_line_kind("5.2.3. Partida da B-418") == "subsubheading"
+
+
+def test_detect_line_kind_nota():
+    from engine.section_mapper.renderer import _detect_line_kind
+
+    assert _detect_line_kind("Nota: Mantendo fluxo continuo") == "nota"
+    assert _detect_line_kind("Nota 1: O Operador SDCD") == "nota"
+    assert _detect_line_kind("Nota1: Não é possível") == "nota"
+
+
+def test_detect_line_kind_body_for_list_items():
+    from engine.section_mapper.renderer import _detect_line_kind
+
+    assert _detect_line_kind("a. Todas as utilidades") == "body"
+    assert _detect_line_kind("• NO.SGI.SIN.100.0016") == "body"
+    assert _detect_line_kind("AGN – Água amoniacal.") == "body"
+
+
+def test_detect_line_kind_body_for_value_with_dot():
+    """Numeric value not at line start (``Capacidade 5.5 toneladas``)
+    is body, not a sub-heading."""
+    from engine.section_mapper.renderer import _detect_line_kind
+
+    assert _detect_line_kind("Capacidade 5.5 toneladas") == "body"
+
+
+def test_renderer_applies_subheading_style(tmp_path):
+    """Sub-heading lines (``6.1. Foo``) get the template's Ttulo2
+    style applied so Word renders them bold + with proper spacing."""
+    p = tmp_path / "tpl.docx"
+    doc = Document()
+    doc.add_paragraph("OBJETIVO")
+    doc.add_paragraph("")
+    doc.add_paragraph("APLICACAO")
+    doc.add_paragraph("")
+    doc.save(str(p))
+
+    out = tmp_path / "out.docx"
+    sections = parse_docx(p)
+    render_section_content(
+        p,
+        out,
+        docx_sections=sections,
+        content_by_target={
+            "OBJETIVO": "6.1. Sub heading\nBody line\n6.2.1. Deeper sub\nMore body",
+        },
+    )
+    # Inspect XML for pStyle
+    import zipfile
+
+    with zipfile.ZipFile(str(out)) as z:
+        xml = z.read("word/document.xml").decode("utf-8")
+    assert 'w:val="Ttulo2"' in xml
+    assert 'w:val="Ttulo3"' in xml
+
+
 # ===== renderer prune + collapse =====
 
 

@@ -35,6 +35,93 @@ if TYPE_CHECKING:
 _W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 
+# Sub-heading prefixes that should render as bold + space-before.
+# ``5.2.`` and ``5.2.1.`` cover the dotted-number pattern; the regex
+# requires a SPACE after the number so ``5.5%`` (units) is not matched.
+_SUBHEADING_RE = re.compile(r"^\s*(\d+(?:\.\d+){1,3})\.?\s+\S")
+_SUBSUBHEADING_RE = re.compile(r"^\s*(\d+(?:\.\d+){2,3})\.?\s+\S")
+_NOTA_RE = re.compile(r"^\s*Nota\s*\d*[:.]\s", re.IGNORECASE)
+
+
+def _detect_line_kind(line: str) -> str:
+    """Return ``"subsubheading"`` / ``"subheading"`` / ``"nota"`` /
+    ``"body"`` based on the rendered marker prefix.
+    """
+    if _SUBSUBHEADING_RE.match(line):
+        return "subsubheading"
+    if _SUBHEADING_RE.match(line):
+        return "subheading"
+    if _NOTA_RE.match(line):
+        return "nota"
+    return "body"
+
+
+def _style_id_for_kind(kind: str) -> str | None:
+    """Pick a style id (Brazilian-PT or English) per detected kind."""
+    if kind == "subheading":
+        return "Ttulo2"
+    if kind == "subsubheading":
+        return "Ttulo3"
+    return None
+
+
+def _apply_paragraph_style(p_elem, style_id: str) -> None:  # type: ignore[no-untyped-def]
+    """Set ``<w:pStyle>`` on the paragraph (replacing any existing one)."""
+    pPr = p_elem.find(f"{_W_NS}pPr")
+    if pPr is None:
+        pPr = p_elem.makeelement(f"{_W_NS}pPr", {})
+        p_elem.insert(0, pPr)
+    existing = pPr.find(f"{_W_NS}pStyle")
+    if existing is not None:
+        pPr.remove(existing)
+    pStyle = pPr.makeelement(f"{_W_NS}pStyle", {f"{_W_NS}val": style_id})
+    pPr.insert(0, pStyle)
+
+
+def _add_run_emphasis(p_elem, *, italic: bool = False, bold: bool = False) -> None:  # type: ignore[no-untyped-def]
+    """Wrap each run's rPr with bold/italic flags."""
+    for r in p_elem.findall(f"{_W_NS}r"):
+        rPr = r.find(f"{_W_NS}rPr")
+        if rPr is None:
+            rPr = r.makeelement(f"{_W_NS}rPr", {})
+            r.insert(0, rPr)
+        if italic and rPr.find(f"{_W_NS}i") is None:
+            i_el = rPr.makeelement(f"{_W_NS}i", {})
+            rPr.append(i_el)
+        if bold and rPr.find(f"{_W_NS}b") is None:
+            b_el = rPr.makeelement(f"{_W_NS}b", {})
+            rPr.append(b_el)
+
+
+def _decorate_for_kind(p_elem, kind: str) -> None:  # type: ignore[no-untyped-def]
+    """Apply per-kind paragraph styling (heading style, italic for notes)."""
+    style_id = _style_id_for_kind(kind)
+    if style_id is not None:
+        _apply_paragraph_style(p_elem, style_id)
+        _add_run_emphasis(p_elem, bold=True)
+    elif kind == "nota":
+        _add_run_emphasis(p_elem, italic=True)
+
+
+def _reset_paragraph_style(p_elem) -> None:  # type: ignore[no-untyped-def]
+    """Drop any heading-style ``<w:pStyle>`` and inline bold/italic so a
+    cloned anchor doesn't inherit decorations from the previous line.
+    """
+    pPr = p_elem.find(f"{_W_NS}pPr")
+    if pPr is not None:
+        pStyle = pPr.find(f"{_W_NS}pStyle")
+        if pStyle is not None and pStyle.get(f"{_W_NS}val", "") in {"Ttulo2", "Ttulo3"}:
+            pPr.remove(pStyle)
+    for r in p_elem.findall(f"{_W_NS}r"):
+        rPr = r.find(f"{_W_NS}rPr")
+        if rPr is None:
+            continue
+        for tag in (f"{_W_NS}b", f"{_W_NS}i"):
+            el = rPr.find(tag)
+            if el is not None:
+                rPr.remove(el)
+
+
 def _strip_jc(p_elem) -> None:  # type: ignore[no-untyped-def]
     """Drop ``<w:jc>`` so a multi-line block doesn't render as columns."""
     pPr = p_elem.find(f"{_W_NS}pPr")
@@ -112,16 +199,21 @@ def render_section_content(
 
         _strip_jc(anchor._p)
         _set_paragraph_text(anchor, lines[0])
+        _decorate_for_kind(anchor._p, _detect_line_kind(lines[0]))
 
         cursor = anchor._p
         for line in lines[1:]:
             new_p = deepcopy(anchor._p)
             _strip_jc(new_p)
+            # Reset any heading style/emphasis copied from the previous
+            # cloned anchor — each line decides its own style.
+            _reset_paragraph_style(new_p)
             ts = new_p.findall(f".//{_W_NS}t")
             if ts:
                 ts[0].text = line
                 for t in ts[1:]:
                     t.text = ""
+            _decorate_for_kind(new_p, _detect_line_kind(line))
             cursor.addnext(new_p)
             cursor = new_p
 
