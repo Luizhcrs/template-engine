@@ -307,9 +307,15 @@ def parse_docx_source(path: Path) -> list[TextSection]:
         np = extract_num_pr(para._p.xml)
         marker = ""
         ilvl = -1
+        num_fmt = ""
         if np is not None:
             num_id, ilvl = np
-            marker = resolver.marker_for(num_id, ilvl)
+            marker, num_fmt = resolver.marker_with_fmt(num_id, ilvl)
+            # Engeman heuristic: a structural heading (decimal-numbered,
+            # any ilvl) restarts every bullet/letter list so the next
+            # sub-section's items begin at ``a.`` again.
+            if num_fmt and num_fmt != "bullet":
+                resolver.reset_bullet_counters()
 
         # Heading detection: ilvl == 0 of a decimal-numbered list IS a
         # top-level section heading. Otherwise fall through to text-only
@@ -340,7 +346,83 @@ def parse_docx_source(path: Path) -> list[TextSection]:
             buffer.append(line)
 
     _flush()
-    return sections
+    return [_apply_section_post_transforms(s) for s in sections]
+
+
+_REFERENCE_LIKE_NAMES: frozenset[str] = frozenset(
+    {
+        "NORMAS",
+        "NORMAS E DOCUMENTOS DE REFERENCIA",
+        "DOCUMENTOS INTERNOS DE REFERENCIA",
+        "DOCUMENTOS DE REFERENCIA",
+        "REFERENCIAS",
+        "REFERENCIAS NORMATIVAS",
+        "REGISTROS",
+        "ANEXOS",
+    }
+)
+
+
+def _apply_section_post_transforms(section: TextSection) -> TextSection:
+    """Apply DOcStream-style cleanups per section name (Engeman defaults).
+
+    - Reference-like sections (``NORMAS``, ``REGISTROS``, ``ANEXOS``):
+      lines without a marker get a leading ``"• "``.
+    - Definitions (``DEFINICOES``): leading ``"<term>: "`` becomes
+      ``"<term> – "`` (en-dash) for legibility.
+    """
+    if not section.content:
+        return section
+
+    name = section.name
+    if name in _REFERENCE_LIKE_NAMES:
+        new_content = _prepend_bullet_to_unmarked(section.content)
+    elif name in {"DEFINICOES", "DEFINICOES SIGLAS"}:
+        new_content = _term_colon_to_en_dash(section.content)
+    else:
+        return section
+
+    return TextSection(
+        name=section.name,
+        raw_heading=section.raw_heading,
+        number=section.number,
+        level=section.level,
+        content=new_content,
+    )
+
+
+_HAS_MARKER_RE = re.compile(r"^\s*(?:[•\-–—]|\d+(?:\.\d+)*\.?\)?|[a-zA-Z][.)])\s")
+
+
+def _prepend_bullet_to_unmarked(content: str) -> str:
+    out = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            out.append(line)
+            continue
+        if _HAS_MARKER_RE.match(stripped):
+            out.append(line)
+            continue
+        out.append(f"• {stripped}")
+    return "\n".join(out)
+
+
+# Term-with-colon at the start of a line. Allows up to 3 short tokens
+# (so "Loop teste:" matches but "Pendências que tenham a ver com..." does
+# not). Tokens are letters / digits / apostrophes (ASCII + curly U+2019);
+# total length up to 40.
+_CURLY_APOS = "’"  # right single quotation mark used in source docs
+_EN_DASH = "–"  # en-dash separator for definitions
+_TERM_TOKEN = f"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9'{_CURLY_APOS}]{{0,20}}"
+_TERM_COLON_RE = re.compile(
+    rf"^({_TERM_TOKEN}(?:\s{_TERM_TOKEN}){{0,2}}):\s+",
+    re.MULTILINE,
+)
+
+
+def _term_colon_to_en_dash(content: str) -> str:
+    return _TERM_COLON_RE.sub(rf"\1 {_EN_DASH} ", content)
 
 
 def heading_index(sections: list) -> dict[str, int]:

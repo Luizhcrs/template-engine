@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-04-27
+
+### Added — DOcStream-style heuristics for industrial templates
+
+The faithful Phase 1 path (v0.9.2) preserved decimal sub-section markers
+and bullets. This release closes the remaining visible gaps against
+DOcStream's reference output on Engeman procedure documents:
+
+#### Bullet → letter sequences (per-list reset)
+
+`NumberingResolver.bullet_as_letters` (default `True`) renders bullet
+items at ilvl=0 as Excel-style letters (`a.`, `b.`, ..., `z.`, `aa.`).
+The parser calls `reset_bullet_counters()` whenever a structural
+decimal heading advances (any non-bullet marker), so each sub-section
+restarts its lettering at `a.` instead of continuing across boundaries.
+
+#### Reference-list auto-bullet
+
+Sections named `NORMAS`, `REGISTROS`, `ANEXOS`, `DOCUMENTOS DE
+REFERÊNCIA`, etc. routinely list items as plain paragraphs without
+`<w:numPr>`. Post-process prepends `"• "` to every line that doesn't
+already carry a marker.
+
+#### Definitions: `:` → en-dash
+
+In `DEFINIÇÕES` / `DEFINIÇÕES SIGLAS` sections, leading `term: ` is
+converted to `term – ` (en-dash). Term matcher accepts up to 3 short
+tokens (so `Loop teste:` matches; sentence-style colons do not).
+
+#### Source-driven Histórico table
+
+`detect_default_specs_with_source(template, source)` extracts the
+source's revision-history table (any of `VERSÃO|DATA|AUTOR|ALTERAÇÕES`
+columns), renumbers from `00`, and appends a final `"Migração para o
+novo modelo padrão"` row dated today.
+
+#### Source-driven Responsabilidade table
+
+When the source carries `Compete à gerência` / `Compete aos
+supervisores` sub-sections, the orchestrator extracts each child
+paragraph as an activity and emits a `TableSpec` whose rows tag `X` in
+the correct column (`Gerente Setorial` / `Supervisores`). Bucket
+boundaries are detected via `<w:numPr>` ilvl, so the extractor doesn't
+spill into the next top-level section.
+
+#### `TableSpec.subheaders`
+
+New optional field. When set, `fill_tables` writes the sub-headers into
+row 1 of the matched table and uses them for column mapping when the
+primary header row has duplicates (e.g. `Atividades |
+Responsabilidade | Responsabilidade`).
+
+#### Tabular section content suppression
+
+When an auto-table fills the data for a target section (Responsabilidade
+/ Histórico), the orchestrator drops the prose body for that section so
+the same info doesn't appear twice (once as text, once in the table).
+
+### Tests
+
+12 new unit tests (328 → **341 passing**) covering bullet-as-letters,
+counter reset, post-transforms, history-column classification, and
+sub-header writing in `fill_tables`.
+
+### Result against the Engeman dados.docx pair
+
+| Aspect | v0.9.2 | v0.9.3 |
+| --- | --- | --- |
+| `NORMAS` reference list bullets | dropped | `• <ref>` per line |
+| `DEFINIÇÕES` separator | `term: prose` | `term – prose` |
+| Bullet sub-items under sub-section | `•` | `a.`, `b.`, `c.`, ... |
+| Letter reset between sub-sections | continuous (`a-z-aa`) | resets per sub-section |
+| Histórico table | 1 default row | source revisions + migração row |
+| Responsabilidade table | empty 5 rows | activity per row + X by role |
+| RESPONSABILIDADE prose duplication | yes | suppressed (table-only) |
+
 ## [0.9.2] - 2026-04-27
 
 ### Added — section_mapper preserves source `.docx` auto-numbering

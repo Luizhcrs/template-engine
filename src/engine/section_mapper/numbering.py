@@ -59,43 +59,78 @@ class NumberingResolver:
     :meth:`marker_for` once per paragraph (in document order) to advance
     counters and get the rendered marker (or ``""`` when the paragraph has
     no ``<w:numPr>``).
+
+    ``bullet_as_letters`` (default ``True``) is an Engeman-style
+    heuristic: bullets at ilvl=0 of any list whose source glyph is a
+    Wingdings/Symbol-style placeholder render as Excel-style letters
+    (``a.``, ``b.``, ``c.``, ...). Set ``False`` for faithful rendering
+    that emits ``"•"`` for every bullet level. Higher ilvls (sub-bullets)
+    always render as ``"•"`` regardless of this flag.
     """
 
     # numId -> {ilvl -> _LevelDef}
     _levels: dict[int, dict[int, _LevelDef]] = field(default_factory=dict)
     # numId -> {ilvl -> current_count}
     _counters: dict[int, dict[int, int]] = field(default_factory=dict)
+    bullet_as_letters: bool = True
 
     def has_num(self, num_id: int) -> bool:
         return num_id in self._levels
 
-    def marker_for(self, num_id: int, ilvl: int) -> str:
-        """Advance counter for ``(num_id, ilvl)`` and return rendered marker.
+    def reset_bullet_counters(self) -> None:
+        """Reset every bullet-format counter back to ``start - 1``.
 
-        Side-effect: increments ``counters[num_id][ilvl]`` and resets every
-        deeper level back to its ``start - 1`` (so the next deeper hit
-        starts at ``start``).
+        Engeman-style heuristic: when a structural decimal heading
+        advances, lettered bullet sequences should restart so each
+        sub-section gets its own ``a.``-``z.`` run.
+        """
+        for num_id, levels in self._levels.items():
+            for ilvl, lvl in levels.items():
+                if lvl.num_fmt != "bullet":
+                    continue
+                self._counters.setdefault(num_id, {})[ilvl] = lvl.start - 1
+
+    def marker_for(self, num_id: int, ilvl: int) -> str:
+        """Advance counter for ``(num_id, ilvl)`` and return rendered marker."""
+        marker, _ = self.marker_with_fmt(num_id, ilvl)
+        return marker
+
+    def marker_with_fmt(self, num_id: int, ilvl: int) -> tuple[str, str]:
+        """Like :meth:`marker_for` but also returns the source ``numFmt``.
+
+        Returns ``(marker, num_fmt)`` where ``num_fmt`` is the original
+        format declared in ``numbering.xml`` (``"bullet"``, ``"decimal"``,
+        ``"lowerLetter"``, ...). Useful for callers who need to know if
+        the marker is bullet-origin even when ``bullet_as_letters`` made
+        it look lettered.
+
+        Side-effect: increments ``counters[num_id][ilvl]`` and resets
+        every deeper level back to its ``start - 1``.
         """
         levels = self._levels.get(num_id)
         if levels is None:
-            return ""
+            return "", ""
         lvl = levels.get(ilvl)
         if lvl is None:
-            return ""
+            return "", ""
 
         counters = self._counters.setdefault(num_id, {})
-        # Initialize every level to start-1 the first time we see this numId.
         for k, v in levels.items():
             counters.setdefault(k, v.start - 1)
 
         counters[ilvl] = counters[ilvl] + 1
-        # Reset deeper levels (any ilvl > current).
         for deeper in list(counters.keys()):
             if deeper > ilvl:
                 deeper_lvl = levels.get(deeper)
                 counters[deeper] = (deeper_lvl.start - 1) if deeper_lvl else 0
 
-        return _render_marker(lvl, counters, levels)
+        marker = _render_marker(
+            lvl,
+            counters,
+            levels,
+            bullet_as_letters=self.bullet_as_letters,
+        )
+        return marker, lvl.num_fmt
 
 
 def load_resolver_from_docx(path: Path) -> NumberingResolver:
@@ -172,9 +207,13 @@ def _render_marker(
     lvl: _LevelDef,
     counters: dict[int, int],
     all_levels: dict[int, _LevelDef],
+    *,
+    bullet_as_letters: bool = False,
 ) -> str:
     """Render ``lvl.lvl_text`` substituting ``%N`` with the formatted counter."""
     if lvl.num_fmt == "bullet":
+        if bullet_as_letters and lvl.ilvl == 0:
+            return _format_count(counters.get(0, 1), "lowerLetter") + "."
         return "•"
 
     def repl(m: re.Match[str]) -> str:

@@ -23,7 +23,13 @@ from engine.section_mapper.numbering import (
     _format_count,
     extract_num_pr,
 )
-from engine.section_mapper.parser import _normalize_heading, parse_docx_source
+from engine.section_mapper.parser import (
+    _apply_section_post_transforms,
+    _normalize_heading,
+    _prepend_bullet_to_unmarked,
+    _term_colon_to_en_dash,
+    parse_docx_source,
+)
 from engine.section_mapper.similarity import (
     _canonicalize,
     _string_match_one,
@@ -642,14 +648,41 @@ def test_numbering_resolver_lower_letter():
 def test_numbering_resolver_bullet_uses_universal_glyph():
     xml = """<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:abstractNum w:abstractNumId="0">
-  <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val=""/></w:lvl>
+  <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val=""/></w:lvl>
 </w:abstractNum>
 <w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
 </w:numbering>"""
     r = _build_resolver(xml)
-    # Wingdings glyph collapsed to portable "•"
+    r.bullet_as_letters = False
     assert r.marker_for(1, 0) == "•"
     assert r.marker_for(1, 0) == "•"
+
+
+def test_numbering_resolver_bullet_as_letters_default():
+    xml = """<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0">
+  <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val=""/></w:lvl>
+</w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>"""
+    r = _build_resolver(xml)
+    assert r.marker_for(1, 0) == "a."
+    assert r.marker_for(1, 0) == "b."
+    assert r.marker_for(1, 0) == "c."
+
+
+def test_numbering_resolver_reset_bullet_counters():
+    xml = """<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0">
+  <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val=""/></w:lvl>
+</w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>"""
+    r = _build_resolver(xml)
+    assert r.marker_for(1, 0) == "a."
+    assert r.marker_for(1, 0) == "b."
+    r.reset_bullet_counters()
+    assert r.marker_for(1, 0) == "a."
 
 
 def test_numbering_resolver_format_count_letters_excel_style():
@@ -723,6 +756,131 @@ def test_parse_docx_source_resolves_section_numbering(tmp_path):
     assert any(rh.startswith("1. ") for rh in raw)
     assert any(rh.startswith("2. ") for rh in raw)
     assert any(rh.startswith("3. ") for rh in raw)
+
+
+# ===== Phase 2 heuristics: post-transforms =====
+
+
+def test_prepend_bullet_to_unmarked_adds_dot_marker():
+    out = _prepend_bullet_to_unmarked("NO.SGI.SIN.100.0016 Gestão\nDS.SGI.MEA.387.0002 PGRS")
+    lines = out.splitlines()
+    assert lines[0].startswith("• ")
+    assert lines[1].startswith("• ")
+    assert "NO.SGI.SIN.100.0016" in lines[0]
+
+
+def test_prepend_bullet_to_unmarked_skips_already_marked():
+    out = _prepend_bullet_to_unmarked("• Already bulletted\nNO.SGI plain")
+    lines = out.splitlines()
+    assert lines[0] == "• Already bulletted"
+    assert lines[1].startswith("• ")
+
+
+def test_term_colon_to_en_dash_simple():
+    assert _term_colon_to_en_dash("AGN: Água amoniacal.") == "AGN – Água amoniacal."
+
+
+def test_term_colon_to_en_dash_two_word_term():
+    assert _term_colon_to_en_dash("Loop teste: Metodologia") == "Loop teste – Metodologia"
+
+
+def test_term_colon_to_en_dash_does_not_break_sentences():
+    """Long-prose sentences with a colon mid-line shouldn't be transformed."""
+    sentence = "Pendências que tenham segurança e meio: regra geral"
+    out = _term_colon_to_en_dash(sentence)
+    # 4-token term exceeds the 3-token limit, so no transformation.
+    assert out == sentence
+
+
+def test_apply_section_post_transforms_normas_section_gets_bullets():
+    from engine.section_mapper.parser import TextSection
+
+    s = TextSection(
+        name="NORMAS E DOCUMENTOS DE REFERENCIA",
+        raw_heading="3. NORMAS E DOCUMENTOS DE REFERÊNCIA",
+        number=None,
+        level=1,
+        content="NO.SGI.SIN.100.0016\nDS.SGI.MEA.387.0002",
+    )
+    out = _apply_section_post_transforms(s)
+    assert out.content.startswith("• NO.SGI.")
+    assert "• DS.SGI." in out.content
+
+
+def test_apply_section_post_transforms_definicoes_section_gets_dash():
+    from engine.section_mapper.parser import TextSection
+
+    s = TextSection(
+        name="DEFINICOES",
+        raw_heading="4. DEFINIÇÕES",
+        number=None,
+        level=1,
+        content="AGN: Água amoniacal.\nSDCD: Sistema de Controle.",
+    )
+    out = _apply_section_post_transforms(s)
+    assert "AGN – Água amoniacal." in out.content
+    assert "SDCD – Sistema de Controle." in out.content
+
+
+# ===== Phase 2: source-driven Histórico + Responsabilidade tables =====
+
+
+def test_classify_history_columns_versao_data_alteracao():
+    from engine.section_mapper.auto_tables import _classify_history_columns
+
+    assert _classify_history_columns(["VERSAO", "DATA", "ALTERACOES"]) == {
+        "version": 0,
+        "date": 1,
+        "change": 2,
+    }
+
+
+def test_classify_history_columns_with_author():
+    from engine.section_mapper.auto_tables import _classify_history_columns
+
+    out = _classify_history_columns(["VERSAO", "DATA", "AUTOR REVISOR", "ALTERACOES"])
+    assert out is not None
+    assert out["author"] == 2
+    assert out["change"] == 3
+
+
+def test_classify_history_columns_returns_none_when_no_change_col():
+    from engine.section_mapper.auto_tables import _classify_history_columns
+
+    assert _classify_history_columns(["FOO", "BAR"]) is None
+
+
+# ===== Phase 2: table_filler subheaders + duplicate primary headers =====
+
+
+def test_fill_tables_writes_subheaders_into_row_1(tmp_path):
+    p_template = tmp_path / "tpl.docx"
+    doc = Document()
+    table = doc.add_table(rows=3, cols=3)
+    table.rows[0].cells[0].text = "Atividades"
+    table.rows[0].cells[1].text = "Responsabilidade"
+    table.rows[0].cells[2].text = "Responsabilidade"
+    doc.save(str(p_template))
+
+    p_output = tmp_path / "out.docx"
+
+    spec = TableSpec(
+        headers=["Atividades", "Responsabilidade"],
+        subheaders=["", "Gerente Setorial", "Supervisores"],
+        rows=[
+            {"Atividades": "Aprovar", "Gerente Setorial": "X", "Supervisores": ""},
+            {"Atividades": "Manter", "Gerente Setorial": "", "Supervisores": "X"},
+        ],
+    )
+    fill_tables(p_template, p_output, [spec])
+
+    out = Document(str(p_output))
+    t = out.tables[0]
+    assert t.rows[1].cells[1].text == "Gerente Setorial"
+    assert t.rows[1].cells[2].text == "Supervisores"
+    assert t.rows[2].cells[0].text == "Aprovar"
+    assert t.rows[2].cells[1].text == "X"
+    assert t.rows[3].cells[2].text == "X"
 
 
 # Path import kept at runtime so pytest fixture annotations resolve

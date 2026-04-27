@@ -45,14 +45,57 @@ class TableSpec:
             ``["Rev.", "Data", "Alteração"]``). Order matters.
         rows: list of row dicts keyed by header (any of the variants is
             accepted; matching is normalized).
+        subheaders: optional second-row labels (``["", "Gerente Setorial",
+            "Supervisores"]``). When provided, fill_tables writes them
+            into the sub-header row and uses them for column mapping when
+            primary headers repeat.
     """
 
     headers: list[str]
     rows: list[dict[str, str]]
+    subheaders: list[str] | None = None
 
 
 def _row_is_empty(row) -> bool:  # type: ignore[no-untyped-def]
     return all(not cell.text.strip() for cell in row.cells)
+
+
+def _resolve_header_order(  # type: ignore[no-untyped-def]
+    table,
+    spec_subheaders: list[str] | None = None,
+) -> list[str]:
+    """Return per-column normalized headers, falling back to row 1 (or a
+    spec-supplied subheader list) when row 0 has repeated values.
+    """
+    primary = [_normalize(c.text) for c in table.rows[0].cells]
+    if len(table.rows) < 2:
+        return primary
+    if spec_subheaders is not None:
+        secondary = [_normalize(s) for s in spec_subheaders]
+    else:
+        secondary = [_normalize(c.text) for c in table.rows[1].cells]
+
+    seen: dict[str, int] = {}
+    for h in primary:
+        if h:
+            seen[h] = seen.get(h, 0) + 1
+
+    out: list[str] = []
+    for i, h in enumerate(primary):
+        if h and seen.get(h, 0) > 1:
+            sub = secondary[i] if i < len(secondary) else ""
+            out.append(sub if sub else h)
+        else:
+            out.append(h)
+    return out
+
+
+def _is_subheader_row(row, resolved_headers: list[str]) -> bool:  # type: ignore[no-untyped-def]
+    """A row whose cells exactly match the resolved sub-headers is a
+    sub-header row, not an empty data row.
+    """
+    cells_norm = [_normalize(c.text) for c in row.cells]
+    return any(cells_norm) and cells_norm == resolved_headers
 
 
 def fill_tables(
@@ -95,13 +138,37 @@ def fill_tables(
 
         spec = spec_queue.pop(match_idx)
 
+        # If the spec carries explicit sub-headers and the second row of
+        # the template is empty (or matches "primary header"), write the
+        # sub-headers into row 1 so the table renders with proper labels.
+        if spec.subheaders and len(table.rows) >= 2:
+            row1 = table.rows[1]
+            primary = [_normalize(c.text) for c in table.rows[0].cells]
+            row1_norm = [_normalize(c.text) for c in row1.cells]
+            looks_overridable = all(
+                (not txt) or (txt == primary[i] if i < len(primary) else False)
+                for i, txt in enumerate(row1_norm)
+            )
+            if looks_overridable:
+                for cell, sub in zip(row1.cells, spec.subheaders, strict=False):
+                    if sub:
+                        cell.text = sub
+
         # Compute the header order of the actual table so cells go to the
-        # right columns regardless of spec header ordering.
-        actual_header_order = [_normalize(c.text) for c in header_row.cells]
+        # right columns regardless of spec header ordering. When the
+        # header row has duplicate values (e.g. ``["Atividades",
+        # "Responsabilidade", "Responsabilidade"]`` with merged cells),
+        # the second row often carries unique sub-headers (``["",
+        # "Gerente Setorial", "Supervisores"]``). Use the sub-header for
+        # any column whose primary header repeats. Spec-supplied
+        # subheaders take precedence over whatever row 1 carried.
+        actual_header_order = _resolve_header_order(table, spec.subheaders)
 
         # First, fill any empty rows already in the table (templates often
         # ship N blank rows under the header).
-        rows_to_fill = [r for r in table.rows[1:] if _row_is_empty(r)]
+        rows_to_fill = [
+            r for r in table.rows[1:] if _row_is_empty(r) and not _is_subheader_row(r, actual_header_order)
+        ]
         spec_iter = iter(spec.rows)
 
         for r in rows_to_fill:

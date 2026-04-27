@@ -168,7 +168,10 @@ def map_sections(
     canonical empty tables (Histórico Rev/Data/Alteração) so the caller does
     not need to pass a TableSpec for them.
     """
-    from engine.section_mapper.auto_tables import detect_default_specs, merge_specs
+    from engine.section_mapper.auto_tables import (
+        detect_default_specs_with_source,
+        merge_specs,
+    )
 
     target_sections = parse_docx(template_path)
     source_sections = _dedupe_sections_by_richest(_parse_source(source_path))
@@ -182,16 +185,28 @@ def map_sections(
     )
 
     content_by_target = _build_content_map(source_sections, matches)
+
+    effective_specs = table_specs
+    if auto_tables:
+        effective_specs = merge_specs(
+            detect_default_specs_with_source(template_path, source_path),
+            table_specs,
+        )
+
+    # Sections whose entire body is covered by an auto-filled table get
+    # their textual content suppressed so we don't duplicate the same
+    # info as both prose and table.
+    content_by_target = _suppress_tabular_section_content(
+        content_by_target,
+        effective_specs,
+    )
+
     render_section_content(
         template_path,
         output_path,
         docx_sections=target_sections,
         content_by_target=content_by_target,
     )
-
-    effective_specs = table_specs
-    if auto_tables:
-        effective_specs = merge_specs(detect_default_specs(template_path), table_specs)
 
     filled = 0
     if effective_specs:
@@ -237,7 +252,10 @@ async def map_sections_async(
     provider is supplied AND coverage is still below the threshold, the LLM
     matcher is invoked as the final tier.
     """
-    from engine.section_mapper.auto_tables import detect_default_specs, merge_specs
+    from engine.section_mapper.auto_tables import (
+        detect_default_specs_with_source,
+        merge_specs,
+    )
 
     target_sections = parse_docx(template_path)
     source_sections = _dedupe_sections_by_richest(_parse_source(source_path))
@@ -261,16 +279,25 @@ async def map_sections_async(
         )
 
     content_by_target = _build_content_map(source_sections, matches)
+
+    effective_specs = table_specs
+    if auto_tables:
+        effective_specs = merge_specs(
+            detect_default_specs_with_source(template_path, source_path),
+            table_specs,
+        )
+
+    content_by_target = _suppress_tabular_section_content(
+        content_by_target,
+        effective_specs,
+    )
+
     render_section_content(
         template_path,
         output_path,
         docx_sections=target_sections,
         content_by_target=content_by_target,
     )
-
-    effective_specs = table_specs
-    if auto_tables:
-        effective_specs = merge_specs(detect_default_specs(template_path), table_specs)
 
     filled = 0
     if effective_specs:
@@ -288,6 +315,41 @@ async def map_sections_async(
         tables_filled=filled,
         orphan_paragraphs=orphans,
     )
+
+
+_TABULAR_TARGET_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "RESPONSABILIDADE",
+        "RESPONSABILIDADES",
+        "ATRIBUICOES",
+        "ATRIBUICOES E RESPONSABILIDADES",
+        "HISTORICO",
+        "HISTORICO DE REVISOES",
+    }
+)
+
+
+def _suppress_tabular_section_content(
+    content_by_target: dict[str, str],
+    specs: list[TableSpec] | None,
+) -> dict[str, str]:
+    """Drop body content for sections whose data is fully covered by an
+    auto-filled table.
+
+    Industrial templates put the responsibility matrix in a table; if we
+    also paste the source's "Compete à gerência / Compete aos
+    supervisores" prose under the heading, the same info shows up
+    twice. Same for revision history.
+    """
+    if not specs:
+        return content_by_target
+    has_filled_specs = any(sp.rows for sp in specs)
+    if not has_filled_specs:
+        return content_by_target
+    return {
+        target: ("" if target in _TABULAR_TARGET_KEYWORDS else body)
+        for target, body in content_by_target.items()
+    }
 
 
 def _parse_source(source_path: Path) -> list[TextSection]:
