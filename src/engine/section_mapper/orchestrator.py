@@ -101,6 +101,17 @@ class SectionMappingReport:
         }
 
 
+_AUTO_COVERAGE_THRESHOLD = 0.6
+
+
+def _coverage(matches: list[HeadingMatch], target_names: list[str]) -> float:
+    """Fraction of target headings that received at least one source match."""
+    if not target_names:
+        return 1.0
+    filled = {m.target_name for m in matches if m.target_name}
+    return len(filled & set(target_names)) / len(target_names)
+
+
 def _select_matches(
     source_sections: list[TextSection],
     target_names: list[str],
@@ -108,12 +119,26 @@ def _select_matches(
     similarity_mode: str,
     llm: LLMProvider | None,
 ) -> list[HeadingMatch]:
-    """Run similarity in the requested mode, with graceful fallback."""
+    """Run similarity in the requested mode, with graceful fallback.
+
+    ``"auto"`` mode tries string first; falls back to embeddings when the
+    optional dep is installed and string coverage is below the threshold.
+    LLM fallback is only available through the async wrapper.
+    """
     if similarity_mode == "string":
         return match_string(source_sections, target_names)
 
     if similarity_mode == "embeddings":
         return match_embeddings(source_sections, target_names)
+
+    if similarity_mode == "auto":
+        string_matches = match_string(source_sections, target_names)
+        if _coverage(string_matches, target_names) >= _AUTO_COVERAGE_THRESHOLD:
+            return string_matches
+        emb_matches = match_embeddings(source_sections, target_names)
+        if _coverage(emb_matches, target_names) > _coverage(string_matches, target_names):
+            return emb_matches
+        return string_matches
 
     if similarity_mode == "llm":
         if llm is None:
@@ -130,10 +155,20 @@ def map_sections(
     source_path: Path,
     output_path: Path,
     *,
-    similarity_mode: str = "string",
+    similarity_mode: str = "auto",
     table_specs: list[TableSpec] | None = None,
+    auto_tables: bool = True,
 ) -> SectionMappingReport:
-    """Synchronous entry point — string and embeddings modes only."""
+    """Synchronous entry point — ``auto`` / ``string`` / ``embeddings`` modes.
+
+    Default ``similarity_mode="auto"`` runs string first and falls back to
+    embeddings (when the optional dep is installed) if string coverage is
+    below 60%. ``auto_tables=True`` synthesizes sensible defaults for
+    canonical empty tables (Histórico Rev/Data/Alteração) so the caller does
+    not need to pass a TableSpec for them.
+    """
+    from engine.section_mapper.auto_tables import detect_default_specs, merge_specs
+
     target_sections = parse_docx(template_path)
     source_text = extract(source_path).text
     source_sections = _dedupe_sections_by_richest(parse_text(source_text))
@@ -154,9 +189,13 @@ def map_sections(
         content_by_target=content_by_target,
     )
 
+    effective_specs = table_specs
+    if auto_tables:
+        effective_specs = merge_specs(detect_default_specs(template_path), table_specs)
+
     filled = 0
-    if table_specs:
-        filled = fill_tables(template_path, output_path, table_specs)
+    if effective_specs:
+        filled = fill_tables(template_path, output_path, effective_specs)
 
     orphans = detect_orphan_paragraphs(output_path)
 
@@ -186,12 +225,20 @@ async def map_sections_async(
     source_path: Path,
     output_path: Path,
     *,
-    similarity_mode: str = "string",
+    similarity_mode: str = "auto",
     llm: LLMProvider | None = None,
     table_specs: list[TableSpec] | None = None,
+    auto_tables: bool = True,
 ) -> SectionMappingReport:
     """Async entry — supports the ``llm`` similarity mode in addition to
-    ``string`` and ``embeddings``."""
+    ``auto`` / ``string`` / ``embeddings``.
+
+    ``auto`` mode runs string + (embeddings if installed); when an LLM
+    provider is supplied AND coverage is still below the threshold, the LLM
+    matcher is invoked as the final tier.
+    """
+    from engine.section_mapper.auto_tables import detect_default_specs, merge_specs
+
     target_sections = parse_docx(template_path)
     source_text = extract(source_path).text
     source_sections = _dedupe_sections_by_richest(parse_text(source_text))
@@ -199,6 +246,13 @@ async def map_sections_async(
     target_names = [s.name for s in target_sections]
     if similarity_mode == "llm" and llm is not None:
         matches = await match_llm(source_sections, target_names, llm=llm)
+    elif similarity_mode == "auto":
+        matches = _select_matches(source_sections, target_names, similarity_mode="auto", llm=None)
+        # Final tier: LLM when string + embeddings still fell short
+        if llm is not None and _coverage(matches, target_names) < _AUTO_COVERAGE_THRESHOLD:
+            llm_matches = await match_llm(source_sections, target_names, llm=llm)
+            if _coverage(llm_matches, target_names) > _coverage(matches, target_names):
+                matches = llm_matches
     else:
         matches = _select_matches(
             source_sections,
@@ -215,9 +269,13 @@ async def map_sections_async(
         content_by_target=content_by_target,
     )
 
+    effective_specs = table_specs
+    if auto_tables:
+        effective_specs = merge_specs(detect_default_specs(template_path), table_specs)
+
     filled = 0
-    if table_specs:
-        filled = fill_tables(template_path, output_path, table_specs)
+    if effective_specs:
+        filled = fill_tables(template_path, output_path, effective_specs)
 
     orphans = detect_orphan_paragraphs(output_path)
 
