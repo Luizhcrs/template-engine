@@ -54,14 +54,22 @@ class AuditLog:
     """
 
     path: Path | None = None
-    _events: list[dict] = field(default_factory=list)
-    _lock: threading.Lock = field(default_factory=threading.Lock)
-    _fp: IO[str] | None = field(default=None, repr=False, init=False)
+    _events: list[dict] = field(default_factory=list, compare=False, repr=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, compare=False, repr=False)
+    _fp: IO[str] | None = field(default=None, compare=False, repr=False, init=False)
 
     def __post_init__(self) -> None:
         if self.path is not None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self._fp = self.path.open("a", encoding="utf-8")
+
+    def __del__(self) -> None:
+        # Defensive close — long-running servers that forget `with` would leak
+        # the file descriptor otherwise. Swallow any error during shutdown.
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def log_event(
         self,

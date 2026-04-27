@@ -115,35 +115,25 @@ _FIELD_EXAMPLES: dict[str, list[str]] = {
 
 def _gold(i: int) -> str:
     e = {k: v[i] for k, v in _FIELD_EXAMPLES.items()}
-    return f"""{e["TITULO_CONTRATO"]}
+    return f"""Titulo contrato: {e["TITULO_CONTRATO"]}
 
-CONTRATANTE: {e["CONTRATANTE"]}, inscrita no CNPJ sob o numero {e["CNPJ_CONTRATANTE"]}.
+Contratante: {e["CONTRATANTE"]}
+CNPJ contratante: {e["CNPJ_CONTRATANTE"]}
 
-CONTRATADA: {e["CONTRATADA"]}, inscrita no CNPJ sob o numero {e["CNPJ_CONTRATADA"]}.
+Contratada: {e["CONTRATADA"]}
+CNPJ contratada: {e["CNPJ_CONTRATADA"]}
 
-CLAUSULA 1 - OBJETO
+Objeto: {e["OBJETO"]}
 
-{e["OBJETO"]}
+Valor: {e["VALOR"]}
 
-CLAUSULA 2 - VALOR
+Vigencia: {e["VIGENCIA"]}
 
-O valor total do presente contrato e de R$ {e["VALOR"]}, a ser pago conforme cronograma anexo.
+Foro: {e["FORO"]}
 
-CLAUSULA 3 - VIGENCIA
-
-{e["VIGENCIA"]}
-
-CLAUSULA 4 - RESCISAO
-
-Qualquer das partes pode rescindir o presente contrato mediante aviso previo de 30 dias.
-
-CLAUSULA 5 - FORO
-
-Fica eleito o foro da comarca de {e["FORO"]} para dirimir quaisquer questoes oriundas do presente contrato.
+Data assinatura: {e["DATA_ASSINATURA"]}
 
 E por estarem assim justas e contratadas, as partes assinam o presente em 2 vias de igual teor.
-
-Local e data: {e["FORO"]}, {e["DATA_ASSINATURA"]}.
 """
 
 

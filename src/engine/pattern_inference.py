@@ -243,20 +243,27 @@ def infer_field_patterns(
             log.warning("pattern_inference.no_examples", field=field)
             continue
 
-        # 1. Find each example in gold docs, collect label contexts
+        # 1. Find each example in gold docs, collect label contexts.
         # Require the example to be preceded by ": " (colon + whitespace) and
         # followed by a word/line boundary — avoids spurious matches when the
-        # example is a short substring of unrelated content (e.g. "A" inside "LAUDO").
+        # example is a short substring of unrelated content (e.g. "A" inside
+        # "LAUDO").
+        # Map example[i] -> gold_docs[i] when possible. This 1-1 alignment
+        # blocks cross-field label leakage: if example 2 of field PMTA happens
+        # to also appear in gold doc 0 under a different label
+        # (e.g. PRESSAO), we never look at doc 0 when processing example 2.
         labels: list[str] = []
-        for ex in examples:
+        for i, ex in enumerate(examples):
             ex_pattern = re.compile(rf":\s*{re.escape(ex)}(?=\s|$|[.,;)])")
-            for doc in gold_docs:
+            docs_to_search = [gold_docs[i]] if i < len(gold_docs) else gold_docs
+            for doc in docs_to_search:
                 for m in ex_pattern.finditer(doc):
                     # value start = where the example actually begins in the doc
                     value_start = m.end() - len(ex)
                     label = _extract_label_before(doc, value_start)
                     if label:
                         labels.append(label)
+                    break  # one label per (example, doc) pair is enough
 
         unique_labels = _aggregate_labels(labels)
 
@@ -264,12 +271,38 @@ def infer_field_patterns(
         shape_name, shape_regex = _detect_value_shape(examples)
 
         # 3. Compose regex
+        # Distinctive shapes can be searched by shape alone because their
+        # syntax is unique enough to avoid collisions (CPF won't match a
+        # phone number once the bare-digit alternative is gone, ISO dates
+        # don't match anything else, CEP is dash-tagged, etc).
+        # Permissive shapes (fullname, doc_code, integer, version,
+        # decimal_br, br_date, freetext, grex_learned) MUST have a label
+        # anchor — otherwise they would happily match the institution name
+        # when looking for an author, the document title when looking for a
+        # conclusion, etc.
+        _DISTINCTIVE_SHAPES = {"cpf", "cnpj", "iso_date", "cep", "uf"}
         if unique_labels:
             label_alt = "|".join(re.escape(label) for label in unique_labels)
             pattern_str = rf"(?:{label_alt}):\s*({shape_regex})"
-        else:
-            # No label context found — search for value-shape only (less reliable)
+        elif shape_name in _DISTINCTIVE_SHAPES:
             pattern_str = rf"({shape_regex})"
+        else:
+            # Refuse to compile a pattern that would silently match the wrong
+            # value. Caller sees coverage=0 and source="missing" downstream
+            # so the LLM tier or a manual review can take over.
+            log.warning(
+                "pattern_inference.no_label_freetext_refused",
+                field=field,
+                shape=shape_name,
+            )
+            inferred[field] = InferredPattern(
+                field=field,
+                label_variants=[],
+                value_shape_name=shape_name,
+                regex=re.compile(r"(?!.*)"),  # never matches
+                coverage=0.0,
+            )
+            continue
 
         compiled = re.compile(pattern_str, re.IGNORECASE)
 

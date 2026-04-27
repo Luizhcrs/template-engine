@@ -14,23 +14,22 @@ from engine.schema_inference import (
 
 
 class _StubLLM:
-    """Stub LLMProvider that returns canned responses based on field name."""
+    """Stub LLMProvider that returns the full ``responses`` dict in one call.
+
+    Wave K #9 batched ``enrich_with_llm`` into a single LLM call returning a
+    dict keyed by every field name. Tests now feed that shape verbatim.
+    """
 
     name = "stub"
     model = "stub-1"
 
     def __init__(self, responses: dict[str, dict]) -> None:
         self._responses = responses
-        self.calls: list[str] = []
+        self.calls = 0
 
     async def generate_structured(self, prompt: str, json_schema: dict) -> dict:
-        # crude name extraction from prompt
-        for name, payload in self._responses.items():
-            if f"name: {name}" in prompt.lower() or f"name: {name}" in prompt:
-                self.calls.append(name)
-                return payload
-        # default fallback
-        return {"field_type": "freetext", "format_hint": None, "required": True}
+        self.calls += 1
+        return dict(self._responses)
 
 
 # ===== detect_placeholders — syntaxes =====

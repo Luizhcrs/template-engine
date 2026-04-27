@@ -144,11 +144,11 @@ _VALIDATORS: Final[dict[str, Callable[[str], bool]]] = {
 
 
 _PLACEHOLDER_RE: Final[re.Pattern[str]] = re.compile(
-    r"(?:\{\{\s*[A-Z_][A-Z0-9_]*\s*\}\}"
-    r"|<<\s*[A-Z_][A-Z0-9_]*\s*>>"
-    r"|__[A-Z][A-Z0-9_]*__"
-    r"|\{\s*[A-Z_][A-Z0-9_]*\s*\}"
-    r"|\[\s*[A-Z_][A-Z0-9_]*\s*\]"
+    r"(?:\{\{\s*[A-Za-z_][A-Za-z0-9_.\-]*\s*\}\}"
+    r"|<<\s*[A-Za-z_][A-Za-z0-9_.\-]*\s*>>"
+    r"|__[A-Za-z][A-Za-z0-9_.\-]*__"
+    r"|\{\s*[A-Za-z_][A-Za-z0-9_.\-]*\s*\}"
+    r"|\[\s*[A-Za-z_][A-Za-z0-9_.\-]*\s*\]"
     r"|_{3,})"
 )
 

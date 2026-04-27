@@ -110,9 +110,18 @@ async def check_design(
         log.warning("conformity.design.provider_error", error=str(exc))
         return DimensionResult(
             dimension="design",
-            score=1.0,
-            skipped=True,
-            skip_reason=f"provider error: {exc}",
+            score=0.0,
+            skipped=False,
+            failures=[
+                Failure(
+                    dimension="design",
+                    field_or_excerpt="provider_error",
+                    expected="provider response",
+                    actual=type(exc).__name__,
+                    severity="warning",
+                    note=f"design dimension unavailable: {exc}",
+                )
+            ],
         )
 
     raw_score = float(response.get("score", 1.0)) if isinstance(response, dict) else 1.0

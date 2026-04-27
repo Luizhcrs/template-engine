@@ -139,12 +139,14 @@ def test_format_pattern_inference_produces_regexes(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["abnt_tcc", "laudo_nr12", "contrato_simples"],
+    _ALL_FORMATS,
 )
 @pytest.mark.asyncio
-async def test_format_hybrid_mapper_extracts_from_gold_doc(name):
-    """Run hybrid_mapper (regex-only) against a gold doc; expect non-trivial
-    coverage (>50% of required fields filled by regex tier).
+async def test_format_hybrid_mapper_extracts_correct_values_from_gold_doc(name):
+    """Run hybrid_mapper (regex-only) against the gold doc; for every field that
+    the regex tier resolves, the extracted VALUE must equal the planted value.
+
+    Coverage-only checks let format bugs ship silently — see CODE-REVIEW.md #1.
     """
     fmt = load_format(name)
     inferred = infer_field_patterns(
@@ -154,12 +156,19 @@ async def test_format_hybrid_mapper_extracts_from_gold_doc(name):
     sample_doc = fmt.gold_docs[0]
     mapping = await map_hybrid(fmt.schemas, inferred, sample_doc, llm=None)
 
-    required_filled = sum(
-        1 for s in fmt.schemas if s.required and s.name in mapping and mapping[s.name].source == "regex"
-    )
-    required_total = sum(1 for s in fmt.schemas if s.required)
-    coverage = required_filled / required_total
-    assert coverage >= 0.5, f"{name}: regex-only coverage {coverage:.2f} below 50% on the gold doc itself"
+    # For every field that the regex tier resolved (source=='regex'), the
+    # value MUST equal the first example planted in the gold doc.
+    for field_name, expected_values in fmt.field_examples.items():
+        result = mapping.get(field_name)
+        if result is None:
+            continue
+        if result.source != "regex":
+            continue
+        expected = expected_values[0].strip()
+        actual = (result.value or "").strip()
+        assert actual == expected, (
+            f"{name}.{field_name}: regex extracted wrong value. expected={expected!r}, got={actual!r}"
+        )
 
 
 # ===== specific format checks =====

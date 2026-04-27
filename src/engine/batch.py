@@ -24,6 +24,7 @@ net that catches information loss.
 from __future__ import annotations
 
 import asyncio
+import re
 import shutil
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
@@ -34,6 +35,7 @@ from docx import Document
 
 from engine.extractor import extract
 from engine.hybrid_mapper import MappingResult, map_hybrid, summarize
+from engine.llm.base import LLMError
 from engine.pattern_inference import infer_field_patterns
 from engine.schema_inference import detect_placeholders, enrich_with_llm
 from engine.semantic_diff import Discrepancy, diff_documents
@@ -44,6 +46,7 @@ if TYPE_CHECKING:
     from engine.llm.base import LLMProvider
     from engine.pattern_inference import InferredPattern
     from engine.schema_inference import FieldSchema
+    from engine.security.audit import AuditLog
 
 log = structlog.get_logger(__name__)
 
@@ -136,7 +139,12 @@ def _classify_tier(
     - ``medium``: any LLM-sourced field OR warning-level discrepancy, no missing
       required, no critical discrepancy.
     - ``low``: any missing required field OR any critical discrepancy.
+    - ``low``: also when the template defines no schema fields (likely a
+      configuration mistake that would otherwise count as ``high``).
     """
+    if not schemas:
+        return "low"
+
     required_names = {s.name for s in schemas if s.required}
     sources = {r.source for r in mapping.values()}
     has_missing_required = any(
@@ -153,56 +161,67 @@ def _classify_tier(
     return "high"
 
 
+_W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _single_pass_replace(text: str, replacements: dict[str, str]) -> str:
+    """Replace every token in *text* in a single regex pass.
+
+    Avoids the order-dependent re-substitution bug where a value containing
+    ``{{B}}`` would be re-matched when the loop processed ``B``.
+    """
+    if not replacements or not text:
+        return text
+    # Sort tokens longest-first so e.g. ``{{NOME_COMPLETO}}`` wins over ``{{NOME}}``.
+    keys = sorted(replacements, key=len, reverse=True)
+    pattern = re.compile("|".join(re.escape(k) for k in keys))
+    return pattern.sub(lambda m: replacements[m.group(0)], text)
+
+
 def _replace_tokens_in_paragraph(
     paragraph,  # type: ignore[no-untyped-def]
     replacements: dict[str, str],
 ) -> None:
     """Replace every key of ``replacements`` with its value inside *paragraph*.
 
+    Walks every ``<w:r>`` element via XPath (not just ``paragraph.runs``),
+    so it covers runs nested inside hyperlinks, smart-tags, sdt content
+    controls, and similar containers.
+
     Two-pass strategy:
 
-    1. Per-run replacement — when a token sits within a single ``<w:r>`` it is
+    1. Per-run replacement — when a token sits within a single run it is
        replaced in place, preserving the run's formatting.
     2. Paragraph-level fallback — when the token spans multiple runs (which
        Word produces routinely on edited templates: ``{{`` in run A,
        ``NAME`` in run B, ``}}`` in run C), pass 1 misses it. Pass 2 builds
        the concatenated paragraph text, applies remaining replacements, drops
-       the result into the first run, and clears the rest. This loses
-       run-level formatting variations within the replaced span but keeps
-       paragraph-level formatting (alignment, style, spacing).
+       the result into the first text-bearing element, and clears the rest.
     """
-    if not paragraph.runs:
+    p_elem = paragraph._p
+    text_elements = p_elem.findall(f".//{_W_NS}t")
+    if not text_elements:
         return
 
-    # Pass 1 — per-run replacement (preserves intra-paragraph formatting).
-    for run in paragraph.runs:
-        original = run.text
+    # Pass 1 — per-text-element replacement (preserves intra-paragraph formatting).
+    for t_elem in text_elements:
+        original = t_elem.text or ""
         if not original:
             continue
-        new_text = original
-        for token, value in replacements.items():
-            if token in new_text:
-                new_text = new_text.replace(token, value)
+        new_text = _single_pass_replace(original, replacements)
         if new_text != original:
-            run.text = new_text
+            t_elem.text = new_text
 
     # Pass 2 — paragraph-level fallback for tokens that survived because they
-    # span multiple runs.
-    full_text = paragraph.text
-    needs_merge = any(token in full_text for token in replacements)
-    if not needs_merge:
+    # span multiple <w:t> elements (i.e. multiple runs).
+    full_text = "".join((t.text or "") for t in text_elements)
+    if not any(token in full_text for token in replacements):
         return
 
-    merged = full_text
-    for token, value in replacements.items():
-        if token in merged:
-            merged = merged.replace(token, value)
-    if merged == full_text:
-        return
-
-    paragraph.runs[0].text = merged
-    for run in paragraph.runs[1:]:
-        run.text = ""
+    merged = _single_pass_replace(full_text, replacements)
+    text_elements[0].text = merged
+    for t_elem in text_elements[1:]:
+        t_elem.text = ""
 
 
 def _apply_mapping_to_template(
@@ -229,14 +248,18 @@ def _apply_mapping_to_template(
         for s in schemas
     }
 
-    for paragraph in doc.paragraphs:
-        _replace_tokens_in_paragraph(paragraph, replacements)
+    def _walk(container) -> None:  # type: ignore[no-untyped-def]
+        for paragraph in container.paragraphs:
+            _replace_tokens_in_paragraph(paragraph, replacements)
+        for table in container.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    _walk(cell)
 
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for paragraph in cell.paragraphs:
-                    _replace_tokens_in_paragraph(paragraph, replacements)
+    _walk(doc)
+    for section in doc.sections:
+        _walk(section.header)
+        _walk(section.footer)
 
     doc.save(str(output_path))
     return output_path
@@ -251,13 +274,41 @@ async def _process_one(
     *,
     llm: LLMProvider | None,
     enable_semantic_diff: bool,
+    audit: AuditLog | None = None,
 ) -> BatchItemResult:
     """Process a single source doc end-to-end."""
-    output_path = output_dir / f"{source_path.stem}.normalized.docx"
+    # Include the source extension in the output stem so `doc1.docx` and
+    # `doc1.pdf` don't both render to `doc1.normalized.docx` (the second
+    # would silently overwrite the first).
+    suffix_label = source_path.suffix.lstrip(".")
+    output_path = output_dir / f"{source_path.stem}.{suffix_label}.normalized.docx"
     try:
         source = extract(source_path)
+        if audit is not None:
+            from engine.security.audit import sha256_hex
+
+            audit.log_event(
+                "batch.item_start",
+                doc_hash=sha256_hex(source.text),
+                fields_touched=[s.name for s in schemas],
+                extra={"source": str(source_path)},
+            )
+
         mapping = await map_hybrid(schemas, inferred_patterns, source.text, llm=llm)
         _apply_mapping_to_template(template_path, mapping, schemas, output_path)
+
+        if audit is not None:
+            from engine.security.audit import sha256_hex
+
+            for r in mapping.values():
+                audit.log_event(
+                    "hybrid_mapper.field",
+                    doc_hash=sha256_hex(source.text),
+                    source=r.source,
+                    fields_touched=[r.field],
+                    llm_provider=getattr(llm, "name", None) if r.source == "llm" else None,
+                    llm_model=getattr(llm, "model", None) if r.source == "llm" else None,
+                )
 
         discrepancies: list[Discrepancy] = []
         if enable_semantic_diff and llm is not None:
@@ -268,7 +319,15 @@ async def _process_one(
                     llm=llm,
                     schemas=schemas,
                 )
-            except Exception as exc:
+                if audit is not None:
+                    audit.log_event(
+                        "semantic_diff.done",
+                        doc_hash=sha256_hex(source.text),
+                        llm_provider=getattr(llm, "name", None),
+                        llm_model=getattr(llm, "model", None),
+                        extra={"discrepancy_count": len(discrepancies)},
+                    )
+            except (TimeoutError, LLMError, ValueError) as exc:
                 log.warning(
                     "batch.semantic_diff_failed",
                     path=str(source_path),
@@ -276,6 +335,12 @@ async def _process_one(
                 )
 
         tier = _classify_tier(mapping, discrepancies, schemas=schemas)
+        if audit is not None:
+            audit.log_event(
+                "batch.item_end",
+                doc_hash=sha256_hex(source.text),
+                extra={"tier": tier, "output": str(output_path)},
+            )
         return BatchItemResult(
             source_path=source_path,
             output_path=output_path,
@@ -284,7 +349,12 @@ async def _process_one(
             discrepancies=discrepancies,
         )
     except Exception as exc:
-        log.warning("batch.item_failed", path=str(source_path), error=str(exc))
+        log.warning(
+            "batch.item_failed",
+            path=str(source_path),
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
         return BatchItemResult(
             source_path=source_path,
             output_path=None,
@@ -306,6 +376,7 @@ async def normalize_batch(
     enable_semantic_diff: bool = True,
     max_concurrent: int = _DEFAULT_MAX_CONCURRENT,
     local_only: bool = False,
+    audit: AuditLog | None = None,
 ) -> BatchReport:
     """Run the full pipeline over a directory of source docs.
 
@@ -375,6 +446,7 @@ async def normalize_batch(
                 output_dir,
                 llm=llm,
                 enable_semantic_diff=enable_semantic_diff,
+                audit=audit,
             )
 
     items = await asyncio.gather(*(_bounded(p) for p in source_paths))

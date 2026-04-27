@@ -22,15 +22,15 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 | Wave G | [done] entregue | `ea39746` (2026-04-26) | security primitives: PII mask, prompt injection detector, audit log, local_only enforcement, SECURITY-MODEL.md |
 | Wave H | [done] entregue | `de79f8b` (2026-04-26) | 5 formatos pre-definidos + CLI list-formats + --format flag |
 | Wave I | [done] entregue | `2cd973a` (2026-04-26) | renderer fragmented runs fix + 5 formatos novos (10 total) + PyPI workflow + drop examples + scrub fake numbers |
-| Wave J | [done] entregue | `(pending push)` (2026-04-26) | TESTING-PLAN.md (10 suites P0-P3) + CODE-REVIEW.md (22 findings, 3 CRITICAL) |
-| Wave K | [blocking] planejada | — | fix CRITICAL+HIGH do code-review (3 dias): formatos com valores errados, AuditLog não plugado, ReDoS, headers/footers, etc. **Bloqueia PyPI publish.** |
+| Wave J | [done] entregue | `f04346c` (2026-04-26) | TESTING-PLAN.md (10 suites P0-P3) + CODE-REVIEW.md (22 findings, 3 CRITICAL) |
+| Wave K | [done] entregue | `(pending push)` (2026-04-26) | resolve all 22 findings (3 CRITICAL + 7 HIGH + 9 MEDIUM + 3 LOW) — unblocks PyPI publish |
 | v0.3.0 | [done] tagged | `v0.3.0` (2026-04-26) | Wave A + D + E shipped |
 | v0.4.0 | [done] tagged | `v0.4.0` (2026-04-26) | Wave F shipped (conformity validator) |
 | v0.5.0 | [done] tagged | `v0.5.0` (2026-04-26) | Wave G shipped (security + SECURITY-MODEL.md + README rewrite) |
 | v0.6.0 | [done] tagged | `v0.6.0` (2026-04-26) | Wave H shipped (5 bundled formats + CLI) |
 | v0.7.0 | [done] tagged | `v0.7.0` (2026-04-26) | Wave I shipped (renderer fix + 10 formats + PyPI workflow + drop examples) |
 | v0.7.1 | [done] tagged | `v0.7.1` (2026-04-26) | Rename PyPI distribution to template-engine-ia |
-| v0.8.0 | [blocked] | — | Wave K complete — clears CRITICAL + HIGH; **prerequisite for PyPI publish** |
+| v0.8.0 | [wip] preparado | — | Wave K shipped — clears all 22 findings; **PyPI publish unblocked** |
 | v0.4+ | [plan] planejado | — | OCR + extractors + renderer expandido |
 
 **Onde estamos hoje (2026-04-26):**

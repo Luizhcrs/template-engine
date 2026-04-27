@@ -174,42 +174,80 @@ def _build_enrichment_prompt(field_schema: FieldSchema) -> str:
     )
 
 
+def _build_batch_enrichment_prompt(schemas: list[FieldSchema]) -> str:
+    """Single prompt asking the LLM to enrich every field in one shot."""
+    field_lines = []
+    for s in schemas:
+        ctx = (s.context_before + " ___ " + s.context_after).strip()
+        field_lines.append(f"- {s.name} (token {s.placeholder_token!r}; context: {ctx[:120]!r})")
+    return (
+        "Analyze every placeholder below and infer its type from surrounding "
+        "context. Return ONLY JSON keyed by field name.\n\n"
+        "Fields:\n" + "\n".join(field_lines) + "\n\n"
+        "For each field choose the most specific field_type. Use 'freetext' only "
+        "when no structured type fits. format_hint is optional (max 60 chars). "
+        "required=true unless context clearly suggests optional."
+    )
+
+
+def _batch_enrichment_schema(field_names: list[str]) -> dict:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": dict.fromkeys(field_names, _ENRICHMENT_SCHEMA),
+        "required": list(field_names),
+    }
+
+
 async def enrich_with_llm(
     schemas: list[FieldSchema],
     llm: LLMProvider,
 ) -> list[FieldSchema]:
-    """Call the LLM once per schema entry to infer ``field_type``, ``format_hint``, ``required``.
+    """Enrich every schema's ``field_type`` / ``format_hint`` / ``required`` in
+    a single batched LLM call.
 
-    Returns a new list with enriched copies. Original list is not mutated.
-    Failures per-field log a warning and keep ``field_type='unknown'``.
+    Returns a new list of enriched copies. Original list is not mutated. On
+    LLM failure the per-field schemas are returned unchanged with
+    ``field_type='unknown'`` and a single warning log.
     """
+    if not schemas:
+        return []
+
+    field_names = [s.name for s in schemas]
+
+    try:
+        response = await llm.generate_structured(
+            prompt=_build_batch_enrichment_prompt(schemas),
+            json_schema=_batch_enrichment_schema(field_names),
+        )
+    except Exception as exc:
+        log.warning(
+            "schema_inference.llm_enrichment_failed",
+            count=len(schemas),
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        return list(schemas)
+
     enriched: list[FieldSchema] = []
-    for schema in schemas:
-        try:
-            result = await llm.generate_structured(
-                prompt=_build_enrichment_prompt(schema),
-                json_schema=_ENRICHMENT_SCHEMA,
+    for s in schemas:
+        entry = response.get(s.name) if isinstance(response, dict) else None
+        if not isinstance(entry, dict):
+            enriched.append(s)
+            continue
+        enriched.append(
+            FieldSchema(
+                name=s.name,
+                placeholder_token=s.placeholder_token,
+                kind=s.kind,
+                field_type=str(entry.get("field_type", "unknown")),
+                format_hint=entry.get("format_hint"),
+                context_before=s.context_before,
+                context_after=s.context_after,
+                required=bool(entry.get("required", True)),
+                aliases=s.aliases,
             )
-            enriched.append(
-                FieldSchema(
-                    name=schema.name,
-                    placeholder_token=schema.placeholder_token,
-                    kind=schema.kind,
-                    field_type=str(result.get("field_type", "unknown")),
-                    format_hint=result.get("format_hint"),
-                    context_before=schema.context_before,
-                    context_after=schema.context_after,
-                    required=bool(result.get("required", True)),
-                    aliases=schema.aliases,
-                )
-            )
-        except Exception as exc:
-            log.warning(
-                "schema_inference.llm_enrichment_failed",
-                field=schema.name,
-                error=str(exc),
-            )
-            enriched.append(schema)
+        )
     return enriched
 
 

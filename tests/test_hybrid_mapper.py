@@ -147,12 +147,14 @@ async def test_llm_failure_marks_missing_fields_gracefully():
     inferred = infer_field_patterns(gold_docs=gold, field_examples=examples)
     schemas = _schemas()
 
+    from engine.llm.base import LLMError
+
     class _BoomLLM:
         name = "boom"
         model = "boom-1"
 
         async def generate_structured(self, prompt: str, json_schema: dict) -> dict:
-            raise RuntimeError("provider down")
+            raise LLMError("provider down")
 
     new_doc = "Codigo: ABC-999\nData: 2027-12-31\nCliente: anything"
     results = await map_hybrid(schemas, inferred, new_doc, llm=_BoomLLM())  # type: ignore[arg-type]

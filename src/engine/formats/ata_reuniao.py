@@ -57,25 +57,18 @@ def _gold(i: int) -> str:
     return f"""ATA DE REUNIAO N {e["ATA_NUMERO"]}
 
 Data: {e["DATA"]}
-Horario: das {e["HORA_INICIO"]} as {e["HORA_FIM"]}
+Hora inicio: {e["HORA_INICIO"]}
+Hora fim: {e["HORA_FIM"]}
 Local: {e["LOCAL"]}
 Assunto: {e["ASSUNTO"]}
 
-PARTICIPANTES
+Participantes: {e["PARTICIPANTES"]}
 
-{e["PARTICIPANTES"]}
+Pauta: {e["PAUTA"]}
 
-PAUTA
+Deliberacoes: {e["DELIBERACOES"]}
 
-{e["PAUTA"]}
-
-DELIBERACOES
-
-{e["DELIBERACOES"]}
-
-PROXIMA REUNIAO
-
-{e["PROXIMA_REUNIAO"]}
+Proxima reuniao: {e["PROXIMA_REUNIAO"]}
 """
 
 

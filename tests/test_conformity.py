@@ -365,7 +365,10 @@ async def test_check_design_uses_stub_provider(docs):
 
 
 @pytest.mark.asyncio
-async def test_check_design_provider_error_marks_skipped(docs):
+async def test_check_design_provider_error_emits_warning_failure(docs):
+    """Provider error must NOT silently pass as score=1.0 — that would let a
+    transient network blip translate to "design conforms". Wave K #8.
+    """
     template, candidate = docs
 
     class _BoomVisual:
@@ -376,7 +379,9 @@ async def test_check_design_provider_error_marks_skipped(docs):
             raise RuntimeError("upload failed")
 
     result = await check_design(template, candidate, visual_llm=_BoomVisual())  # type: ignore[arg-type]
-    assert result.skipped is True
+    assert result.skipped is False
+    assert result.score == 0.0
+    assert any(f.field_or_excerpt == "provider_error" for f in result.failures)
 
 
 # ===== aggregator =====

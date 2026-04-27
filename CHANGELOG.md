@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — Wave K (closes 22 code-review findings)
+
+**3 CRITICAL** + **7 HIGH** + 9 MEDIUM + 3 LOW from `CODE-REVIEW.md` resolved. Unblocks PyPI publish.
+
+#### Pattern inference + formats (#1, #20)
+
+- `pattern_inference.infer_field_patterns` now refuses the freetext / grex no-label fallback for permissive shapes. Only the distinctive shapes (`cpf`, `cnpj`, `iso_date`, `cep`, `uf`) accept value-only regex. Other shapes without a label anchor mark the field for LLM-only fallback.
+- Example→doc 1-1 alignment in label collection: example index `i` searches gold doc `i` first. Eliminates cross-field label leakage when one field's example value also appears under another field's label.
+- Gold docs of `ata_reuniao`, `contrato_simples`, `procuracao_simples` rewritten to put one field per labeled line (no comma chains). Disambiguates extraction.
+- New test `test_format_hybrid_mapper_extracts_correct_values_from_gold_doc` asserts value-equality per field (not just `source=='regex'` coverage). All 10 formats round-trip cleanly.
+
+#### Renderer (#4, #11, #22)
+
+- `_apply_mapping_to_template` now walks document headers and footers (`section.header`, `section.footer`) plus their tables.
+- Token replacement walks every `<w:t>` element via XPath, including those nested inside hyperlinks, smart-tags, and content controls.
+- Single-pass alternation regex replaces all tokens at once, eliminating the order-dependent re-substitution bug where a field value containing `{{B}}` would trigger another replacement when the loop processed `B`.
+- Pass-2 dead branch removed.
+
+#### Security (#3, #5, #6, #14, #15)
+
+- `injection.py::ignore_instructions` regex tightened to allow stacked qualifiers (`"the previous"`, `"all prior"`) — closes canonical-attack misses (`"Ignore the previous instructions"` was previously ignored).
+- `injection.py::ignore_instructions_pt` regex restructured to remove ambiguous `\s+...\s*` partitioning. ReDoS gate (test) now asserts <1s on 100K-space adversarial input — was 7.5s on 20K previously.
+- `pii.py::CPF` and `CNPJ` patterns no longer accept bare digit blocks. 11-digit phones used to silently mask as `<CPF_001>`; users now must format CPFs explicitly.
+- `pii.py::PHONE` pattern extended: keyword-prefixed bare digits (`Tel: 8133334444`), DD-spaced 11-digit (`81 99999-9999`).
+- `pii.py::CEP` pattern extended for keyword-prefixed dashless CEP.
+- `audit.py::AuditLog` adds `__del__` defensive close + `compare=False, repr=False` on internal fields.
+
+#### Pipeline integration (#2, #7, #8, #9, #10, #13, #16, #19)
+
+- **`AuditLog` is now wired** into `normalize_batch` and `check_conformity` via an optional `audit:` kwarg. Emits `batch.item_start`, `hybrid_mapper.field`, `semantic_diff.done`, `batch.item_end`, `conformity.dimension`, `conformity.verdict` events. The "audit-grade" claim is now backed by code, not just docs.
+- `check_conformity` returns `is_conformant=False` and surfaces an `all_dimensions_skipped` failure when no dimension actually evaluated (was: silent score=1.0 pass).
+- `check_design` and `diff_texts` no longer swallow LLM errors as `score=1.0` / empty diff. Both now surface a synthetic `provider_error` failure / discrepancy with `severity='warning'`.
+- `enrich_with_llm` batches all field enrichments into a single LLM call (was: N sequential calls per template).
+- Output stems include the source extension (`doc1.docx.normalized.docx` instead of `doc1.normalized.docx`) so `doc1.docx` and `doc1.pdf` no longer overwrite each other silently.
+- `_classify_tier` returns `"low"` when `schemas=[]` (was: `"high"` — a template with zero placeholders silently looked OK).
+- `hybrid_mapper.map_hybrid` and `enrich_with_llm` narrow the LLM exception scope from `Exception` to `(LLMError, TimeoutError, ValueError, KeyError)` so configuration / authentication failures propagate.
+- `conformity.technical` placeholder regex now matches lowercase + namespaced tokens (`{{user.name}}` no longer invisible).
+
+### Changed
+
+- `__version__` bumped to `0.8.0`.
+
 ### Fixed — Wave I
 
 - **Renderer: tokens fragmented across runs.** `batch._apply_mapping_to_template` now uses a two-pass strategy: per-run replacement (preserves intra-paragraph formatting) followed by paragraph-level fallback when a token spans multiple `<w:r>` elements (the common case in Word-edited templates). 6 new tests cover token-in-single-run, fragmented `{{X}}` across 3+ runs, multiple fragmented tokens, table cells, no-op, and direct unit on `_replace_tokens_in_paragraph`.

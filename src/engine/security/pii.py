@@ -29,13 +29,19 @@ class _Detector:
 
 
 _PATTERNS: Final[list[_Detector]] = [
-    _Detector(
-        name="CPF",
-        pattern=re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b"),
-    ),
+    # Detection order matters: longer / more-specific shapes first so they win
+    # over shorter ambiguous digit blocks.
     _Detector(
         name="CNPJ",
-        pattern=re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b|\b\d{14}\b"),
+        # Formatted only. We deliberately do NOT match a bare 14-digit run since
+        # that conflicts with phone numbers, document codes, and order ids.
+        pattern=re.compile(r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b"),
+    ),
+    _Detector(
+        name="CPF",
+        # Formatted only — see comment above. Bare 11-digit blocks are inherently
+        # ambiguous with mobile numbers; users must format CPFs to be detected.
+        pattern=re.compile(r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b"),
     ),
     _Detector(
         name="EMAIL",
@@ -43,18 +49,27 @@ _PATTERNS: Final[list[_Detector]] = [
     ),
     _Detector(
         name="PHONE",
-        # Brazilian: (DD) 9XXXX-XXXX or 10/11 plain digits. Avoid clobbering CPF/CNPJ
-        # by requiring formatting cues (parentheses or +55) when not in a 10/11 raw block.
-        pattern=re.compile(r"\(\d{2}\)\s?9?\d{4,5}-\d{4}|\+55\s?\d{2}\s?9?\d{4,5}-?\d{4}"),
+        # Brazilian phone variants:
+        # - (DD) 9XXXX-XXXX or (DD) XXXX-XXXX
+        # - +55 prefix with optional separators
+        # - Bare 10 or 11 digits when prefixed by a phone keyword (Tel, Whats, ...)
+        # - DD-spaced 11 digits ("81 99999-9999")
+        pattern=re.compile(
+            r"\(\d{2}\)\s?9?\d{4,5}-\d{4}"
+            r"|\+55\s?\d{2}\s?9?\d{4,5}-?\d{4}"
+            r"|\b\d{2}\s9?\d{4,5}-\d{4}\b"
+            r"|(?i:(?:tel|telefone|fone|celular|whats|whatsapp)[^\d]{0,4})\d{10,11}\b"
+        ),
     ),
     _Detector(
         name="RG",
-        # Common Brazilian RG formats: 12.345.678-9, 12.345.678-X, 12345678 (8-9 digits + opt check digit).
+        # Common Brazilian RG formats: 12.345.678-9, 12.345.678-X.
         pattern=re.compile(r"\b\d{1,2}\.\d{3}\.\d{3}-[\dXx]\b"),
     ),
     _Detector(
         name="CEP",
-        pattern=re.compile(r"\b\d{5}-\d{3}\b"),
+        # 12345-678 (canonical) or bare 8-digit run when prefixed by "CEP".
+        pattern=re.compile(r"\b\d{5}-\d{3}\b|(?i:cep[^\d]{0,4})\d{8}\b"),
     ),
 ]
 

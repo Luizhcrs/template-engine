@@ -91,21 +91,22 @@ def _gold(i: int) -> str:
     e = {k: v[i] for k, v in _FIELD_EXAMPLES.items()}
     return f"""PROCURACAO
 
-OUTORGANTE: {e["OUTORGANTE"]}, brasileiro(a), CPF {e["CPF_OUTORGANTE"]}, RG {e["RG_OUTORGANTE"]}, residente em {e["ENDERECO_OUTORGANTE"]}.
+Outorgante: {e["OUTORGANTE"]}
+CPF outorgante: {e["CPF_OUTORGANTE"]}
+RG outorgante: {e["RG_OUTORGANTE"]}
+Endereco outorgante: {e["ENDERECO_OUTORGANTE"]}
 
-OUTORGADO: {e["OUTORGADO"]}, brasileiro(a), CPF {e["CPF_OUTORGADO"]}.
+Outorgado: {e["OUTORGADO"]}
+CPF outorgado: {e["CPF_OUTORGADO"]}
 
-PODERES
+Poderes: {e["PODERES"]}
 
-Pelo presente instrumento particular, o Outorgante constitui o Outorgado seu bastante procurador para {e["PODERES"]}
+Prazo: {e["PRAZO"]}
 
-PRAZO
+Local: {e["LOCAL"]}
+Data: {e["DATA"]}
 
-A presente procuracao tem prazo de validade de {e["PRAZO"]}.
-
-E para que produza os efeitos legais, firmo a presente.
-
-{e["LOCAL"]}, {e["DATA"]}.
+Pelo presente instrumento particular, o Outorgante constitui o Outorgado seu bastante procurador.
 
 ____________________________
 {e["OUTORGANTE"]}

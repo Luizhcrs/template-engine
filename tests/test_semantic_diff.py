@@ -68,7 +68,11 @@ async def test_diff_texts_returns_empty_when_no_discrepancies():
 
 
 @pytest.mark.asyncio
-async def test_diff_texts_handles_llm_failure_gracefully():
+async def test_diff_texts_handles_llm_failure_emits_warning():
+    """Provider error must surface as a synthetic warning discrepancy, not as
+    an empty diff. Wave K #8 — silent passes on transient failures hide bugs.
+    """
+
     class _BoomLLM:
         name = "boom"
         model = "boom-1"
@@ -77,7 +81,9 @@ async def test_diff_texts_handles_llm_failure_gracefully():
             raise RuntimeError("network down")
 
     out = await diff_texts("a", "b", llm=_BoomLLM())  # type: ignore[arg-type]
-    assert out == []
+    assert len(out) == 1
+    assert out[0].field_or_excerpt == "provider_error"
+    assert out[0].severity == "warning"
 
 
 @pytest.mark.asyncio

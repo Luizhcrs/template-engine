@@ -27,7 +27,7 @@ _PATTERNS: Final[list[tuple[str, re.Pattern[str]]]] = [
         "ignore_instructions",
         re.compile(
             r"(?i)\b(?:ignore|disregard|forget)\s+"
-            r"(?:all|every|the|previous|prior|above|earlier|original)\s+"
+            r"(?:(?:all|every|the|previous|prior|above|earlier|original)\s+){1,3}"
             r"(?:instructions?|prompts?|context|messages?|rules?)"
         ),
     ),
@@ -35,9 +35,9 @@ _PATTERNS: Final[list[tuple[str, re.Pattern[str]]]] = [
         "ignore_instructions_pt",
         re.compile(
             r"(?i)\b(?:ignore|esqueça|desconsidere|despreze)\s+"
-            r"(?:as?|todas?|todos?|os?|tudo)?\s*"
-            r"(?:instru[cç][õo]es?|comandos?|regras?|prompts?|mensagens?)\s+"
-            r"(?:acima|anteriores|originais?|prévia)?"
+            r"(?:(?:as?|todas?|todos?|os?|tudo)\s+)?"
+            r"(?:instru[cç][õo]es?|comandos?|regras?|prompts?|mensagens?)"
+            r"(?:\s+(?:acima|anteriores|originais?|prévia))?"
         ),
     ),
     (

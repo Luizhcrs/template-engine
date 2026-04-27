@@ -197,7 +197,19 @@ async def diff_texts(
         response = await llm.generate_structured(prompt, _DIFF_SCHEMA)
     except Exception as exc:
         log.warning("semantic_diff.llm_failed", error=str(exc))
-        return []
+        # Surface a synthetic discrepancy so callers see the failure rather than
+        # treat it as "no issues found". Severity warning, not critical, because
+        # the cause is provider availability, not a content defect.
+        return [
+            Discrepancy(
+                type="value_mismatch",
+                field_or_excerpt="provider_error",
+                source_value=None,
+                output_value=None,
+                severity="warning",
+                note=f"semantic_diff unavailable: {type(exc).__name__}: {exc}",
+            )
+        ]
 
     raw_items = response.get("discrepancies", []) if isinstance(response, dict) else []
     discrepancies: list[Discrepancy] = []

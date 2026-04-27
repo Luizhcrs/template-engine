@@ -172,8 +172,8 @@ async def test_normalize_batch_writes_outputs_named_after_sources(template_and_s
     report = await normalize_batch(template, source_dir, output_dir, llm=None)
 
     output_names = {item.output_path.name for item in report.items if item.output_path}
-    assert "doc1.normalized.docx" in output_names
-    assert "doc2.normalized.docx" in output_names
+    assert "doc1.docx.normalized.docx" in output_names
+    assert "doc2.docx.normalized.docx" in output_names
 
 
 @pytest.mark.asyncio

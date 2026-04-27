@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Final
 import structlog
 
 from engine.conformity.design import check_design
-from engine.conformity.report import ConformityReport, DimensionResult
+from engine.conformity.report import ConformityReport, DimensionResult, Failure
 from engine.conformity.structural import check_structural
 from engine.conformity.technical import check_technical
 from engine.conformity.text import check_text
@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from engine.hybrid_mapper import MappingResult
     from engine.llm.base import LLMProvider
     from engine.schema_inference import FieldSchema
+    from engine.security.audit import AuditLog
 
 log = structlog.get_logger(__name__)
 
@@ -72,6 +73,7 @@ async def check_conformity(
     weights: dict[str, float] | None = None,
     threshold: float = DEFAULT_THRESHOLD,
     local_only: bool = False,
+    audit: AuditLog | None = None,
 ) -> ConformityReport:
     """Compute a multi-dimensional conformity report.
 
@@ -134,10 +136,27 @@ async def check_conformity(
     flat_failures = [f for dr in by_dim.values() for f in dr.failures]
     has_critical = any(f.severity == "critical" for f in flat_failures)
 
+    # An evaluable dimension is one that actually ran (not skipped). Without
+    # at least one evaluable dimension the report cannot make a positive
+    # claim — score=1.0 from an empty evaluation is meaningless.
+    evaluable_count = sum(1 for dr in by_dim.values() if not dr.skipped)
+    if evaluable_count == 0 and by_dim:
+        flat_failures = list(flat_failures) + [
+            Failure(
+                dimension="aggregator",
+                field_or_excerpt="all_dimensions_skipped",
+                expected="at least one evaluable dimension",
+                actual="zero evaluable dimensions",
+                severity="critical",
+                note="every requested dimension was skipped (missing LLM, missing inputs, etc)",
+            )
+        ]
+        has_critical = True
+
     # Conformidade exige score acima do threshold E zero failures críticos.
     # Um único critical (CPF inválido, orphan placeholder, info perdida)
     # invalida o doc independente da média ponderada.
-    is_conformant = (score >= threshold) and not has_critical
+    is_conformant = (score >= threshold) and not has_critical and evaluable_count > 0
 
     report = ConformityReport(
         score=score,
@@ -155,4 +174,28 @@ async def check_conformity(
         failures=len(flat_failures),
         dimensions=list(by_dim.keys()),
     )
+
+    if audit is not None:
+        from engine.security.audit import sha256_hex
+
+        for dim_name, dr in by_dim.items():
+            audit.log_event(
+                "conformity.dimension",
+                doc_hash=sha256_hex(str(candidate_path)),
+                dimension=dim_name,
+                extra={
+                    "score": dr.score,
+                    "skipped": dr.skipped,
+                    "failures": len(dr.failures),
+                },
+            )
+        audit.log_event(
+            "conformity.verdict",
+            doc_hash=sha256_hex(str(candidate_path)),
+            extra={
+                "score": score,
+                "threshold": threshold,
+                "is_conformant": report.is_conformant,
+            },
+        )
     return report

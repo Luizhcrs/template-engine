@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Final
 
 import structlog
 
+from engine.llm.base import LLMError
 from engine.pattern_inference import apply_inferred
 
 if TYPE_CHECKING:
@@ -166,8 +167,12 @@ async def map_hybrid(
         json_schema = _llm_fallback_schema(missing_names)
         try:
             response = await llm.generate_structured(prompt, json_schema)
-        except Exception as exc:
-            log.warning("hybrid_mapper.llm_failed", error=str(exc))
+        except (TimeoutError, LLMError, ValueError, KeyError) as exc:
+            log.warning(
+                "hybrid_mapper.llm_failed",
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
             response = {}
 
         for name in missing_names:
