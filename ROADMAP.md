@@ -20,11 +20,13 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 | Wave E | [done] entregue | `83cd524` (2026-04-26) | drop legacy preset/renderer/validator/visual_validator (~26% LOC -) |
 | Wave F | [done] entregue | `23118f3` (2026-04-26) | conformity validator multi-dim (5 dimensions: texto + estrutural + visual + design + técnico) |
 | Wave G | [done] entregue | `ea39746` (2026-04-26) | security primitives: PII mask, prompt injection detector, audit log, local_only enforcement, SECURITY-MODEL.md |
-| Wave H | [done] entregue | `(pending push)` (2026-04-26) | 5 formatos pre-definidos: abnt_artigo, abnt_tcc, abnt_referencia, laudo_nr12, contrato_simples + CLI list-formats + --format flag |
+| Wave H | [done] entregue | `de79f8b` (2026-04-26) | 5 formatos pre-definidos + CLI list-formats + --format flag |
+| Wave I | [done] entregue | `(pending push)` (2026-04-26) | renderer fragmented runs fix + 5 formatos novos (10 total) + PyPI workflow + drop examples + scrub fake numbers |
 | v0.3.0 | [done] tagged | `v0.3.0` (2026-04-26) | Wave A + D + E shipped |
 | v0.4.0 | [done] tagged | `v0.4.0` (2026-04-26) | Wave F shipped (conformity validator) |
 | v0.5.0 | [done] tagged | `v0.5.0` (2026-04-26) | Wave G shipped (security + SECURITY-MODEL.md + README rewrite) |
-| v0.6.0 | [wip] preparado | — | Wave H shipped (5 bundled formats + CLI) |
+| v0.6.0 | [done] tagged | `v0.6.0` (2026-04-26) | Wave H shipped (5 bundled formats + CLI) |
+| v0.7.0 | [wip] preparado | — | Wave I shipped (renderer fix + 10 formats + PyPI workflow + drop examples) |
 | v0.4+ | [plan] planejado | — | OCR + extractors + renderer expandido |
 
 **Onde estamos hoje (2026-04-26):**

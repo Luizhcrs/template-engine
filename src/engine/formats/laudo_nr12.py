@@ -3,8 +3,8 @@
 Spec: Norma Regulamentadora 12 (Portaria MTE) - Seguranca no trabalho em
 maquinas e equipamentos.
 
-Use case: Engeman e empresas industriais que recebem laudos de inspecao de
-maquinas de vendors terceiros e precisam padronizar pro template corporativo.
+Use case: empresas industriais que recebem laudos de inspecao de maquinas
+de vendors terceiros e precisam padronizar pro template corporativo.
 
 Campos esperados:
 

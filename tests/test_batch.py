@@ -9,7 +9,9 @@ from docx import Document
 
 from engine.batch import (
     BatchItemResult,
+    _apply_mapping_to_template,
     _classify_tier,
+    _replace_tokens_in_paragraph,
     normalize_batch,
 )
 from engine.hybrid_mapper import MappingResult
@@ -285,6 +287,134 @@ async def test_failed_doc_marked_as_error_tier_without_killing_batch(tmp_path):
     assert "error" in tiers
     error_item = next(i for i in report.items if i.tier == "error")
     assert error_item.error is not None
+
+
+# ===== fragmented runs renderer =====
+
+
+def _add_fragmented_paragraph(doc, fragments: list[str]):  # type: ignore[no-untyped-def]
+    """Helper: add a paragraph whose text is split across N runs.
+
+    Word frequently splits ``{{NAME}}`` into 3 or more runs whenever the user
+    edits the template (different fonts, autocomplete etc). The renderer must
+    cope with this.
+    """
+    p = doc.add_paragraph()
+    for fragment in fragments:
+        run = p.add_run(fragment)
+        _ = run  # keep formatting default
+    return p
+
+
+def test_replace_tokens_handles_token_in_single_run(tmp_path):
+    """Sanity: simplest case still works after the two-pass refactor."""
+    p = tmp_path / "x.docx"
+    doc = Document()
+    doc.add_paragraph("Codigo: {{CODIGO}}")
+    doc.save(str(p))
+
+    out = tmp_path / "out.docx"
+    schemas = [FieldSchema("CODIGO", "{{CODIGO}}", "mustache")]
+    mapping = {"CODIGO": MappingResult("CODIGO", "ABC-001", "regex", 1.0)}
+    _apply_mapping_to_template(p, mapping, schemas, out)
+
+    text = "\n".join(par.text for par in Document(str(out)).paragraphs)
+    assert "{{CODIGO}}" not in text
+    assert "ABC-001" in text
+
+
+def test_replace_tokens_handles_token_split_across_runs(tmp_path):
+    """The placeholder ``{{CODIGO}}`` is split into 3 runs.
+
+    Without the pass-2 paragraph-level fallback this regresses silently —
+    the docx ships with the literal ``{{CODIGO}}`` still in it.
+    """
+    p = tmp_path / "x.docx"
+    doc = Document()
+    _add_fragmented_paragraph(doc, ["Codigo: {{", "CODIGO", "}}"])
+    doc.save(str(p))
+
+    out = tmp_path / "out.docx"
+    schemas = [FieldSchema("CODIGO", "{{CODIGO}}", "mustache")]
+    mapping = {"CODIGO": MappingResult("CODIGO", "ABC-042", "regex", 1.0)}
+    _apply_mapping_to_template(p, mapping, schemas, out)
+
+    text = "\n".join(par.text for par in Document(str(out)).paragraphs)
+    assert "{{CODIGO}}" not in text
+    assert "{{" not in text
+    assert "}}" not in text
+    assert "ABC-042" in text
+
+
+def test_replace_tokens_handles_multiple_tokens_split_across_runs(tmp_path):
+    p = tmp_path / "x.docx"
+    doc = Document()
+    _add_fragmented_paragraph(doc, ["Codigo: {{", "CODIGO", "}}, Data: ", "{{DATA}}"])
+    doc.save(str(p))
+
+    out = tmp_path / "out.docx"
+    schemas = [
+        FieldSchema("CODIGO", "{{CODIGO}}", "mustache"),
+        FieldSchema("DATA", "{{DATA}}", "mustache"),
+    ]
+    mapping = {
+        "CODIGO": MappingResult("CODIGO", "ABC-099", "regex", 1.0),
+        "DATA": MappingResult("DATA", "2026-04-26", "regex", 1.0),
+    }
+    _apply_mapping_to_template(p, mapping, schemas, out)
+
+    text = "\n".join(par.text for par in Document(str(out)).paragraphs)
+    assert "{{CODIGO}}" not in text
+    assert "{{DATA}}" not in text
+    assert "ABC-099" in text
+    assert "2026-04-26" in text
+
+
+def test_replace_tokens_in_table_cells_with_fragmented_runs(tmp_path):
+    """Same fragmentation can happen inside table cells."""
+    p = tmp_path / "x.docx"
+    doc = Document()
+    table = doc.add_table(rows=1, cols=2)
+    cell = table.rows[0].cells[0]
+    cell.text = ""  # clear default
+    para = cell.paragraphs[0]
+    for fragment in ("Cliente: {{", "CLIENTE", "}}"):
+        para.add_run(fragment)
+    doc.save(str(p))
+
+    out = tmp_path / "out.docx"
+    schemas = [FieldSchema("CLIENTE", "{{CLIENTE}}", "mustache")]
+    mapping = {"CLIENTE": MappingResult("CLIENTE", "Empresa Alpha", "regex", 1.0)}
+    _apply_mapping_to_template(p, mapping, schemas, out)
+
+    out_doc = Document(str(out))
+    cell_text = "\n".join(para.text for para in out_doc.tables[0].rows[0].cells[0].paragraphs)
+    assert "{{CLIENTE}}" not in cell_text
+    assert "Empresa Alpha" in cell_text
+
+
+def test_replace_tokens_no_op_when_no_token_present(tmp_path):
+    p = tmp_path / "x.docx"
+    doc = Document()
+    doc.add_paragraph("Plain paragraph without placeholders.")
+    doc.save(str(p))
+
+    out = tmp_path / "out.docx"
+    schemas: list[FieldSchema] = []
+    _apply_mapping_to_template(p, {}, schemas, out)
+
+    text = "\n".join(par.text for par in Document(str(out)).paragraphs)
+    assert text == "Plain paragraph without placeholders."
+
+
+def test_replace_tokens_in_paragraph_helper_directly():
+    """Unit test on the helper without going through file IO."""
+    doc = Document()
+    p = doc.add_paragraph()
+    for frag in ("Hello ", "{{NAME", "}}, welcome"):
+        p.add_run(frag)
+    _replace_tokens_in_paragraph(p, {"{{NAME}}": "Luiz"})
+    assert p.text == "Hello Luiz, welcome"
 
 
 # Suppress unused import warning

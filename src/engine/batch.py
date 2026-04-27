@@ -153,6 +153,58 @@ def _classify_tier(
     return "high"
 
 
+def _replace_tokens_in_paragraph(
+    paragraph,  # type: ignore[no-untyped-def]
+    replacements: dict[str, str],
+) -> None:
+    """Replace every key of ``replacements`` with its value inside *paragraph*.
+
+    Two-pass strategy:
+
+    1. Per-run replacement — when a token sits within a single ``<w:r>`` it is
+       replaced in place, preserving the run's formatting.
+    2. Paragraph-level fallback — when the token spans multiple runs (which
+       Word produces routinely on edited templates: ``{{`` in run A,
+       ``NAME`` in run B, ``}}`` in run C), pass 1 misses it. Pass 2 builds
+       the concatenated paragraph text, applies remaining replacements, drops
+       the result into the first run, and clears the rest. This loses
+       run-level formatting variations within the replaced span but keeps
+       paragraph-level formatting (alignment, style, spacing).
+    """
+    if not paragraph.runs:
+        return
+
+    # Pass 1 — per-run replacement (preserves intra-paragraph formatting).
+    for run in paragraph.runs:
+        original = run.text
+        if not original:
+            continue
+        new_text = original
+        for token, value in replacements.items():
+            if token in new_text:
+                new_text = new_text.replace(token, value)
+        if new_text != original:
+            run.text = new_text
+
+    # Pass 2 — paragraph-level fallback for tokens that survived because they
+    # span multiple runs.
+    full_text = paragraph.text
+    needs_merge = any(token in full_text for token in replacements)
+    if not needs_merge:
+        return
+
+    merged = full_text
+    for token, value in replacements.items():
+        if token in merged:
+            merged = merged.replace(token, value)
+    if merged == full_text:
+        return
+
+    paragraph.runs[0].text = merged
+    for run in paragraph.runs[1:]:
+        run.text = ""
+
+
 def _apply_mapping_to_template(
     template_path: Path,
     mapping: dict[str, MappingResult],
@@ -163,7 +215,8 @@ def _apply_mapping_to_template(
 
     Copies the template ``.docx`` to ``output_path`` and replaces every
     placeholder token with the mapped value (or empty string when missing).
-    Avoids depending on the legacy preset-bundle renderer.
+    Handles tokens fragmented across multiple ``<w:r>`` runs — a common
+    failure mode of naive renderers on Word-edited templates.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(template_path, output_path)
@@ -176,24 +229,14 @@ def _apply_mapping_to_template(
         for s in schemas
     }
 
-    def _replace_in_runs(runs) -> None:  # type: ignore[no-untyped-def]
-        for run in runs:
-            text = run.text
-            new_text = text
-            for token, value in replacements.items():
-                if token in new_text:
-                    new_text = new_text.replace(token, value)
-            if new_text != text:
-                run.text = new_text
-
     for paragraph in doc.paragraphs:
-        _replace_in_runs(paragraph.runs)
+        _replace_tokens_in_paragraph(paragraph, replacements)
 
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for paragraph in cell.paragraphs:
-                    _replace_in_runs(paragraph.runs)
+                    _replace_tokens_in_paragraph(paragraph, replacements)
 
     doc.save(str(output_path))
     return output_path

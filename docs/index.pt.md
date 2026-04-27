@@ -89,7 +89,7 @@ Path/bytes in, paths/bytes/dataclasses out. Sem framework web, ORM, app layer. P
 
 ## Casos de uso
 
-- Industrial: padronizar 400 laudos de manutenção pro template corporativo.
+- Industrial: padronizar laudos de manutenção pro template corporativo (NR-12, NR-13).
 - Jurídico: normalização de cláusulas de contrato com audit trail.
 - Governo / regulado: processamento de formulários com `local_only=True` + PII masking.
 - Migração: trazer documentos legados pro padrão corporativo novo.

@@ -17,15 +17,23 @@ from engine.pattern_inference import infer_field_patterns
 # ===== registry =====
 
 
-def test_list_formats_returns_all_5():
+_ALL_FORMATS = [
+    "abnt_artigo",
+    "abnt_tcc",
+    "abnt_referencia",
+    "abnt_relatorio_tecnico",
+    "laudo_nr12",
+    "nr13",
+    "nr35",
+    "ata_reuniao",
+    "contrato_simples",
+    "procuracao_simples",
+]
+
+
+def test_list_formats_returns_all_10():
     names = list_formats()
-    assert set(names) == {
-        "abnt_artigo",
-        "abnt_tcc",
-        "abnt_referencia",
-        "laudo_nr12",
-        "contrato_simples",
-    }
+    assert set(names) == set(_ALL_FORMATS)
 
 
 def test_load_format_returns_format_object():
@@ -46,7 +54,7 @@ def test_describe_formats_returns_serializable_list():
     desc = describe_formats()
     serialized = json.dumps(desc)
     parsed = json.loads(serialized)
-    assert len(parsed) == 5
+    assert len(parsed) == 10
     for entry in parsed:
         assert "name" in entry
         assert "title" in entry
@@ -58,7 +66,7 @@ def test_describe_formats_returns_serializable_list():
 
 @pytest.mark.parametrize(
     "name",
-    ["abnt_artigo", "abnt_tcc", "abnt_referencia", "laudo_nr12", "contrato_simples"],
+    _ALL_FORMATS,
 )
 def test_format_has_3_gold_docs(name):
     fmt = load_format(name)
@@ -67,7 +75,7 @@ def test_format_has_3_gold_docs(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["abnt_artigo", "abnt_tcc", "abnt_referencia", "laudo_nr12", "contrato_simples"],
+    _ALL_FORMATS,
 )
 def test_format_has_at_least_4_schemas(name):
     fmt = load_format(name)
@@ -76,7 +84,7 @@ def test_format_has_at_least_4_schemas(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["abnt_artigo", "abnt_tcc", "abnt_referencia", "laudo_nr12", "contrato_simples"],
+    _ALL_FORMATS,
 )
 def test_format_field_examples_have_3_each(name):
     fmt = load_format(name)
@@ -86,7 +94,7 @@ def test_format_field_examples_have_3_each(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["abnt_artigo", "abnt_tcc", "abnt_referencia", "laudo_nr12", "contrato_simples"],
+    _ALL_FORMATS,
 )
 def test_format_examples_appear_in_gold_docs(name):
     """Each example value must be findable in at least one gold doc.
@@ -103,7 +111,7 @@ def test_format_examples_appear_in_gold_docs(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["abnt_artigo", "abnt_tcc", "abnt_referencia", "laudo_nr12", "contrato_simples"],
+    _ALL_FORMATS,
 )
 def test_format_conformity_weights_sum_close_to_one(name):
     fmt = load_format(name)
@@ -116,7 +124,7 @@ def test_format_conformity_weights_sum_close_to_one(name):
 
 @pytest.mark.parametrize(
     "name",
-    ["abnt_artigo", "abnt_tcc", "abnt_referencia", "laudo_nr12", "contrato_simples"],
+    _ALL_FORMATS,
 )
 def test_format_pattern_inference_produces_regexes(name):
     fmt = load_format(name)
@@ -201,8 +209,31 @@ def test_format_is_frozen():
 
 def test_all_format_modules_export_FORMAT():
     """Every module under engine.formats/ exposing a format must export FORMAT."""
-    from engine.formats import abnt_artigo, abnt_referencia, abnt_tcc, contrato_simples, laudo_nr12
+    from engine.formats import (
+        abnt_artigo,
+        abnt_referencia,
+        abnt_relatorio_tecnico,
+        abnt_tcc,
+        ata_reuniao,
+        contrato_simples,
+        laudo_nr12,
+        nr13,
+        nr35,
+        procuracao_simples,
+    )
 
-    for module in (abnt_artigo, abnt_tcc, abnt_referencia, laudo_nr12, contrato_simples):
+    modules = (
+        abnt_artigo,
+        abnt_tcc,
+        abnt_referencia,
+        abnt_relatorio_tecnico,
+        laudo_nr12,
+        nr13,
+        nr35,
+        ata_reuniao,
+        contrato_simples,
+        procuracao_simples,
+    )
+    for module in modules:
         assert hasattr(module, "FORMAT")
         assert isinstance(module.FORMAT, Format)

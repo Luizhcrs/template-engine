@@ -9,8 +9,13 @@ Bundled formats:
 - ``abnt_artigo`` - ABNT NBR 6022 (artigo cientifico)
 - ``abnt_tcc`` - ABNT NBR 14724 (TCC, dissertacao, tese)
 - ``abnt_referencia`` - ABNT NBR 6023 (referencias bibliograficas)
+- ``abnt_relatorio_tecnico`` - ABNT NBR 10719 (relatorio tecnico-cientifico)
 - ``laudo_nr12`` - NR-12 (laudo de seguranca em maquinas)
+- ``nr13`` - NR-13 (caldeiras e vasos de pressao)
+- ``nr35`` - NR-35 (permissao de trabalho em altura)
+- ``ata_reuniao`` - ata de reuniao corporativa generica
 - ``contrato_simples`` - contrato bilateral generico
+- ``procuracao_simples`` - procuracao por instrumento particular
 
 Adding a new format: drop a module under ``engine/formats/`` exposing a
 ``FORMAT`` constant of type :class:`Format`, then add it to the ``_REGISTRY``
@@ -22,9 +27,14 @@ from __future__ import annotations
 from engine.formats import (
     abnt_artigo,
     abnt_referencia,
+    abnt_relatorio_tecnico,
     abnt_tcc,
+    ata_reuniao,
     contrato_simples,
     laudo_nr12,
+    nr13,
+    nr35,
+    procuracao_simples,
 )
 from engine.formats._base import Format
 
@@ -32,8 +42,13 @@ _REGISTRY: dict[str, Format] = {
     abnt_artigo.FORMAT.name: abnt_artigo.FORMAT,
     abnt_tcc.FORMAT.name: abnt_tcc.FORMAT,
     abnt_referencia.FORMAT.name: abnt_referencia.FORMAT,
+    abnt_relatorio_tecnico.FORMAT.name: abnt_relatorio_tecnico.FORMAT,
     laudo_nr12.FORMAT.name: laudo_nr12.FORMAT,
+    nr13.FORMAT.name: nr13.FORMAT,
+    nr35.FORMAT.name: nr35.FORMAT,
+    ata_reuniao.FORMAT.name: ata_reuniao.FORMAT,
     contrato_simples.FORMAT.name: contrato_simples.FORMAT,
+    procuracao_simples.FORMAT.name: procuracao_simples.FORMAT,
 }
 
 

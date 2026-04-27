@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed — Wave I
+
+- **Renderer: tokens fragmented across runs.** `batch._apply_mapping_to_template` now uses a two-pass strategy: per-run replacement (preserves intra-paragraph formatting) followed by paragraph-level fallback when a token spans multiple `<w:r>` elements (the common case in Word-edited templates). 6 new tests cover token-in-single-run, fragmented `{{X}}` across 3+ runs, multiple fragmented tokens, table cells, no-op, and direct unit on `_replace_tokens_in_paragraph`.
+
+### Added — Wave I
+
+- **5 new bundled formats** (10 total now): `abnt_relatorio_tecnico` (NBR 10719), `nr13` (caldeiras / vasos de pressão), `nr35` (permissão de trabalho em altura), `ata_reuniao` (genérico), `procuracao_simples` (instrumento particular).
+- **`.github/workflows/publish.yml`** — automated PyPI release on `v*.*.*` tag push using PyPA trusted publishing (no `PYPI_API_TOKEN` secret needed once the project is configured at <https://pypi.org/manage/account/publishing/>).
+
+### Removed — Wave I
+
+- **`examples/`** moved out of the main repo to keep the lib focused. POCs continue to exist as reference but are no longer shipped with the package. Prior examples (`08`-`14`) are preserved in git history.
+
+### Changed — Wave I
+
+- **README/README.pt + docs/index.pt.md**: dropped any mention of specific customer numbers, paying customers, or unverified case-study figures. The cost-by-tier table remains as the only quantitative claim.
+- ``__version__`` bumped to ``0.7.0``.
+
 ### Added — Wave H (bundled formats library)
 
 - **`engine.formats`** subpackage with 5 ready-to-use document formats. Each format ships :class:`FieldSchema` list, ``field_examples`` for ``pattern_inference``, 3 gold docs, conformity weight overrides, required headings, and a recommended threshold.
@@ -40,7 +58,7 @@ Public API exports added: ``AuditLog``, ``InjectionMatch``, ``PIIMask``, ``Promp
 ### Changed
 
 - ``__version__`` bumped to ``0.5.0`` (Wave G ships security primitives).
-- README rewritten — leads with the differential ("audit-grade, regex-first, LLM-as-judge, zero LibreOffice"), adds an ASCII pipeline diagram, an operating-cost table by tier, a real case study (400 industrial reports, 18 LLM calls, $0.011 total), and a "Design decisions" section. PT-BR mirror updated.
+- README rewritten — leads with the differential ("audit-grade, regex-first, LLM-as-judge, zero LibreOffice"), adds an ASCII pipeline diagram, an operating-cost table by tier, and a "Design decisions" section. PT-BR mirror updated.
 
 ### Added — Wave F (conformity validator multi-dim)
 

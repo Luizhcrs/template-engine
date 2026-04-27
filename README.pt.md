@@ -95,18 +95,12 @@ Custo por tier (Gemini Flash, ~3K tokens input por LLM call):
 | Com `semantic_diff` ligado | 2 | ~$0.0012 |
 | Com `check_conformity(dimensions=[text, design])` | 4 | ~$0.0024 |
 
-## Caso real: laudos de manutenção industrial
-
-Empresa de manutenção recebe 400 laudos por trimestre de vendors terceiros. Cada laudo é um Word doc com layout próprio do vendor, mas todos têm que sair no template padrão da empresa (cabeçalho / seções / bloco de assinatura / tabelas obrigatórias).
-
-Antes: analista reformatava 12 docs/dia manualmente. Backlog de 3 semanas.
-
-Com template-engine:
+## Rodada típica
 
 ```bash
 template-engine normalize \
-  --template ./padrao_2026.docx \
-  --source-dir ./entrada_q1/ \
+  --template ./padrao.docx \
+  --source-dir ./entrada/ \
   --output-dir ./normalizados/ \
   --provider gemini \
   --gold-doc gold_01.docx --gold-doc gold_02.docx --gold-doc gold_03.docx \
@@ -114,20 +108,14 @@ template-engine normalize \
   --report ./report.json
 ```
 
-Resultado de uma rodada real (`report.json`):
+O `report.json` agrupa cada input num tier:
 
-```
-high     382  (regex resolveu tudo, sem critical diff)
-medium    13  (LLM preencheu 1-2 campos free-text, sem critical)
-low        4  (placeholder órfão ou campo obrigatório missing — revisar)
-error      1  (docx fonte corrompido)
+- **`high`** — regex resolveu tudo, sem critical diff. Ship sem review.
+- **`medium`** — LLM preencheu pelo menos 1 campo free-text, ou warning-level diff. Spot-check.
+- **`low`** — placeholder órfão, campo obrigatório missing, ou critical diff. Abrir e editar.
+- **`error`** — extração ou render falhou.
 
-llm_call_count: 18      ← 382/400 docs custaram zero LLM tokens
-total_runtime: 47s      ← async, 4 workers
-total_cost:    $0.011   ← Gemini Flash nos 18 docs que tocaram LLM
-```
-
-Os 4 docs `low` foram os únicos que analista abriu. Os `high` foram direto pro cliente.
+O custo depende da fração de docs que o tier regex resolve. Quando cobre todos os required, o LLM não é chamado e a rodada é grátis; caso contrário o LLM é invocado uma vez por doc com missing fields e (opcional) uma vez no semantic-diff QA.
 
 ## Instalação
 
@@ -275,7 +263,7 @@ ruff check . && ruff format --check . && mypy src/engine && pytest
 
 ## Roadmap
 
-[ROADMAP.md](ROADMAP.md) — Wave A/D/E/F/G shipped; v0.5 stable. Próximas ondas dependem de validação com cliente pagante.
+[ROADMAP.md](ROADMAP.md) — Wave A/D/E/F/G/H shipped na v0.6.
 
 ## Contribuir
 
