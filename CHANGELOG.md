@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-04-27
+
+### Fixed — vertical-gap regression
+
+The renderer was leaving every unused empty body slot in place, so
+sections that filled less content than the template reserved (and the
+HISTÓRICO tail beyond the last heading) showed as long blank runs in
+Word. Output had 185 paragraphs vs DOcStream's 180; 24 were empty (vs
+DOcStream's 10).
+
+Two new post-render passes:
+
+- **Prune unused body slots**: after inserting content, walk the
+  siblings of the last filled anchor; delete every empty paragraph up
+  to the next heading. Catches the per-section trailing blank slots.
+- **Collapse empty-paragraph runs**: walk the document body once;
+  whenever 2+ consecutive empty paragraphs appear at the same nesting
+  level, drop all but the first. Catches the HISTÓRICO tail (no next
+  heading to stop at) and any other long blank run. Paragraphs inside
+  table cells are left alone — cell layout depends on paragraph count.
+
+### Result on Engeman dados.docx
+
+| Aspect | v0.9.3 | v0.9.4 | DOcStream |
+| --- | --- | --- | --- |
+| Total paragraphs | 185 | 172 | 180 |
+| Empty paragraphs | 24 | 11 | 10 |
+| Empty slots between filled section and next heading | yes | gone | gone |
+| Empty paragraphs after last heading (HISTÓRICO tail) | 11 | 1 | 1 |
+
+### Tests
+
+1 new test (`test_renderer_collapses_consecutive_empty_paragraphs`),
+**342 passing**.
+
 ## [0.9.3] - 2026-04-27
 
 ### Added — DOcStream-style heuristics for industrial templates

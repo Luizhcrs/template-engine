@@ -850,6 +850,47 @@ def test_classify_history_columns_returns_none_when_no_change_col():
     assert _classify_history_columns(["FOO", "BAR"]) is None
 
 
+# ===== renderer prune + collapse =====
+
+
+def test_renderer_collapses_consecutive_empty_paragraphs(tmp_path):
+    """Multiple consecutive empty paragraphs in the body should collapse
+    to at most one to avoid visual gaps in Word.
+    """
+    p = tmp_path / "tpl.docx"
+    doc = Document()
+    doc.add_paragraph("OBJETIVO")  # heading
+    # 5 empty paragraphs the user is supposed to fill
+    for _ in range(5):
+        doc.add_paragraph("")
+    doc.add_paragraph("APLICACAO")  # heading
+    doc.add_paragraph("")
+    doc.add_paragraph("")
+    doc.save(str(p))
+
+    out = tmp_path / "out.docx"
+    sections = parse_docx(p)
+    render_section_content(
+        p,
+        out,
+        docx_sections=sections,
+        content_by_target={"OBJETIVO": "Body para OBJETIVO"},
+    )
+    out_doc = Document(str(out))
+    paras = list(out_doc.paragraphs)
+    # Find OBJETIVO heading and its filled body line
+    texts = [p.text for p in paras]
+    obj_idx = texts.index("OBJETIVO")
+    apl_idx = texts.index("APLICACAO")
+    # Between OBJETIVO and APLICACAO, only the body line should remain
+    # (no leftover empty body slots).
+    between = texts[obj_idx + 1 : apl_idx]
+    non_empty_between = [t for t in between if t.strip()]
+    empty_between = [t for t in between if not t.strip()]
+    assert non_empty_between == ["Body para OBJETIVO"]
+    assert len(empty_between) == 0
+
+
 # ===== Phase 2: table_filler subheaders + duplicate primary headers =====
 
 

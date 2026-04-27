@@ -83,8 +83,10 @@ def render_section_content(
     doc = Document(str(template_path))
     paragraphs = list(doc.paragraphs)
 
-    # Build a quick {target_name -> heading_paragraph_idx} map
     heading_idx = {s.name: s.heading_paragraph_idx for s in docx_sections}
+    # Track each anchor + the index of the LAST inserted paragraph in the
+    # source paragraphs list so we can prune leftover empties later.
+    last_filled_idx_by_target: dict[str, int] = {}
 
     for target_name, content in content_by_target.items():
         if not content.strip():
@@ -93,14 +95,15 @@ def render_section_content(
         if idx is None:
             continue
 
-        # Find the first empty body paragraph between this heading and the next
         next_heading_idx = _next_heading_idx(idx, docx_sections)
         anchor = None
+        anchor_idx: int | None = None
         for j in range(idx + 1, next_heading_idx if next_heading_idx else len(paragraphs)):
             if not paragraphs[j].text.strip():
                 anchor = paragraphs[j]
+                anchor_idx = j
                 break
-        if anchor is None:
+        if anchor is None or anchor_idx is None:
             continue
 
         lines = _split_into_lines(content)
@@ -110,13 +113,10 @@ def render_section_content(
         _strip_jc(anchor._p)
         _set_paragraph_text(anchor, lines[0])
 
-        # Append the rest as cloned siblings (insertion order preserved
-        # by adding each new paragraph immediately AFTER the previous one).
         cursor = anchor._p
         for line in lines[1:]:
             new_p = deepcopy(anchor._p)
             _strip_jc(new_p)
-            # Walk <w:t> directly on the cloned XML (no python-docx wrapper).
             ts = new_p.findall(f".//{_W_NS}t")
             if ts:
                 ts[0].text = line
@@ -125,7 +125,90 @@ def render_section_content(
             cursor.addnext(new_p)
             cursor = new_p
 
+        last_filled_idx_by_target[target_name] = anchor_idx
+
+    # Prune empty body paragraphs left over between the last filled anchor
+    # and the next heading. The template ships with multiple blank slots
+    # per section (so the user can paste arbitrary content); keeping the
+    # ones we did not use produces large vertical gaps in Word.
+    _prune_unused_body_slots(
+        paragraphs,
+        docx_sections,
+        last_filled_idx_by_target,
+    )
+    # Collapse any run of >1 empty paragraphs in the body to a single
+    # empty so end-of-document filler space and "between sections we
+    # didn't fill" gaps don't stretch the output vertically.
+    _collapse_empty_paragraph_runs(doc)
+
     doc.save(str(output_path))
+
+
+def _collapse_empty_paragraph_runs(doc) -> None:  # type: ignore[no-untyped-def]
+    """Walk the document body once; whenever 2+ consecutive empty
+    paragraphs appear at the same nesting level, drop all but the first.
+
+    Paragraphs inside tables are left alone — table cells are sensitive
+    to paragraph count for cell sizing.
+    """
+    body = doc.element.body
+    _collapse_in_element(body)
+
+
+def _collapse_in_element(parent) -> None:  # type: ignore[no-untyped-def]
+    """Walk *parent*'s direct children; collapse consecutive empty
+    ``<w:p>`` runs (siblings only). Recurse into ``<w:tc>`` cells'
+    inner bodies — but skip the table cell collapse to preserve cell
+    layout.
+    """
+    consecutive_empty: list = []  # type: ignore[type-arg]
+    for child in list(parent):
+        tag = child.tag.rsplit("}", 1)[-1]
+        if tag == "p":
+            text_content = "".join(t.text or "" for t in child.findall(f".//{_W_NS}t"))
+            if not text_content.strip():
+                consecutive_empty.append(child)
+                if len(consecutive_empty) > 1:
+                    parent.remove(child)
+                continue
+            consecutive_empty = []
+        else:
+            consecutive_empty = []
+
+
+def _prune_unused_body_slots(
+    paragraphs: list,  # type: ignore[type-arg]
+    docx_sections: list[DocxSection],
+    last_filled_idx_by_target: dict[str, int],
+) -> None:
+    """Delete blank body paragraphs that follow a filled anchor up until
+    the next heading. Anchors carry section formatting, so we can't drop
+    EVERYTHING — only paragraphs strictly between our last inserted
+    content and the next heading.
+    """
+    heading_idx_by_name = {s.name: s.heading_paragraph_idx for s in docx_sections}
+    for target_name, anchor_idx in last_filled_idx_by_target.items():
+        idx = heading_idx_by_name.get(target_name)
+        if idx is None:
+            continue
+        next_idx = _next_heading_idx(idx, docx_sections)
+        if next_idx is None:
+            continue
+        # Anchor + cloned-next-paragraphs live AFTER anchor_idx in the doc
+        # tree (we used addnext). The paragraphs *list* is stale — the
+        # original "blank slot" indices stay valid, but new clones are
+        # inserted between them. Walk the live siblings instead.
+        anchor_p = paragraphs[anchor_idx]._p
+        sibling = anchor_p.getnext()
+        while sibling is not None and sibling.tag.endswith("}p"):
+            text_content = "".join(t.text or "" for t in sibling.findall(f".//{_W_NS}t"))
+            if text_content.strip():
+                # The next heading's text is non-empty too, so we stop.
+                break
+            parent = sibling.getparent()
+            nxt = sibling.getnext()
+            parent.remove(sibling)
+            sibling = nxt
 
 
 def _next_heading_idx(current_idx: int, sections: list[DocxSection]) -> int | None:
