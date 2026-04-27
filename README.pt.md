@@ -113,9 +113,35 @@ report = map_sections(
 print(f"sections mapeadas: {report.mapped_count}; tabelas: {report.tables_filled}")
 ```
 
-End-to-end em Engeman dados.docx com zero config: 7/8 sections mapeadas, header preenchido (`IT.PRO.URE.387.0005`, `Rev. 01`, `Elaborado: ...`, `(PARTIDA DA ÁREA DE SÍNTESE)`), tabela Histórico extraída das revisões da fonte, tabela Responsabilidade populada dos parágrafos `Compete à gerência` / `Compete aos supervisores`.
+End-to-end em Engeman dados.docx com zero config (rules mode): 7/8 sections mapeadas, header preenchido (`IT.PRO.URE.387.0005`, `Rev. 01`, `Elaborado: ...`, `(PARTIDA DA ÁREA DE SÍNTESE)`), tabela Histórico extraída das revisões da fonte, tabela Responsabilidade populada dos parágrafos `Compete à gerência` / `Compete aos supervisores`.
 
-Veja [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) para o pipeline completo (parser → resolver de numeração → matcher de similaridade → renderer com decoração por tipo de linha → tabelas → header filler).
+### LLM mode vendor-agnóstico (Wave M)
+
+`map_sections_async(..., mode="llm", llm=provider)` faz 1 chamada LLM que cobre QUALQUER par template+source. Sem heurística vendor hardcoded. Validado em:
+
+- **Par Engeman** (PT-BR, `XXXX`/`(TITULO)`/`Elaborado:`/etc, tabela `Atividades | Responsabilidade | Responsabilidade`) — paridade DOcStream.
+- **Par Vendor B** (corporate inglês, `{{DOC_CODE}}`/`[Title]`/`Author:`/`Reviewer:`, tabela `Activity | Owner`) — fixtures em `tests/vendor_b/`. Texto da migration row segue idioma da fonte.
+
+```python
+import asyncio
+from pathlib import Path
+from engine.llm.openai_provider import OpenAIProvider
+from engine.section_mapper import map_sections_async
+
+async def run():
+    provider = OpenAIProvider(api_key="sk-...", model="gpt-4o", timeout=300.0)
+    await map_sections_async(
+        template_path=Path("template.docx"),
+        source_path=Path("source.docx"),
+        output_path=Path("output.docx"),
+        mode="llm",
+        llm=provider,
+    )
+
+asyncio.run(run())
+```
+
+Veja [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) para o pipeline completo + os profilers / auto-mapper que dirigem o Wave M.
 
 ## Rodada típica
 

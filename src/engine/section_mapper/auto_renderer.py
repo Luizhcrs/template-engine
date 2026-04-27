@@ -32,6 +32,7 @@ if TYPE_CHECKING:
 
 
 _HEADER_FILE_RE = re.compile(r"^word/header\d*\.xml$")
+_BODY_FILE_RE = re.compile(r"^word/document\.xml$")
 
 
 def apply_mapping_plan(
@@ -61,6 +62,10 @@ def apply_mapping_plan(
 
     if plan.header_substitutions:
         _apply_header_substitutions(output_path, plan.header_substitutions)
+        # Body placeholders (e.g. ``{{DOC_CODE}}``, ``[Title]`` on the
+        # cover page) get the same substitution map applied to
+        # ``word/document.xml``.
+        _apply_body_substitutions(output_path, plan.header_substitutions)
 
     return filled
 
@@ -117,6 +122,39 @@ def _apply_header_substitutions(docx_path: Path, subs: dict[str, str]) -> None:
             for item in zin.infolist():
                 data = zin.read(item.filename)
                 if _HEADER_FILE_RE.match(item.filename):
+                    text = data.decode("utf-8")
+                    text = _replace_in_runs(text, subs)
+                    data = text.encode("utf-8")
+                zout.writestr(item, data)
+        shutil.move(str(tmp_path), str(docx_path))
+    except Exception:
+        if tmp_path.exists():
+            tmp_path.unlink()
+        raise
+
+
+def _apply_body_substitutions(docx_path: Path, subs: dict[str, str]) -> None:
+    """Same in-run substitution as the header path, but applied to
+    ``word/document.xml`` so cover-page placeholders get filled too.
+    """
+    if not subs:
+        return
+
+    with tempfile.NamedTemporaryFile(
+        suffix=".docx",
+        delete=False,
+        dir=str(docx_path.parent),
+    ) as tmp:
+        tmp_path = Path(tmp.name)
+
+    try:
+        with (
+            zipfile.ZipFile(str(docx_path), "r") as zin,
+            zipfile.ZipFile(str(tmp_path), "w", zipfile.ZIP_DEFLATED) as zout,
+        ):
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if _BODY_FILE_RE.match(item.filename):
                     text = data.decode("utf-8")
                     text = _replace_in_runs(text, subs)
                     data = text.encode("utf-8")

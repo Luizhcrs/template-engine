@@ -240,6 +240,64 @@ print(f"orphan placeholders: {report.orphan_paragraphs}")
 
 `SectionMappingReport.to_dict()` returns a JSON-serializable summary suitable for audit logs.
 
+## Operating modes
+
+| Mode | When | Cost (Gemini Flash 2.5) |
+| --- | --- | --- |
+| `rules` (default in `map_sections`) | PT-BR / Engeman style; bit-for-bit reproducibility | $0.0000 |
+| `llm` (`map_sections_async(mode="llm", llm=...)`) | any vendor / language; needs provider | ~$0.001 |
+| `hybrid` (`mode="hybrid", llm=...`) | rules first, LLM tops up gaps | ~$0.001 when gaps |
+
+### LLM mode end-to-end
+
+```python
+import asyncio
+from pathlib import Path
+
+from engine.llm.openai_provider import OpenAIProvider
+from engine.section_mapper import map_sections_async
+
+async def main() -> None:
+    provider = OpenAIProvider(api_key="sk-...", model="gpt-4o", timeout=300.0)
+    report = await map_sections_async(
+        template_path=Path("template.docx"),
+        source_path=Path("source.docx"),
+        output_path=Path("output.docx"),
+        mode="llm",
+        llm=provider,
+    )
+    print(f"sections in plan: {len(report.matches)}")
+    print(f"tables filled: {report.tables_filled}")
+
+asyncio.run(main())
+```
+
+The LLM call returns a `MappingPlan` covering every detected
+placeholder (header + body), every template heading, and every empty
+table. Failure paths fall back to an empty plan so callers can chain a
+rules-mode retry.
+
+### Cross-vendor validation (Wave M)
+
+`tests/vendor_b/` ships a synthetic English corporate template that
+differs from the Engeman pair on every dimension:
+
+| Dimension | Engeman (vendor A) | Vendor B (English corporate) |
+| --- | --- | --- |
+| Language | Portuguese | English |
+| Header placeholders | `XXXX`, `(TITULO)`, `Elaborado:`, `Aprovado:`, `Data:`, `Rev. 00` | `{{DOC_CODE}}`, `[Title]`, `Author:`, `Reviewer:`, `Issue Date:` |
+| Section taxonomy | `OBJETIVO`, `APLICAÇÃO`, `SISTEMÁTICA`, ... | `PURPOSE`, `SCOPE`, `PROCEDURE`, ... |
+| Tables | `Atividades \| Responsabilidade \| Responsabilidade` (duplicate primary) + `Rev. \| Data \| Alteração` | `Activity \| Owner` (single column) + `# \| Date \| Description` |
+| Migration row text | `Migração para o novo modelo padrão` | `Migration to new standard template` (LLM follows source language) |
+
+Both pairs round-trip to a fully populated output via the same
+`mode="llm"` call, no synonym-table extension, no per-vendor rule
+edits. Regenerate the fixtures with:
+
+```bash
+python scripts/build_vendor_b_fixtures.py
+```
+
 ## Limits
 
 See [REAL-WORLD-LIMITS.md][limits] for the full list. Notable items for `section_mapper`:

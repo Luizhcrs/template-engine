@@ -106,17 +106,41 @@ The plan covers three things:
    for that placeholder.
 
 2. **Section content** — for every TEMPLATE heading, decide what body
-   text from the SOURCE goes under it. Keep markers (5.1., 6.2.1.,
-   bullet "•" / letter "a.", "b." sequences) intact when they are part
-   of the source content. If the source has nothing for a section,
-   leave its content empty.
+   text from the SOURCE goes under it. The SOURCE may carry the content
+   as already-segmented ``sections`` (each with name + content) OR, when
+   heading detection failed (e.g. English / Title-case sources), as a
+   flat ``body_paragraphs`` list — in which case YOU segment it: pick
+   each TEMPLATE heading and find the consecutive run of source
+   paragraphs that belong under it. Keep markers intact (5.1., 6.2.1.,
+   bullet "•" / letter "a.", "b." sequences) when they are part of the
+   source content. Reuse rendered numbering if the source provides it;
+   otherwise prepend "a.", "b.", "c." to consecutive list-style items
+   you identify, and "•" to consecutive reference-style items. Sub-
+   headings that the source uses to break a section internally (like
+   "Pre-shutdown checks" / "Shutdown execution" inside a "PROCEDURE"
+   block) should be preserved as their own line, ideally with a
+   sub-section number (e.g. "5.1. Pre-shutdown checks") inferred from
+   the heading position.
+
+   IMPORTANT: do NOT repeat the source's own heading line at the top of
+   the section content — the template's heading is already there. Skip
+   source heading lines like "Objective" / "Applicability" /
+   "Reference Documents" / "Glossary" / "Method" / "Roles" when they
+   are merely the source's wording for a TEMPLATE heading you already
+   matched.
+
+   If the source has nothing for a template section, leave its content
+   empty.
 
 3. **Table data** — for every TEMPLATE empty table, decide rows.
 
    Revision-history tables (any of Rev. / Versão / Data / Alteração /
-   Autor columns): extract them from the source's revision-history
-   table when present, renumber starting at "00", append a final
-   "Migração para o novo modelo padrão" row dated TODAY. Row dicts use
+   Autor / # / Date / Description columns): extract them from the
+   source's revision-history table when present, renumber starting at
+   "00", append a final migration row dated TODAY. The migration row's
+   description text MUST match the SOURCE's language (e.g. "Migração
+   para o novo modelo padrão" for Portuguese sources, "Migration to
+   new standard template" for English sources, etc). Row dicts use
    the primary header strings exactly:
      {"Rev.": "00", "Data": "31/08/2021", "Alteração": "..."}
 

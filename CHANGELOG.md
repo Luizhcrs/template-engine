@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-04-27 — Cross-vendor LLM mode validated
+
+### Added
+
+- **Body-paragraph fallback in `SourceStructure`** — `body_paragraphs:
+  list[str]` carries every non-empty paragraph from the source. The
+  LLM mapper segments this when heading detection fails (English /
+  Title-case sources where `OBJETIVO`-style all-caps headings are
+  absent).
+- **Body placeholder substitution in `auto_renderer`** — the
+  `_apply_body_substitutions` pass walks `word/document.xml` and
+  applies the same in-run substitution map used for headers, so
+  cover-page placeholders (`{{DOC_CODE}}`, `Author:`, `[Title]`, ...)
+  get filled too.
+- **Cross-vendor fixtures** — `tests/vendor_b/{template,source}.docx`
+  and `scripts/build_vendor_b_fixtures.py` regenerate them. Vendor B
+  uses English wording, `{{DOC_CODE}}` / `[Title]` / `Author:` /
+  `Reviewer:` placeholders, and an `Activity | Owner` table — every
+  dimension differs from the Engeman pair.
+
+### Changed — LLM prompt refinements (validated against gpt-4o)
+
+- Source-heading deduplication: explicit instruction not to repeat a
+  source heading line (`Objective`, `Method`, `Glossary`, ...) at the
+  top of the section content when the LLM has already matched it to a
+  template heading.
+- Migration-row language follows the source: `"Migração para o novo
+  modelo padrão"` for Portuguese sources, `"Migration to new standard
+  template"` for English sources, etc. Prior versions hard-wrote the
+  Portuguese phrase regardless of source language.
+- Body-paragraph fallback noted in the prompt: when
+  `source.sections == []` the LLM is told to segment `body_paragraphs`
+  itself, and to infer sub-section numbers (`5.1.`, `5.2.`) from the
+  heading position.
+
+### Result on Vendor B (English corporate)
+
+| Aspect | Output (rules mode) | Output (llm mode) |
+| --- | --- | --- |
+| Header `Document Reference: {{DOC_CODE}}` | unchanged (rules don't know this shape) | `Document Reference: PROC-OPS-2024-007` |
+| Body title page `{{DOC_CODE}}` / `[Title]` / `Author:` / `Reviewer:` / `Issue Date:` | unchanged | all populated from source |
+| Sections (PURPOSE / SCOPE / REFERENCES / DEFINITIONS / PROCEDURE / ROLES / REVISION HISTORY) | empty (English not in synonym table) | all 7 populated from source |
+| Sub-section markers (`5.1. Pre-shutdown checks`, `5.2. Shutdown execution`) | absent | inferred by LLM |
+| List markers (`a.`, `b.`, `c.` reset per sub-section, `•` for references) | absent | applied per content shape |
+| `Activity \| Owner` table | unchanged (single-column shape unknown) | 5 rows, Plant Manager / Shift Supervisor in Owner column |
+| `# \| Date \| Description` history table | unchanged | source row + `Migration to new standard template` row dated today |
+
+### Tests
+
+358 passing. The vendor B fixtures live under `tests/vendor_b/` so a
+follow-up integration test can be added without re-generating.
+
 ## [0.10.1] - 2026-04-27 — Wave M prompt validated against OpenAI gpt-4o
 
 First end-to-end run of the LLM mode against a real provider on the

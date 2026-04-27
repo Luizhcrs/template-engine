@@ -115,9 +115,35 @@ report = map_sections(
 print(f"mapped {report.mapped_count} sections; {report.tables_filled} tables filled")
 ```
 
-End-to-end on Engeman dados.docx with zero config: 7/8 sections mapped, header populated (`IT.PRO.URE.387.0005`, `Rev. 01`, `Elaborado: ...`, `(PARTIDA DA ÁREA DE SÍNTESE)`), Histórico table extracted from source revisions, Responsabilidade table populated from `Compete à gerência` / `Compete aos supervisores` paragraphs.
+End-to-end on Engeman dados.docx with zero config (rules mode): 7/8 sections mapped, header populated (`IT.PRO.URE.387.0005`, `Rev. 01`, `Elaborado: ...`, `(PARTIDA DA ÁREA DE SÍNTESE)`), Histórico table extracted from source revisions, Responsabilidade table populated from `Compete à gerência` / `Compete aos supervisores` paragraphs.
 
-See [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) for the full pipeline (parser → numbering resolver → similarity matcher → renderer with line-kind decoration → tables → header filler).
+### Vendor-agnostic LLM mode (Wave M)
+
+`map_sections_async(..., mode="llm", llm=provider)` runs a single batched LLM call that handles ANY template + source pair. No hardcoded vendor heuristics. Validated against:
+
+- **Engeman pair** (PT-BR, `XXXX`/`(TITULO)`/`Elaborado:`/etc placeholders, `Atividades | Responsabilidade | Responsabilidade` table) — full DOcStream parity.
+- **Vendor B pair** (English corporate, `{{DOC_CODE}}`/`[Title]`/`Author:`/`Reviewer:` placeholders, `Activity | Owner` table) — fixtures in `tests/vendor_b/`. The migration row's text follows the source's language automatically.
+
+```python
+import asyncio
+from pathlib import Path
+from engine.llm.openai_provider import OpenAIProvider
+from engine.section_mapper import map_sections_async
+
+async def run():
+    provider = OpenAIProvider(api_key="sk-...", model="gpt-4o", timeout=300.0)
+    await map_sections_async(
+        template_path=Path("template.docx"),
+        source_path=Path("source.docx"),
+        output_path=Path("output.docx"),
+        mode="llm",
+        llm=provider,
+    )
+
+asyncio.run(run())
+```
+
+See [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) for the full pipeline (parser → numbering resolver → similarity matcher → renderer with line-kind decoration → tables → header filler) and the LLM-mode profilers + auto-mapper that drive Wave M.
 
 ## Typical batch run
 

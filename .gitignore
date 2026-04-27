@@ -26,13 +26,16 @@ htmlcov/
 *.swo
 site/
 out/
-template.docx
-gold.pdf
-dados.pdf
-dados.docx
-doc_exemplo.pdf
-output_engeman.docx
-output*.docx
-resultado_*.docx
+# User-supplied test fixtures at repo root (do not commit)
+/template.docx
+/gold.pdf
+/dados.pdf
+/dados.docx
+/doc_exemplo.pdf
+/output_engeman.docx
+/output*.docx
+/resultado_*.docx
 ~$*.docx
+# Outputs from running the test suite locally
+tests/vendor_b/output_*.docx
 

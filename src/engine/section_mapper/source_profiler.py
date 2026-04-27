@@ -55,6 +55,7 @@ class SourceStructure:
     tables: list[SourceTable]
     header_text_glued: str
     header_text_spaced: str
+    body_paragraphs: list[str]  # flat full-text fallback for LLM
 
     def to_dict(self) -> dict:
         return {
@@ -72,6 +73,7 @@ class SourceStructure:
             "tables": [t.to_dict() for t in self.tables],
             "header_text_glued": self.header_text_glued,
             "header_text_spaced": self.header_text_spaced,
+            "body_paragraphs": list(self.body_paragraphs),
         }
 
 
@@ -80,13 +82,33 @@ def profile_source(source_path: Path) -> SourceStructure:
     sections = _profile_sections(source_path)
     tables = _profile_tables(source_path)
     glued, spaced = _profile_header_text(source_path)
+    body_paragraphs = _profile_body_paragraphs(source_path)
     return SourceStructure(
         source_path=str(source_path),
         sections=sections,
         tables=tables,
         header_text_glued=glued,
         header_text_spaced=spaced,
+        body_paragraphs=body_paragraphs,
     )
+
+
+def _profile_body_paragraphs(source_path: Path) -> list[str]:
+    """Flat list of every non-empty body paragraph.
+
+    Used as a fallback when heading detection fails (English / Title-case
+    sources, free-form documents). The LLM mapper segments this when
+    ``sections`` is empty.
+    """
+    if source_path.suffix.lower() != ".docx":
+        return []
+    try:
+        from docx import Document
+
+        doc = Document(str(source_path))
+    except Exception:
+        return []
+    return [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
 
 
 def _profile_sections(source_path: Path) -> list[TextSection]:
