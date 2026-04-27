@@ -56,62 +56,90 @@ def _detect_line_kind(line: str) -> str:
     return "body"
 
 
-def _style_id_for_kind(kind: str) -> str | None:
-    """Pick a style id (Brazilian-PT or English) per detected kind."""
-    if kind == "subheading":
-        return "Ttulo2"
-    if kind == "subsubheading":
-        return "Ttulo3"
-    return None
+def _add_run_emphasis(  # type: ignore[no-untyped-def]
+    p_elem,
+    *,
+    italic: bool = False,
+    bold: bool = False,
+    color: str | None = None,
+) -> None:
+    """Apply bold / italic / explicit color to every run in the paragraph.
 
-
-def _apply_paragraph_style(p_elem, style_id: str) -> None:  # type: ignore[no-untyped-def]
-    """Set ``<w:pStyle>`` on the paragraph (replacing any existing one)."""
-    pPr = p_elem.find(f"{_W_NS}pPr")
-    if pPr is None:
-        pPr = p_elem.makeelement(f"{_W_NS}pPr", {})
-        p_elem.insert(0, pPr)
-    existing = pPr.find(f"{_W_NS}pStyle")
-    if existing is not None:
-        pPr.remove(existing)
-    pStyle = pPr.makeelement(f"{_W_NS}pStyle", {f"{_W_NS}val": style_id})
-    pPr.insert(0, pStyle)
-
-
-def _add_run_emphasis(p_elem, *, italic: bool = False, bold: bool = False) -> None:  # type: ignore[no-untyped-def]
-    """Wrap each run's rPr with bold/italic flags."""
+    ``color`` is a 6-digit hex string (``"000000"`` for black). When set,
+    overrides any inherited color so headings don't pick up Word's
+    default heading-blue from a Ttulo style.
+    """
     for r in p_elem.findall(f"{_W_NS}r"):
         rPr = r.find(f"{_W_NS}rPr")
         if rPr is None:
             rPr = r.makeelement(f"{_W_NS}rPr", {})
             r.insert(0, rPr)
         if italic and rPr.find(f"{_W_NS}i") is None:
-            i_el = rPr.makeelement(f"{_W_NS}i", {})
-            rPr.append(i_el)
+            rPr.append(rPr.makeelement(f"{_W_NS}i", {}))
         if bold and rPr.find(f"{_W_NS}b") is None:
-            b_el = rPr.makeelement(f"{_W_NS}b", {})
-            rPr.append(b_el)
+            rPr.append(rPr.makeelement(f"{_W_NS}b", {}))
+        if color is not None:
+            existing = rPr.find(f"{_W_NS}color")
+            if existing is not None:
+                rPr.remove(existing)
+            rPr.append(rPr.makeelement(f"{_W_NS}color", {f"{_W_NS}val": color}))
+
+
+def _set_paragraph_spacing(  # type: ignore[no-untyped-def]
+    p_elem,
+    *,
+    before_twips: int,
+    after_twips: int,
+) -> None:
+    """Set ``<w:spacing>`` directly on the paragraph (twips: 1pt = 20)."""
+    pPr = p_elem.find(f"{_W_NS}pPr")
+    if pPr is None:
+        pPr = p_elem.makeelement(f"{_W_NS}pPr", {})
+        p_elem.insert(0, pPr)
+    existing = pPr.find(f"{_W_NS}spacing")
+    if existing is not None:
+        pPr.remove(existing)
+    pPr.append(
+        pPr.makeelement(
+            f"{_W_NS}spacing",
+            {
+                f"{_W_NS}before": str(before_twips),
+                f"{_W_NS}after": str(after_twips),
+            },
+        )
+    )
 
 
 def _decorate_for_kind(p_elem, kind: str) -> None:  # type: ignore[no-untyped-def]
-    """Apply per-kind paragraph styling (heading style, italic for notes)."""
-    style_id = _style_id_for_kind(kind)
-    if style_id is not None:
-        _apply_paragraph_style(p_elem, style_id)
-        _add_run_emphasis(p_elem, bold=True)
-    elif kind == "nota":
+    """Apply per-kind decoration via direct formatting only.
+
+    No ``<w:pStyle>`` is applied — Word's default heading styles render
+    blue, which is wrong for industrial-procedure documents that expect
+    black bold sub-headings. Direct formatting (bold + spacing + black
+    color) keeps the visual hierarchy without inheriting style colors.
+    """
+    if kind == "subheading":
+        _add_run_emphasis(p_elem, bold=True, color="000000")
+        _set_paragraph_spacing(p_elem, before_twips=240, after_twips=120)
+        return
+    if kind == "subsubheading":
+        _add_run_emphasis(p_elem, bold=True, color="000000")
+        _set_paragraph_spacing(p_elem, before_twips=180, after_twips=80)
+        return
+    if kind == "nota":
         _add_run_emphasis(p_elem, italic=True)
 
 
 def _reset_paragraph_style(p_elem) -> None:  # type: ignore[no-untyped-def]
-    """Drop any heading-style ``<w:pStyle>`` and inline bold/italic so a
-    cloned anchor doesn't inherit decorations from the previous line.
+    """Drop inline bold/italic and any prior spacing override so a cloned
+    anchor doesn't inherit decorations from the previous line.
     """
     pPr = p_elem.find(f"{_W_NS}pPr")
     if pPr is not None:
-        pStyle = pPr.find(f"{_W_NS}pStyle")
-        if pStyle is not None and pStyle.get(f"{_W_NS}val", "") in {"Ttulo2", "Ttulo3"}:
-            pPr.remove(pStyle)
+        # Drop our own paragraph-level spacing override.
+        spacing = pPr.find(f"{_W_NS}spacing")
+        if spacing is not None and (spacing.get(f"{_W_NS}before") or spacing.get(f"{_W_NS}after")):
+            pPr.remove(spacing)
     for r in p_elem.findall(f"{_W_NS}r"):
         rPr = r.find(f"{_W_NS}rPr")
         if rPr is None:

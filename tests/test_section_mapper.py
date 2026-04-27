@@ -891,9 +891,10 @@ def test_detect_line_kind_body_for_value_with_dot():
     assert _detect_line_kind("Capacidade 5.5 toneladas") == "body"
 
 
-def test_renderer_applies_subheading_style(tmp_path):
-    """Sub-heading lines (``6.1. Foo``) get the template's Ttulo2
-    style applied so Word renders them bold + with proper spacing."""
+def test_renderer_applies_subheading_direct_formatting(tmp_path):
+    """Sub-heading lines (``6.1. Foo``) get bold + black + spacing applied
+    via direct formatting (NOT a Ttulo style ref). Word's default
+    Ttulo2/3 render blue which is wrong for industrial-procedure docs."""
     p = tmp_path / "tpl.docx"
     doc = Document()
     doc.add_paragraph("OBJETIVO")
@@ -912,13 +913,18 @@ def test_renderer_applies_subheading_style(tmp_path):
             "OBJETIVO": "6.1. Sub heading\nBody line\n6.2.1. Deeper sub\nMore body",
         },
     )
-    # Inspect XML for pStyle
     import zipfile
 
     with zipfile.ZipFile(str(out)) as z:
         xml = z.read("word/document.xml").decode("utf-8")
-    assert 'w:val="Ttulo2"' in xml
-    assert 'w:val="Ttulo3"' in xml
+    # No heading style applied (would render blue).
+    assert 'w:val="Ttulo2"' not in xml
+    assert 'w:val="Ttulo3"' not in xml
+    # Direct bold + black color present.
+    assert 'w:val="000000"' in xml
+    assert "<w:b/>" in xml
+    # Paragraph spacing override present.
+    assert "w:before=" in xml
 
 
 # ===== renderer prune + collapse =====

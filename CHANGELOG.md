@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-04-27
+
+### Fixed — sub-headings turning blue
+
+v0.9.5 applied Word's ``Ttulo2`` / ``Ttulo3`` styles for sub-headings so
+they would inherit Heading-2/3 spacing. Side-effect: those styles
+default to blue, which is wrong for industrial-procedure documents that
+expect black bold sub-headings throughout.
+
+The renderer now applies decoration via direct formatting only — no
+``<w:pStyle>`` reference:
+
+- Bold run + explicit black color (``w:color w:val="000000"``).
+- Paragraph spacing: ``before=240`` twips / ``after=120`` for
+  ``X.Y.`` sub-headings, ``before=180`` / ``after=80`` for
+  ``X.Y.Z.`` sub-sub-headings.
+
+This keeps the visual hierarchy (bold + visible breaks before/after)
+without inheriting any heading-style color theme.
+
+### Tests
+
+`test_renderer_applies_subheading_direct_formatting` asserts the output
+XML carries direct ``<w:b/>`` + ``w:val="000000"`` + ``w:before=`` but
+NOT the ``Ttulo2`` / ``Ttulo3`` style refs.
+
+**348 passing**.
+
 ## [0.9.5] - 2026-04-27
 
 ### Fixed — paragraph styling for sub-headings + notes
