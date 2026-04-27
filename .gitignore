@@ -40,4 +40,7 @@ out/
 tests/vendor_b/output_*.docx
 tests/vendor_*/output_*.docx
 tests/vendor_*/report.json
+tests/vendor_*/plan.json
+tests/real_world/output_*.docx
+tests/real_world/report_*.json
 

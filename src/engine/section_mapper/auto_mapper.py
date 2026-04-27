@@ -552,6 +552,17 @@ def _merge_plans(prev: MappingPlan, addendum: MappingPlan) -> MappingPlan:
     )
 
 
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _clean(s: str) -> str:
+    """Strip ASCII control characters that some providers emit when
+    handling non-ASCII (Portuguese accents end up as ``\\x1d`` in OpenAI
+    strict-mode responses).
+    """
+    return _CONTROL_CHAR_RE.sub("", s)
+
+
 def _parse_response(response: object) -> MappingPlan:
     if not isinstance(response, dict):
         log.warning("section_mapper.auto_mapper.bad_response_type", got=type(response).__name__)
@@ -562,8 +573,16 @@ def _parse_response(response: object) -> MappingPlan:
     tables_raw = response.get("table_data") or []
     rewrites_raw = response.get("paragraph_rewrites") or []
 
-    headers = {str(k): str(v) for k, v in headers_raw.items() if isinstance(k, str) and isinstance(v, str)}
-    sections = {str(k): str(v) for k, v in sections_raw.items() if isinstance(k, str) and isinstance(v, str)}
+    headers = {
+        _clean(str(k)): _clean(str(v))
+        for k, v in headers_raw.items()
+        if isinstance(k, str) and isinstance(v, str)
+    }
+    sections = {
+        _clean(str(k)): _clean(str(v))
+        for k, v in sections_raw.items()
+        if isinstance(k, str) and isinstance(v, str)
+    }
 
     tables: list[TableFillData] = []
     if isinstance(tables_raw, list):
