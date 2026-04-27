@@ -1,0 +1,249 @@
+"""Section-mapping orchestrator (Wave L).
+
+End-to-end driver that wires the four section_mapper modules together:
+
+```
+parse_docx(template)        ─┐
+parse_text(extract(source)) ─┴─► match (string -> embeddings -> llm)
+                                  │
+                                  ▼
+                       content_by_target_heading
+                                  │
+                                  ▼
+                       render_section_content (preserves format)
+                                  │
+                                  ▼
+                       fill_tables (optional metadata)
+                                  │
+                                  ▼
+                       SectionMappingReport
+```
+
+The report distinguishes *mapped* (heading paired with content), *unmapped*
+(source heading with no target counterpart) and *unfilled* (target
+heading that no source heading maps to). Callers can review the report
+before shipping the rendered docx.
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from typing import TYPE_CHECKING
+
+import structlog
+
+from engine.extractor import extract
+from engine.section_mapper.parser import (
+    DocxSection,
+    TextSection,
+    parse_docx,
+    parse_text,
+)
+from engine.section_mapper.renderer import detect_orphan_paragraphs, render_section_content
+from engine.section_mapper.similarity import (
+    HeadingMatch,
+    match_embeddings,
+    match_llm,
+    match_string,
+)
+from engine.section_mapper.table_filler import TableSpec, fill_tables
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from engine.llm.base import LLMProvider
+
+log = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class SectionMappingReport:
+    """Outcome of a single section-mapping run."""
+
+    template_path: Path
+    source_path: Path
+    output_path: Path
+    target_sections: list[DocxSection]
+    source_sections: list[TextSection]
+    matches: list[HeadingMatch]
+    tables_filled: int
+    orphan_paragraphs: list[str]
+
+    @property
+    def mapped_count(self) -> int:
+        return sum(1 for m in self.matches if m.target_name is not None)
+
+    @property
+    def unmapped_source_headings(self) -> list[str]:
+        return [m.source_name for m in self.matches if m.target_name is None]
+
+    @property
+    def unfilled_target_headings(self) -> list[str]:
+        filled = {m.target_name for m in self.matches if m.target_name}
+        return [s.name for s in self.target_sections if s.name not in filled]
+
+    def to_dict(self) -> dict:
+        return {
+            "template_path": str(self.template_path),
+            "source_path": str(self.source_path),
+            "output_path": str(self.output_path),
+            "summary": {
+                "target_sections": len(self.target_sections),
+                "source_sections": len(self.source_sections),
+                "mapped": self.mapped_count,
+                "unmapped_source": self.unmapped_source_headings,
+                "unfilled_target": self.unfilled_target_headings,
+                "tables_filled": self.tables_filled,
+                "orphan_paragraphs": self.orphan_paragraphs,
+            },
+            "matches": [asdict(m) for m in self.matches],
+        }
+
+
+def _select_matches(
+    source_sections: list[TextSection],
+    target_names: list[str],
+    *,
+    similarity_mode: str,
+    llm: LLMProvider | None,
+) -> list[HeadingMatch]:
+    """Run similarity in the requested mode, with graceful fallback."""
+    if similarity_mode == "string":
+        return match_string(source_sections, target_names)
+
+    if similarity_mode == "embeddings":
+        return match_embeddings(source_sections, target_names)
+
+    if similarity_mode == "llm":
+        if llm is None:
+            log.warning("section_mapper.llm_mode_no_provider_falling_back_to_string")
+            return match_string(source_sections, target_names)
+        # match_llm is async; we'll handle it in the async wrapper below.
+        raise RuntimeError("llm mode requires await; use map_sections_async")
+
+    raise ValueError(f"unknown similarity_mode: {similarity_mode!r}")
+
+
+def map_sections(
+    template_path: Path,
+    source_path: Path,
+    output_path: Path,
+    *,
+    similarity_mode: str = "string",
+    table_specs: list[TableSpec] | None = None,
+) -> SectionMappingReport:
+    """Synchronous entry point — string and embeddings modes only."""
+    target_sections = parse_docx(template_path)
+    source_text = extract(source_path).text
+    source_sections = parse_text(source_text)
+
+    target_names = [s.name for s in target_sections]
+    matches = _select_matches(
+        source_sections,
+        target_names,
+        similarity_mode=similarity_mode,
+        llm=None,
+    )
+
+    content_by_target = _build_content_map(source_sections, matches)
+    render_section_content(
+        template_path,
+        output_path,
+        docx_sections=target_sections,
+        content_by_target=content_by_target,
+    )
+
+    filled = 0
+    if table_specs:
+        filled = fill_tables(template_path, output_path, table_specs)
+
+    orphans = detect_orphan_paragraphs(output_path)
+
+    report = SectionMappingReport(
+        template_path=template_path,
+        source_path=source_path,
+        output_path=output_path,
+        target_sections=target_sections,
+        source_sections=source_sections,
+        matches=matches,
+        tables_filled=filled,
+        orphan_paragraphs=orphans,
+    )
+    log.info(
+        "section_mapper.done",
+        mapped=report.mapped_count,
+        unmapped=len(report.unmapped_source_headings),
+        unfilled=len(report.unfilled_target_headings),
+        tables_filled=filled,
+        orphans=len(orphans),
+    )
+    return report
+
+
+async def map_sections_async(
+    template_path: Path,
+    source_path: Path,
+    output_path: Path,
+    *,
+    similarity_mode: str = "string",
+    llm: LLMProvider | None = None,
+    table_specs: list[TableSpec] | None = None,
+) -> SectionMappingReport:
+    """Async entry — supports the ``llm`` similarity mode in addition to
+    ``string`` and ``embeddings``."""
+    target_sections = parse_docx(template_path)
+    source_text = extract(source_path).text
+    source_sections = parse_text(source_text)
+
+    target_names = [s.name for s in target_sections]
+    if similarity_mode == "llm" and llm is not None:
+        matches = await match_llm(source_sections, target_names, llm=llm)
+    else:
+        matches = _select_matches(
+            source_sections,
+            target_names,
+            similarity_mode=similarity_mode,
+            llm=llm,
+        )
+
+    content_by_target = _build_content_map(source_sections, matches)
+    render_section_content(
+        template_path,
+        output_path,
+        docx_sections=target_sections,
+        content_by_target=content_by_target,
+    )
+
+    filled = 0
+    if table_specs:
+        filled = fill_tables(template_path, output_path, table_specs)
+
+    orphans = detect_orphan_paragraphs(output_path)
+
+    return SectionMappingReport(
+        template_path=template_path,
+        source_path=source_path,
+        output_path=output_path,
+        target_sections=target_sections,
+        source_sections=source_sections,
+        matches=matches,
+        tables_filled=filled,
+        orphan_paragraphs=orphans,
+    )
+
+
+def _build_content_map(
+    source_sections: list[TextSection],
+    matches: list[HeadingMatch],
+) -> dict[str, str]:
+    """Group matched source content under each target heading."""
+    by_source = {s.name: s.content for s in source_sections}
+    grouped: dict[str, list[str]] = {}
+    for m in matches:
+        if m.target_name is None:
+            continue
+        content = by_source.get(m.source_name, "")
+        if not content.strip():
+            continue
+        grouped.setdefault(m.target_name, []).append(content)
+    return {k: "\n\n".join(v) for k, v in grouped.items()}

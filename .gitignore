@@ -26,3 +26,8 @@ htmlcov/
 *.swo
 site/
 out/
+template.docx
+gold.pdf
+dados.pdf
+output_engeman.docx
+

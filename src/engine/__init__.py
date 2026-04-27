@@ -62,6 +62,15 @@ from engine.schema_inference import (
     enrich_with_llm,
     infer_template_schema,
 )
+from engine.section_mapper import (
+    DocxSection,
+    HeadingMatch,
+    SectionMappingReport,
+    TableSpec,
+    TextSection,
+    map_sections,
+    map_sections_async,
+)
 from engine.security import (
     AuditLog,
     InjectionMatch,
@@ -80,7 +89,7 @@ from engine.semantic_diff import (
     filter_by_severity,
 )
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 __all__ = [
     "AuditLog",
@@ -91,12 +100,14 @@ __all__ = [
     "ConformityVisualProvider",
     "DimensionResult",
     "Discrepancy",
+    "DocxSection",
     "ExtractedDoc",
     "Failure",
     "FieldSchema",
     "Format",
     "FormatNotFound",
     "HeadingHint",
+    "HeadingMatch",
     "InferredPattern",
     "InjectionMatch",
     "LayoutFeatures",
@@ -107,8 +118,11 @@ __all__ = [
     "PromptInjectionDetected",
     "RefusedRemoteCallError",
     "SectionBreak",
+    "SectionMappingReport",
     "StructuralFingerprint",
     "TableHint",
+    "TableSpec",
+    "TextSection",
     "__version__",
     "apply_inferred",
     "calculate_confidence",
@@ -136,6 +150,8 @@ __all__ = [
     "list_formats",
     "load_format",
     "map_hybrid",
+    "map_sections",
+    "map_sections_async",
     "mask_pii",
     "normalize_batch",
     "sha256_hex",

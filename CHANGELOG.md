@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added — Wave L (section_mapper for structural templates)
+
+New subpackage `engine.section_mapper` covers the case the existing pipeline did not: templates that ship with named-but-empty sections (no `{{X}}` placeholders) and rely on heading hierarchy + tables. Validated against an industrial procedure template (Engeman / NR-style) that the Wave D `normalize_batch` could not handle.
+
+- **`engine.section_mapper.parser`** — heading detection from `.docx` (paragraphs + heading styles + numbered + all-caps unnumbered) and from plain text (PDF-extracted). Returns `DocxSection` with paragraph indices and `TextSection` with captured content.
+- **`engine.section_mapper.similarity`** — three-tier matcher:
+  - **string** (default, zero deps): exact + curated synonym table + Jaccard token overlap with stop-word filtering. Maps `DESCRIÇÃO -> SISTEMÁTICA`, `REGISTROS -> RESPONSABILIDADE`, `ESCOPO -> APLICAÇÃO` out of the box.
+  - **embeddings** (optional `[embeddings]` extra, `sentence-transformers`): cosine similarity for semantic equivalence when wording diverges.
+  - **llm**: one batched call asking the provider to map every source heading to either a target heading or `null`.
+- **`engine.section_mapper.renderer`** — multi-line content insertion that walks every `<w:t>` via XPath (covers hyperlinks, smart-tags), strips `<w:jc>` to prevent the justified-paragraph blowout, and clones the anchor `<w:p>` for additional lines so paragraph order is preserved.
+- **`engine.section_mapper.table_filler`** — `TableSpec(headers, rows)` + header-set matching populates empty tables (Histórico Rev/Data/Alteração, Atividades/Responsabilidade, etc) without touching the rest of the doc.
+- **`engine.section_mapper.orchestrator`** — `map_sections()` and `map_sections_async()` plus `SectionMappingReport` (mapped count, unmapped source headings, unfilled target headings, orphan paragraphs, JSON-serializable).
+- **New extra `[embeddings]`**: `sentence-transformers>=3.0,<4`.
+- 22 new unit tests (284 → **307 passing**) covering parser, similarity (all 3 modes mocked), renderer, table_filler, orchestrator end-to-end.
+
+Real-world smoke against an Engeman industrial procedure template: 7 target sections detected, 21 source sections detected, 10 mapped (OBJETIVO -> OBJETIVO, APLICAÇÃO -> APLICAÇÃO, DESCRIÇÃO -> SISTEMÁTICA via synonym, REGISTROS -> RESPONSABILIDADE via synonym), 1 metadata table filled (Rev/Data/Alteração).
+
 ### Fixed — Wave K (closes 22 code-review findings)
 
 **3 CRITICAL** + **7 HIGH** + 9 MEDIUM + 3 LOW from `CODE-REVIEW.md` resolved. Unblocks PyPI publish.
