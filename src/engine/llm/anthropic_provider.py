@@ -14,7 +14,7 @@ try:
     from anthropic import APITimeoutError, AsyncAnthropic, RateLimitError
 except ImportError as e:  # pragma: no cover - optional dep
     raise ImportError(
-        "anthropic SDK não instalado. Instale com: pip install template-engine[anthropic]"
+        "anthropic SDK não instalado. Instale com: pip install template-engine-ia[anthropic]"
     ) from e
 
 log = structlog.get_logger(__name__)

@@ -120,13 +120,13 @@ O custo depende da fração de docs que o tier regex resolve. Quando cobre todos
 ## Instalação
 
 ```bash
-pip install template-engine                    # core
-pip install "template-engine[gemini]"          # + Google Gemini
-pip install "template-engine[openai]"          # + OpenAI
-pip install "template-engine[anthropic]"       # + Anthropic Claude
-pip install "template-engine[ollama]"          # + LLMs locais (LGPD-safe)
-pip install "template-engine[inference]"       # + grex regex learner
-pip install "template-engine[all]"             # tudo
+pip install template-engine-ia                 # core
+pip install "template-engine-ia[gemini]"          # + Google Gemini
+pip install "template-engine-ia[openai]"          # + OpenAI
+pip install "template-engine-ia[anthropic]"       # + Anthropic Claude
+pip install "template-engine-ia[ollama]"          # + LLMs locais (LGPD-safe)
+pip install "template-engine-ia[inference]"       # + grex regex learner
+pip install "template-engine-ia[all]"             # tudo
 ```
 
 ## Quickstart — normalizar um diretório

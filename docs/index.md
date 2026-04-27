@@ -98,7 +98,7 @@ Path / bytes in, paths / bytes / dataclasses out. No web framework, ORM, or app 
 ## Quick install
 
 ```bash
-pip install "template-engine[gemini]"
+pip install "template-engine-ia[gemini]"
 ```
 
 [Continue with Quickstart →](quickstart.md){ .md-button .md-button--primary }

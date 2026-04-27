@@ -132,7 +132,9 @@ def image_to_ascii(
     try:
         from PIL import Image
     except ImportError as e:  # pragma: no cover - optional dep
-        raise ImportError("Pillow not installed. Install with: pip install 'template-engine[visual]'") from e
+        raise ImportError(
+            "Pillow not installed. Install with: pip install 'template-engine-ia[visual]'"
+        ) from e
 
     if len(ramp) < 2:
         raise ValueError("ramp must have at least 2 chars")

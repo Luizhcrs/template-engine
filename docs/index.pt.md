@@ -98,7 +98,7 @@ Path/bytes in, paths/bytes/dataclasses out. Sem framework web, ORM, app layer. P
 ## Instalação rápida
 
 ```bash
-pip install "template-engine[gemini]"
+pip install "template-engine-ia[gemini]"
 ```
 
 [Continue com Quickstart →](quickstart.md){ .md-button .md-button--primary }

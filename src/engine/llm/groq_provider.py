@@ -13,7 +13,7 @@ from .base import LLMError, LLMRateLimit, LLMTimeout
 try:
     from groq import APITimeoutError, AsyncGroq, RateLimitError
 except ImportError as e:  # pragma: no cover - optional dep
-    raise ImportError("groq SDK não instalado. Instale com: pip install template-engine[groq]") from e
+    raise ImportError("groq SDK não instalado. Instale com: pip install template-engine-ia[groq]") from e
 
 log = structlog.get_logger(__name__)
 

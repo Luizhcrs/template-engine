@@ -7,31 +7,31 @@ Normalização ponta-a-ponta em menos de 60 segundos.
 === "Gemini (default)"
 
     ```bash
-    pip install "template-engine[gemini]"
+    pip install "template-engine-ia[gemini]"
     ```
 
 === "OpenAI"
 
     ```bash
-    pip install "template-engine[openai]"
+    pip install "template-engine-ia[openai]"
     ```
 
 === "Anthropic"
 
     ```bash
-    pip install "template-engine[anthropic]"
+    pip install "template-engine-ia[anthropic]"
     ```
 
 === "Local-only (Ollama, sem LLM remoto)"
 
     ```bash
-    pip install "template-engine[ollama]"
+    pip install "template-engine-ia[ollama]"
     ```
 
 === "Todos os providers"
 
     ```bash
-    pip install "template-engine[all]"
+    pip install "template-engine-ia[all]"
     ```
 
 ## Setup

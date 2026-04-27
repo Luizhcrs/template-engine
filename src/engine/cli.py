@@ -64,7 +64,7 @@ def _build_provider(name: str, api_key: str | None, model: str | None):
         module = importlib.import_module(module_path)
     except ImportError as e:
         raise typer.BadParameter(
-            f"provider {name!r} not installed. Try: pip install 'template-engine[{name}]'"
+            f"provider {name!r} not installed. Try: pip install 'template-engine-ia[{name}]'"
         ) from e
     cls = getattr(module, class_name)
     if name == "ollama":
@@ -100,8 +100,8 @@ def info() -> None:
     console.print(table)
     console.print(
         Panel(
-            "Install missing providers via [bold]pip install 'template-engine[<name>]'[/bold]\n"
-            "Or all at once: [bold]pip install 'template-engine[all]'[/bold]",
+            "Install missing providers via [bold]pip install 'template-engine-ia[<name>]'[/bold]\n"
+            "Or all at once: [bold]pip install 'template-engine-ia[all]'[/bold]",
             title="Tips",
             border_style="dim",
         )

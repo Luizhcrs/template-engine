@@ -93,7 +93,7 @@ def check_visual(
             dimension="visual",
             score=1.0,
             skipped=True,
-            skip_reason="Pillow not installed (pip install 'template-engine[poc]')",
+            skip_reason="Pillow not installed (pip install 'template-engine-ia[poc]')",
         )
 
     import tempfile

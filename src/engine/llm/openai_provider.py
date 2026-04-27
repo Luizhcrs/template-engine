@@ -14,7 +14,7 @@ from .base import LLMError, LLMRateLimit, LLMTimeout
 try:
     from openai import APITimeoutError, AsyncOpenAI, RateLimitError
 except ImportError as e:  # pragma: no cover - optional dep
-    raise ImportError("openai SDK não instalado. Instale com: pip install template-engine[openai]") from e
+    raise ImportError("openai SDK não instalado. Instale com: pip install template-engine-ia[openai]") from e
 
 log = structlog.get_logger(__name__)
 
