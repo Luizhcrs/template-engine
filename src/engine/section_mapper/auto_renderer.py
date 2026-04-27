@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 _HEADER_FILE_RE = re.compile(r"^word/header\d*\.xml$")
 _BODY_FILE_RE = re.compile(r"^word/document\.xml$")
+_W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
 
 def apply_mapping_plan(
@@ -64,10 +65,49 @@ def apply_mapping_plan(
         _apply_header_substitutions(output_path, plan.header_substitutions)
         # Body placeholders (e.g. ``{{DOC_CODE}}``, ``[Title]`` on the
         # cover page) get the same substitution map applied to
-        # ``word/document.xml``.
-        _apply_body_substitutions(output_path, plan.header_substitutions)
+        # ``word/document.xml`` — but only for placeholders whose text
+        # is distinctive enough to avoid substring collision in body
+        # paragraphs that contain similar runs (CNPJ masks like
+        # ``__.___.___/____-__``, dotted-leader fields like
+        # ``...........``).
+        body_safe_subs = _filter_body_safe_subs(plan.header_substitutions)
+        if body_safe_subs:
+            _apply_body_substitutions(output_path, body_safe_subs)
+
+    if plan.paragraph_rewrites:
+        _apply_paragraph_rewrites(output_path, plan.paragraph_rewrites)
 
     return filled
+
+
+_DISTINCT_PLACEHOLDER_RE = re.compile(
+    r"""(
+        \{\{[^}]+\}\}     # curly token
+        | \[[^\]]+\]      # bracket label
+        | <<[^>]+>>       # double-angle
+        | \([A-ZÁÉÍÓÚÂÊÔÃÕÇ_][A-ZÁÉÍÓÚÂÊÔÃÕÇ_ ]{2,}\)  # parens UPPERCASE label
+    )""",
+    re.VERBOSE,
+)
+
+
+def _filter_body_safe_subs(subs: dict[str, str]) -> dict[str, str]:
+    """Drop substitutions whose placeholder text is not distinct enough
+    to apply safely as a body-XML substring replace.
+
+    Distinctive placeholders carry a delimiter pair (``{{...}}``,
+    ``[...]``, ``<<...>>``, ``(LABEL)``) so the match is unambiguous in
+    free-flowing paragraph text. Generic shapes (``__``, ``___``,
+    ``XXXX``, ``____/____``, label-with-empty-suffix like
+    ``Author:``) are header-only — they collide with surrounding text
+    in body paragraphs (CPF / CNPJ masks, dotted leaders, etc.) and
+    must not be substring-replaced there.
+    """
+    safe: dict[str, str] = {}
+    for placeholder, replacement in subs.items():
+        if _DISTINCT_PLACEHOLDER_RE.search(placeholder):
+            safe[placeholder] = replacement
+    return safe
 
 
 def _build_table_specs(
@@ -131,6 +171,55 @@ def _apply_header_substitutions(docx_path: Path, subs: dict[str, str]) -> None:
         if tmp_path.exists():
             tmp_path.unlink()
         raise
+
+
+def _apply_paragraph_rewrites(docx_path: Path, rewrites: list) -> None:  # type: ignore[type-arg]
+    """Replace whole paragraphs whose rendered text matches
+    ``rewrite.match_text`` with ``rewrite.replacement_text``. Walks
+    body + headers + footers. Run formatting of the first non-empty
+    run is preserved; trailing runs in the paragraph are cleared.
+    """
+    if not rewrites:
+        return
+
+    from docx import Document
+
+    doc = Document(str(docx_path))
+
+    rewrite_map = {r.match_text.strip(): r.replacement_text for r in rewrites}
+
+    def _try_rewrite_para(para) -> None:  # type: ignore[no-untyped-def]
+        text = para.text.strip()
+        if text in rewrite_map:
+            replacement = rewrite_map[text]
+            t_elements = para._p.findall(f".//{_W_NS}t")
+            if t_elements:
+                t_elements[0].text = replacement
+                for t in t_elements[1:]:
+                    t.text = ""
+            else:
+                para.add_run(replacement)
+
+    for para in doc.paragraphs:
+        _try_rewrite_para(para)
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    _try_rewrite_para(para)
+
+    for section in doc.sections:
+        for container in (section.header, section.footer):
+            for para in container.paragraphs:
+                _try_rewrite_para(para)
+            for table in container.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for para in cell.paragraphs:
+                            _try_rewrite_para(para)
+
+    doc.save(str(docx_path))
 
 
 def _apply_body_substitutions(docx_path: Path, subs: dict[str, str]) -> None:

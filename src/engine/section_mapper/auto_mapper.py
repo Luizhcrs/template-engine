@@ -53,6 +53,21 @@ class TableFillData:
 
 
 @dataclass(frozen=True)
+class ParagraphRewrite:
+    """Full-paragraph replacement: when a body paragraph contains
+    multiple placeholders that overlap (parties blocks, address lines,
+    signature blocks), substring substitution falls over and we need
+    the LLM to hand us the entire filled paragraph text.
+    """
+
+    match_text: str  # exact paragraph text to find (the template carries this)
+    replacement_text: str  # full filled paragraph (template prefix preserved by LLM)
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class MappingPlan:
     """The LLM's complete substitution plan for one template+source pair.
 
@@ -60,17 +75,21 @@ class MappingPlan:
         header_substitutions: ``{placeholder_text: replacement}``.
         section_content: ``{target_heading_canonical_name: body_text}``.
         table_data: per template-table fill instructions.
+        paragraph_rewrites: full-paragraph replacements for multi-
+            placeholder body paragraphs (parties blocks, address lines).
     """
 
     header_substitutions: dict[str, str] = field(default_factory=dict)
     section_content: dict[str, str] = field(default_factory=dict)
     table_data: list[TableFillData] = field(default_factory=list)
+    paragraph_rewrites: list[ParagraphRewrite] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
             "header_substitutions": dict(self.header_substitutions),
             "section_content": dict(self.section_content),
             "table_data": [t.to_dict() for t in self.table_data],
+            "paragraph_rewrites": [r.to_dict() for r in self.paragraph_rewrites],
         }
 
 
@@ -129,8 +148,46 @@ The plan covers three things:
    are merely the source's wording for a TEMPLATE heading you already
    matched.
 
-   If the source has nothing for a template section, leave its content
-   empty.
+   When a TEMPLATE heading carries multiple sub-headings inside it
+   (e.g. "Resumo" + "Abstract" both at the top of an academic
+   template, or numbered clauses 1./2./3. inside a contract template),
+   distribute the source content across them instead of dumping it
+   all under the first heading. Empty section_content is fine if the
+   source genuinely has no equivalent.
+
+   When the source carries narrative prose that maps to numbered
+   clauses (1./2./3.) or sub-headings, segment it accordingly: identify
+   which clause each source paragraph addresses by its semantics, then
+   place that paragraph under the matching template clause. Do NOT
+   leave the source paragraph at its original position — the template
+   provides the canonical structure.
+
+4. **Paragraph rewrites** — when a body paragraph carries TWO OR MORE
+   placeholders interleaved with literal prefix/connector text (parties
+   block: ``CONTRATANTE: <razão social>, inscrita no CNPJ sob o nº
+   __.___.___/____-__, com sede em __________________.``; address
+   line: ``Cidade / City: __________  UF / State: __  CEP / ZIP:
+   _____-___``; signature block: ``Testemunha 1 (CPF):
+   ____________________``), substring substitution will collide — emit
+   a ParagraphRewrite instead. Rewrite has two strings:
+
+   - ``match_text``: the EXACT template paragraph text (so the renderer
+     can locate it).
+   - ``replacement_text``: the FULL filled paragraph, prefix words and
+     connector text preserved, placeholders replaced inline with
+     source values.
+
+   Example:
+
+   - match_text: ``CONTRATANTE: <razão social>, inscrita no CNPJ sob o
+     nº __.___.___/____-__, com sede em __________________.``
+   - replacement_text: ``CONTRATANTE: Tecnologia Brasil Ltda., inscrita
+     no CNPJ sob o nº 12.345.678/0001-90, com sede na Avenida Paulista,
+     1000, São Paulo/SP.``
+
+   Use paragraph_rewrites for ANY body paragraph whose text carries 2+
+   placeholders. For simple single-placeholder paragraphs (just
+   ``[Title]`` on its own line), prefer header_substitutions.
 
 3. **Table data** — for every TEMPLATE empty table, decide rows.
 
@@ -213,8 +270,25 @@ def _build_schema(template: TemplateStructure) -> dict:
                     "required": ["template_table_index", "sub_headers", "rows"],
                 },
             },
+            "paragraph_rewrites": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "match_text": {"type": "string"},
+                        "replacement_text": {"type": "string"},
+                    },
+                    "required": ["match_text", "replacement_text"],
+                },
+            },
         },
-        "required": ["header_substitutions", "section_content", "table_data"],
+        "required": [
+            "header_substitutions",
+            "section_content",
+            "table_data",
+            "paragraph_rewrites",
+        ],
     }
 
 
@@ -264,6 +338,7 @@ def _parse_response(response: object) -> MappingPlan:
     headers_raw = response.get("header_substitutions") or {}
     sections_raw = response.get("section_content") or {}
     tables_raw = response.get("table_data") or []
+    rewrites_raw = response.get("paragraph_rewrites") or []
 
     headers = {str(k): str(v) for k, v in headers_raw.items() if isinstance(k, str) and isinstance(v, str)}
     sections = {str(k): str(v) for k, v in sections_raw.items() if isinstance(k, str) and isinstance(v, str)}
@@ -288,10 +363,21 @@ def _parse_response(response: object) -> MappingPlan:
             except (KeyError, TypeError, ValueError) as exc:
                 log.warning("section_mapper.auto_mapper.bad_table_entry", error=str(exc))
 
+    rewrites: list[ParagraphRewrite] = []
+    if isinstance(rewrites_raw, list):
+        for entry in rewrites_raw:
+            if not isinstance(entry, dict):
+                continue
+            mt = entry.get("match_text")
+            rt = entry.get("replacement_text")
+            if isinstance(mt, str) and isinstance(rt, str) and mt.strip():
+                rewrites.append(ParagraphRewrite(match_text=mt, replacement_text=rt))
+
     return MappingPlan(
         header_substitutions=headers,
         section_content=sections,
         table_data=tables,
+        paragraph_rewrites=rewrites,
     )
 
 

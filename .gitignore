@@ -38,4 +38,6 @@ out/
 ~$*.docx
 # Outputs from running the test suite locally
 tests/vendor_b/output_*.docx
+tests/vendor_*/output_*.docx
+tests/vendor_*/report.json
 

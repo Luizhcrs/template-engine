@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-04-27 — Adversarial vendor stress test + paragraph rewrites
+
+Three new fixture pairs (`tests/vendor_c/d/e`) target weaknesses that
+Engeman + Vendor B did not exercise. The first runs revealed
+catastrophic body-substitution failures and the bilingual-form CNPJ
+mask collisions. This release closes the loudest failures.
+
+### Added — adversarial fixtures
+
+- **`tests/vendor_c/`** — ABNT-style academic with Title-case
+  headings (`Resumo`, `Introdução`, `Metodologia`), three-level
+  nested numbered sub-sections (`3.2.1.`), placeholder shapes
+  `<<TITULO_DO_TRABALHO>>`, `§§§§`, `__/__/____`.
+- **`tests/vendor_d/`** — government bilingual form
+  (`OBJETIVO / OBJECTIVE` headings on the same line), placeholders of
+  shape `[______]` (variable underscore length), `< nome completo >`
+  (lowercase angle), dotted-leader fields, CNPJ-style masks
+  `___.___.___-__`.
+- **`tests/vendor_e/`** — legal contract with parties block (multiple
+  placeholders interleaved with literal text), numbered clauses
+  `1./2./3.`, witness blocks. Source carries the same content as
+  pure narrative without formal headings.
+
+`scripts/build_adversarial_fixtures.py` regenerates them.
+`scripts/run_adversarial_llm.py` exercises every pair with the LLM
+mode and writes `output_llm.docx` + `report.json` per vendor.
+
+### Added — `MappingPlan.paragraph_rewrites`
+
+Body paragraphs that carry **multiple placeholders interleaved with
+literal connector text** (parties block:
+`CONTRATANTE: <razão social>, inscrita no CNPJ sob o nº __.___.___/____-__,
+com sede em __________________.`; address line:
+`Cidade / City: __________  UF / State: __  CEP / ZIP: _____-___`)
+break under substring-substitution because every underscore mask
+collides. The plan now carries `paragraph_rewrites: list[ParagraphRewrite]`
+where each entry has `match_text` (exact paragraph text in the
+template) + `replacement_text` (the entire filled paragraph). The
+renderer matches by full paragraph text and substitutes preserving
+the first run's formatting.
+
+LLM prompt now asks for `paragraph_rewrites` whenever ≥2 placeholders
+share a paragraph, with worked examples for parties / address /
+signature blocks.
+
+### Fixed — body substitution collision
+
+`auto_renderer._apply_body_substitutions` previously substring-replaced
+EVERY occurrence of every placeholder text in `word/document.xml`,
+including inside paragraphs that happened to contain similar runs
+(CNPJ masks, dotted leaders). This wrecked vendor D's entire body. The
+substitution map is now filtered through `_filter_body_safe_subs`
+which keeps only placeholders whose text carries an explicit
+delimiter pair (`{{...}}`, `[...]`, `<<...>>`, `(LABEL)` uppercase).
+
+### Added — extra placeholder shapes in `template_profiler`
+
+- `<<DOUBLE_ANGLE>>` (kind `"double_angle"`).
+- `< lowercase label >` (kind `"angle"`, lowercase only to skip
+  XML-like tags).
+- `\.{6,}` dotted leaders (kind `"dot_leader"`).
+- `§§§...` / `¶¶¶...` symbol runs (kind `"symbol_run"`).
+- `Label: ......` / `Label: _______` label-with-leader compound
+  pattern.
+
+### Adversarial run results (gpt-4o)
+
+| Vendor | Header | Title page | Sections | Multi-placeholder paragraphs | Tables | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| **A** Engeman PT-BR | ✅ | ✅ | ✅ | ✅ | ✅ | DOcStream parity |
+| **B** English corporate | ✅ | ✅ | ✅ | ✅ | ✅ | Migration row in EN |
+| **C** ABNT academic | ⚠️ `<<TITULO_DO_TRABALHO>>` empty | ✅ Autor/Orientador/Data | ⚠️ 5 of 8 sections empty | n/a | ✅ | LLM under-fills nested sections |
+| **D** Bilingual gov form | ⚠️ Form Nº not filled | ✅ Cidade/City rewrite | ✅ | ⚠️ CPF / Local / Assinatura still placeholder | ✅ | LLM not rewriting label+leader compound |
+| **E** Legal contract | ✅ | ✅ Parties / signatures via rewrite | ❌ Cláusulas empty | ✅ | ✅ | LLM not segmenting narrative into clauses |
+
+Vendors A/B unchanged. C/D/E are honest evidence of the LLM mapper's
+current limits — open issues in `tests/vendor_c/report.json`,
+`tests/vendor_d/report.json`, `tests/vendor_e/report.json`.
+
 ## [0.10.2] - 2026-04-27 — Cross-vendor LLM mode validated
 
 ### Added

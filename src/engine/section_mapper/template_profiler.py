@@ -50,8 +50,15 @@ _REPEATED_CHARS_RE = re.compile(r"(?<![A-Za-z0-9])([X0]{3,}|[X0]{2,}(?:[/\-.][X0
 _PARENS_LABEL_RE = re.compile(r"\(([A-ZÁÉÍÓÚÂÊÔÃÕÇ_][A-ZÁÉÍÓÚÂÊÔÃÕÇ_ ]{1,40})\)")
 _BRACKET_LABEL_RE = re.compile(r"\[([A-Za-zÀ-ÿ_][\w.-]{0,40})\]")
 _CURLY_TOKEN_RE = re.compile(r"\{\{\s*([A-Za-z_][\w.-]*)\s*\}\}")
+_DOUBLE_ANGLE_RE = re.compile(r"<<\s*([A-Za-z_][\w. -]*)\s*>>")
+_ANGLE_LABEL_RE = re.compile(r"<\s*([a-zà-ÿ][a-zà-ÿ ]{1,30})\s*>")  # lowercase only to skip XML-like tags
 _UNDERSCORE_RUN_RE = re.compile(r"_{3,}")
+_DOT_LEADER_RE = re.compile(r"\.{6,}")
+_SYMBOL_RUN_RE = re.compile(r"([§¶†‡])\1{2,}")
 _LABEL_EMPTY_RE = re.compile(r"^([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÀ-ÿ ]{1,30}):\s*$")
+_LABEL_WITH_LEADER_RE = re.compile(
+    r"^([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ /]{1,40}):\s*(?:\.{3,}|_{3,})\s*$",
+)
 _REVISION_RE = re.compile(r"\b(Rev\.?|Vers[aã]o|Ver\.)\s*0+\b", re.IGNORECASE)
 
 
@@ -322,11 +329,51 @@ def _scan_paragraph_text(
                 context=text.strip(),
             )
         )
+    for m in _DOUBLE_ANGLE_RE.finditer(text):
+        out.append(
+            TemplatePlaceholder(
+                text=m.group(0),
+                kind="double_angle",
+                location=location,
+                paragraph_idx=paragraph_idx,
+                context=text.strip(),
+            )
+        )
+    for m in _ANGLE_LABEL_RE.finditer(text):
+        out.append(
+            TemplatePlaceholder(
+                text=m.group(0),
+                kind="angle",
+                location=location,
+                paragraph_idx=paragraph_idx,
+                context=text.strip(),
+            )
+        )
     for m in _UNDERSCORE_RUN_RE.finditer(text):
         out.append(
             TemplatePlaceholder(
                 text=m.group(0),
                 kind="underscore",
+                location=location,
+                paragraph_idx=paragraph_idx,
+                context=text.strip(),
+            )
+        )
+    for m in _DOT_LEADER_RE.finditer(text):
+        out.append(
+            TemplatePlaceholder(
+                text=m.group(0),
+                kind="dot_leader",
+                location=location,
+                paragraph_idx=paragraph_idx,
+                context=text.strip(),
+            )
+        )
+    for m in _SYMBOL_RUN_RE.finditer(text):
+        out.append(
+            TemplatePlaceholder(
+                text=m.group(0),
+                kind="symbol_run",
                 location=location,
                 paragraph_idx=paragraph_idx,
                 context=text.strip(),
