@@ -160,13 +160,18 @@ def map_sections(
     table_specs: list[TableSpec] | None = None,
     auto_tables: bool = True,
 ) -> SectionMappingReport:
-    """Synchronous entry point — ``auto`` / ``string`` / ``embeddings`` modes.
+    """Synchronous entry — rules pipeline only (``mode="rules"``).
 
     Default ``similarity_mode="auto"`` runs string first and falls back to
     embeddings (when the optional dep is installed) if string coverage is
     below 60%. ``auto_tables=True`` synthesizes sensible defaults for
     canonical empty tables (Histórico Rev/Data/Alteração) so the caller does
     not need to pass a TableSpec for them.
+
+    For LLM-driven (``mode="llm"``) and hybrid (``mode="hybrid"``) modes
+    use :func:`map_sections_async`. Those modes generalise across vendors
+    and languages by replacing the rules-based heuristics with a single
+    structured LLM call per document.
     """
     from engine.section_mapper.auto_tables import (
         detect_default_specs_with_source,
@@ -255,18 +260,34 @@ async def map_sections_async(
     llm: LLMProvider | None = None,
     table_specs: list[TableSpec] | None = None,
     auto_tables: bool = True,
+    mode: str = "rules",
 ) -> SectionMappingReport:
     """Async entry — supports the ``llm`` similarity mode in addition to
     ``auto`` / ``string`` / ``embeddings``.
 
-    ``auto`` mode runs string + (embeddings if installed); when an LLM
-    provider is supplied AND coverage is still below the threshold, the LLM
-    matcher is invoked as the final tier.
+    ``mode`` selects the orchestration strategy:
+
+    - ``"rules"`` (default) — runs the Wave L rules pipeline.
+    - ``"llm"`` — single LLM call builds a complete substitution plan
+      from the template + source structure profilers. Requires a
+      provider. Generalises across vendors and languages.
+    - ``"hybrid"`` — runs the rules pipeline first, then asks the LLM
+      to fill any gaps the rules left behind (unmapped source headings,
+      empty tables the auto-table detector did not recognise, header
+      placeholders the rule-based filler could not match). Requires a
+      provider.
+
+    The ``similarity_mode`` flag controls heading similarity and is
+    independent of ``mode`` — it still applies in ``rules`` and as the
+    initial pass in ``hybrid``.
     """
     from engine.section_mapper.auto_tables import (
         detect_default_specs_with_source,
         merge_specs,
     )
+
+    if mode == "llm":
+        return await _run_llm_mode(template_path, source_path, output_path, llm=llm)
 
     target_sections = parse_docx(template_path)
     source_sections = _dedupe_sections_by_richest(_parse_source(source_path))
@@ -325,6 +346,12 @@ async def map_sections_async(
 
     fill_template_header(output_path, extract_source_metadata(source_path))
 
+    # Hybrid mode: hand off to the LLM to plug whatever gaps remain
+    # (unmapped source sections, untouched header placeholders, empty
+    # tables the auto-table detector did not recognise).
+    if mode == "hybrid" and llm is not None:
+        await _run_hybrid_topup(template_path, source_path, output_path, llm=llm)
+
     orphans = detect_orphan_paragraphs(output_path)
 
     return SectionMappingReport(
@@ -336,6 +363,106 @@ async def map_sections_async(
         matches=matches,
         tables_filled=filled,
         orphan_paragraphs=orphans,
+    )
+
+
+async def _run_llm_mode(
+    template_path: Path,
+    source_path: Path,
+    output_path: Path,
+    *,
+    llm: LLMProvider | None,
+) -> SectionMappingReport:
+    """Wave M LLM-driven path: profile both docs, ask the LLM for a
+    complete substitution plan, render the plan onto the template.
+    """
+    from engine.section_mapper.auto_mapper import build_mapping_plan
+    from engine.section_mapper.auto_renderer import apply_mapping_plan
+    from engine.section_mapper.source_profiler import profile_source
+    from engine.section_mapper.template_profiler import profile_template
+
+    if llm is None:
+        raise ValueError("mode='llm' requires an llm provider")
+
+    template_struct = profile_template(template_path)
+    source_struct = profile_source(source_path)
+
+    plan = await build_mapping_plan(template_struct, source_struct, llm=llm)
+    filled = apply_mapping_plan(
+        template_path,
+        output_path,
+        plan=plan,
+        template=template_struct,
+    )
+
+    target_sections = parse_docx(template_path)
+    source_sections = _dedupe_sections_by_richest(_parse_source(source_path))
+
+    matches = [
+        HeadingMatch(source_name=s.name, target_name=s.name, score=1.0, method="llm-plan")
+        for s in source_sections
+        if s.name in plan.section_content
+    ]
+    orphans = detect_orphan_paragraphs(output_path)
+
+    log.info(
+        "section_mapper.llm_mode_done",
+        sections_in_plan=len(plan.section_content),
+        header_subs=len(plan.header_substitutions),
+        tables_filled=filled,
+        orphans=len(orphans),
+    )
+
+    return SectionMappingReport(
+        template_path=template_path,
+        source_path=source_path,
+        output_path=output_path,
+        target_sections=target_sections,
+        source_sections=source_sections,
+        matches=matches,
+        tables_filled=filled,
+        orphan_paragraphs=orphans,
+    )
+
+
+async def _run_hybrid_topup(
+    template_path: Path,
+    source_path: Path,
+    output_path: Path,
+    *,
+    llm: LLMProvider,
+) -> None:
+    """After the rules pass, ask the LLM for a plan and apply ONLY the
+    pieces that aren't already filled (untouched header placeholders,
+    empty tables in the output, content for sections still empty).
+    """
+    from engine.section_mapper.auto_mapper import build_mapping_plan
+    from engine.section_mapper.auto_renderer import apply_mapping_plan
+    from engine.section_mapper.source_profiler import profile_source
+    from engine.section_mapper.template_profiler import profile_template
+
+    # Re-profile the OUTPUT (not the template) so we only act on what
+    # the rules pass left untouched.
+    output_struct = profile_template(output_path)
+    if not output_struct.placeholders and not output_struct.empty_tables:
+        return
+
+    source_struct = profile_source(source_path)
+    plan = await build_mapping_plan(output_struct, source_struct, llm=llm)
+    if not plan.header_substitutions and not plan.table_data and not plan.section_content:
+        return
+
+    apply_mapping_plan(
+        output_path,
+        output_path,
+        plan=plan,
+        template=output_struct,
+    )
+    log.info(
+        "section_mapper.hybrid_topup_done",
+        header_subs=len(plan.header_substitutions),
+        sections=len(plan.section_content),
+        tables=len(plan.table_data),
     )
 
 

@@ -38,6 +38,12 @@ print(report.to_dict())
 
 from __future__ import annotations
 
+from engine.section_mapper.auto_mapper import (
+    MappingPlan,
+    TableFillData,
+    build_mapping_plan,
+)
+from engine.section_mapper.auto_renderer import apply_mapping_plan
 from engine.section_mapper.numbering import (
     NumberingResolver,
     load_resolver_from_docx,
@@ -64,15 +70,33 @@ from engine.section_mapper.similarity import (
     match_llm,
     match_string,
 )
+from engine.section_mapper.source_profiler import SourceStructure, SourceTable, profile_source
 from engine.section_mapper.table_filler import TableSpec, fill_tables
+from engine.section_mapper.template_profiler import (
+    TemplateEmptyTable,
+    TemplateHeading,
+    TemplatePlaceholder,
+    TemplateStructure,
+    profile_template,
+)
 
 __all__ = [
     "DocxSection",
     "HeadingMatch",
+    "MappingPlan",
     "NumberingResolver",
     "SectionMappingReport",
+    "SourceStructure",
+    "SourceTable",
+    "TableFillData",
     "TableSpec",
+    "TemplateEmptyTable",
+    "TemplateHeading",
+    "TemplatePlaceholder",
+    "TemplateStructure",
     "TextSection",
+    "apply_mapping_plan",
+    "build_mapping_plan",
     "detect_orphan_paragraphs",
     "fill_tables",
     "load_resolver_from_docx",
@@ -84,5 +108,7 @@ __all__ = [
     "parse_docx",
     "parse_docx_source",
     "parse_text",
+    "profile_source",
+    "profile_template",
     "render_section_content",
 ]

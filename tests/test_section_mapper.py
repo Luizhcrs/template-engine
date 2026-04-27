@@ -1116,5 +1116,206 @@ def test_fill_tables_writes_subheaders_into_row_1(tmp_path):
     assert t.rows[3].cells[2].text == "X"
 
 
+# ===== Wave M: profilers + auto mapper =====
+
+
+def test_template_profiler_detects_placeholders_in_header(tmp_path):
+    """Header placeholders are detected by shape regardless of name:
+    XXXX, Rev. 00, Elaborado:, Aprovado:, Data:, (TITULO).
+    """
+    import zipfile as _zipfile
+
+    from engine.section_mapper.template_profiler import profile_template
+
+    p = tmp_path / "tpl.docx"
+    doc = Document()
+    doc.add_paragraph("OBJETIVO")
+    doc.save(str(p))
+    header_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        "<w:p><w:r><w:t>XXXX</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Rev. 00</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Elaborado:</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Aprovado:</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Data:</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>(TITULO)</w:t></w:r></w:p>"
+        "</w:hdr>"
+    )
+    with _zipfile.ZipFile(str(p), "a") as z:
+        z.writestr("word/header1.xml", header_xml)
+
+    prof = profile_template(p)
+    kinds = {ph.kind for ph in prof.placeholders}
+    texts = {ph.text for ph in prof.placeholders}
+
+    assert "repeated" in kinds  # XXXX
+    assert "revision" in kinds  # Rev. 00
+    assert "label_empty" in kinds  # Elaborado:/Aprovado:/Data:
+    assert "parens" in kinds  # TITULO
+    assert "XXXX" in texts
+
+
+def test_template_profiler_detects_empty_tables(tmp_path):
+    """Any table with at least one fully-empty data row is reported."""
+    from engine.section_mapper.template_profiler import profile_template
+
+    p = tmp_path / "tpl.docx"
+    doc = Document()
+    doc.add_paragraph("OBJETIVO")
+    table = doc.add_table(rows=3, cols=3)
+    table.rows[0].cells[0].text = "Atividades"
+    table.rows[0].cells[1].text = "Responsabilidade"
+    table.rows[0].cells[2].text = "Responsabilidade"
+    # Rows 1 + 2 stay empty.
+    doc.save(str(p))
+
+    prof = profile_template(p)
+    assert len(prof.empty_tables) == 1
+    t = prof.empty_tables[0]
+    assert t.primary_headers == ["Atividades", "Responsabilidade", "Responsabilidade"]
+    assert t.empty_row_count == 2
+
+
+def test_source_profiler_collects_sections_tables_header(tmp_path):
+    """profile_source returns sections + tables + (glued, spaced) header
+    text. Synthetic source carries one heading and one table.
+    """
+    import zipfile as _zipfile
+
+    from engine.section_mapper.source_profiler import profile_source
+
+    p = tmp_path / "src.docx"
+    doc = Document()
+    doc.add_paragraph("OBJETIVO")
+    doc.add_paragraph("body line for objetivo")
+    table = doc.add_table(rows=2, cols=3)
+    table.rows[0].cells[0].text = "VERSÃO"
+    table.rows[0].cells[1].text = "DATA"
+    table.rows[0].cells[2].text = "ALTERAÇÕES"
+    table.rows[1].cells[0].text = "01"
+    table.rows[1].cells[1].text = "31/08/2021"
+    table.rows[1].cells[2].text = "Inicial"
+    doc.save(str(p))
+    header_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        "<w:p><w:r><w:t>IT.PRO.URE.387.0005</w:t></w:r></w:p>"
+        "</w:hdr>"
+    )
+    with _zipfile.ZipFile(str(p), "a") as z:
+        z.writestr("word/header1.xml", header_xml)
+
+    s = profile_source(p)
+    assert any(sec.name == "OBJETIVO" for sec in s.sections)
+    assert len(s.tables) == 1
+    assert s.tables[0].headers[0] == "VERSÃO"
+    assert "IT.PRO.URE.387.0005" in s.header_text_glued
+
+
+def test_auto_mapper_parse_response_handles_well_formed_plan():
+    """The parser tolerates well-formed responses and returns a
+    populated MappingPlan."""
+    from engine.section_mapper.auto_mapper import _parse_response
+
+    response = {
+        "header_substitutions": {"XXXX": "IT.PRO.URE.387.0005", "TITULO": "PARTIDA"},
+        "section_content": {"OBJETIVO": "Listar tarefas..."},
+        "table_data": [
+            {
+                "template_table_index": 1,
+                "sub_headers": [],
+                "rows": [
+                    {"Rev.": "00", "Data": "31/08/2021", "Alteração": "Inicial"},
+                ],
+            }
+        ],
+    }
+    plan = _parse_response(response)
+    assert plan.header_substitutions["XXXX"] == "IT.PRO.URE.387.0005"
+    assert plan.section_content["OBJETIVO"].startswith("Listar")
+    assert len(plan.table_data) == 1
+    assert plan.table_data[0].template_table_index == 1
+
+
+def test_auto_mapper_parse_response_returns_empty_on_bad_input():
+    from engine.section_mapper.auto_mapper import _parse_response
+
+    plan = _parse_response("not a dict")
+    assert plan.header_substitutions == {}
+    assert plan.section_content == {}
+    assert plan.table_data == []
+
+
+def test_auto_mapper_build_schema_uses_actual_placeholder_keys():
+    """Schema's required keys come from template.placeholders so the
+    LLM is forced to address every detected placeholder."""
+    from engine.section_mapper.auto_mapper import _build_schema
+    from engine.section_mapper.template_profiler import (
+        TemplateEmptyTable,
+        TemplateHeading,
+        TemplatePlaceholder,
+        TemplateStructure,
+    )
+
+    template = TemplateStructure(
+        template_path="x.docx",
+        headings=[
+            TemplateHeading(
+                name="OBJETIVO",
+                raw_heading="OBJETIVO",
+                number=None,
+                level=1,
+                paragraph_idx=0,
+            )
+        ],
+        placeholders=[
+            TemplatePlaceholder(
+                text="XXXX",
+                kind="repeated",
+                location="header",
+                paragraph_idx=-1,
+                context="XXXX Rev. 00",
+            )
+        ],
+        empty_tables=[
+            TemplateEmptyTable(
+                index=0,
+                primary_headers=["Rev.", "Data"],
+                sub_headers=["", ""],
+                empty_row_count=1,
+            )
+        ],
+    )
+    schema = _build_schema(template)
+    assert "XXXX" in schema["properties"]["header_substitutions"]["properties"]
+    assert "OBJETIVO" in schema["properties"]["section_content"]["properties"]
+
+
+def test_auto_renderer_header_substitution_low_level(tmp_path):
+    """Direct test of the header-XML substitution path: build a docx
+    with a real header part referenced from the document, run the
+    substitution, verify."""
+    import zipfile as _zipfile
+
+    from engine.section_mapper.auto_renderer import _apply_header_substitutions
+
+    p = tmp_path / "tpl.docx"
+    doc = Document()
+    # Use python-docx's section.header to register a real header part.
+    sec = doc.sections[0]
+    sec.header.paragraphs[0].text = "XXXX"
+    doc.save(str(p))
+
+    _apply_header_substitutions(p, {"XXXX": "IT.PRO.URE.387.0005"})
+
+    with _zipfile.ZipFile(str(p)) as z:
+        hdr_files = [n for n in z.namelist() if n.startswith("word/header")]
+        assert hdr_files, "expected at least one word/header*.xml"
+        hdr_xml = z.read(hdr_files[0]).decode("utf-8")
+    assert "IT.PRO.URE.387.0005" in hdr_xml
+    assert ">XXXX<" not in hdr_xml
+
+
 # Path import kept at runtime so pytest fixture annotations resolve
 _ = Path

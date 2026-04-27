@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-27 — Wave M (LLM-driven full-doc mapping)
+
+The Wave L pipeline relied on hardcoded vendor heuristics: Engeman
+placeholder names, Brazilian-PT synonym table, canonical Histórico /
+Responsabilidade extractors, regex-based `Aprovador (es):` /
+`IT.PRO.URE.387.0005` parsers, etc. That worked for one vendor's
+templates; it did not generalise.
+
+Wave M ships a vendor-agnostic LLM-driven mode that handles ANY template
++ source pair the LLM can read.
+
+### Added — generic profilers
+
+- **`engine.section_mapper.template_profiler`** —
+  `profile_template(path)` returns a vendor-agnostic
+  `TemplateStructure` carrying:
+  - Headings (re-used from `parse_docx`).
+  - Placeholders detected by SHAPE (not by name): `XXXX` repeated
+    chars, `(TITULO)` parenthesised labels, `[FOO]` brackets, `{{X}}`
+    curly tokens, `___` underscore runs, `Label:` empty-suffix labels,
+    `Rev. 00` revision-like literals. Header / footer placeholders are
+    detected even inside `<w:txbxContent>` text boxes that
+    python-docx's iterators skip.
+  - Empty tables: any table with at least one fully-blank data row
+    after the header(s).
+- **`engine.section_mapper.source_profiler`** — `profile_source(path)`
+  bundles sections (with auto-numbering already resolved when the
+  source is `.docx`), tables, and the source's header text in two
+  flavors (glued for dotted document codes, spaced for multi-word
+  titles).
+
+Both structures are JSON-serialisable.
+
+### Added — LLM mapper
+
+- **`engine.section_mapper.auto_mapper.build_mapping_plan(template,
+  source, *, llm)`** — issues ONE batched LLM call that returns a
+  complete `MappingPlan`:
+  - `header_substitutions: dict[placeholder_text, replacement]`
+  - `section_content: dict[heading_canonical, body_text]`
+  - `table_data: list[TableFillData]` (per-template-table rows)
+- The schema is JSON-Schema strict; required keys come from the
+  detected placeholders + headings so the LLM is forced to address
+  every detected slot. Failure (provider error / schema mismatch)
+  returns an empty plan so callers can fall back to rules-mode.
+
+### Added — auto renderer
+
+- **`engine.section_mapper.auto_renderer.apply_mapping_plan(template,
+  output, *, plan, template_struct)`** — materialises the plan: section
+  content via `render_section_content`, tables via `fill_tables` with
+  synthesised `TableSpec`s anchored by `template_table_index`, header
+  placeholders via run-preserving substitution in every
+  `word/header*.xml`.
+
+### Added — orchestrator `mode` flag
+
+- `map_sections_async` gains a `mode: str = "rules"` parameter:
+  - `"rules"` (default) — Wave L pipeline, free, deterministic, but
+    Engeman / PT-BR specific.
+  - `"llm"` — single LLM call builds the complete substitution plan
+    from the profilers. Generalises across vendors and languages.
+    Requires a provider.
+  - `"hybrid"` — runs rules first, then asks the LLM to plug whatever
+    gaps the rules left behind (untouched header placeholders, empty
+    tables the auto-detector did not recognise, content for sections
+    still empty). Requires a provider.
+- `map_sections` (sync) stays rules-only. Use `map_sections_async` for
+  LLM / hybrid modes.
+
+### Tests
+
+7 new unit tests covering profilers + mapper + renderer paths
+(351 → **358 passing**).
+
+### Cost ballpark (Gemini Flash 2.5)
+
+| Mode | LLM calls | $/doc |
+|---|---|---|
+| `rules` | 0 | **$0.0000** |
+| `hybrid` | 1 (only when rules left gaps) | ~$0.0010 |
+| `llm` | 1 (always) | ~$0.0010 |
+
+Use `rules` when the regulator demands bit-for-bit reproducibility,
+`hybrid` for best of both worlds, `llm` when the template / source pair
+is too far from the rules' Engeman heuristics.
+
 ## [0.9.7] - 2026-04-27
 
 ### Added — header filler
