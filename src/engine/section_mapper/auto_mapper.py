@@ -441,6 +441,21 @@ async def _build_initial_plan(
         .replace("{source_json}", source_json[:60000])
         .replace("{today}", today)
     )
+
+    # Append an explicit, deduped checklist of cells that MUST be
+    # addressed via cell_fills. Without this enumeration the model
+    # often skips merged-cell body slots in mega-table layouts (the
+    # text repeats across 8 columns; the model thinks it has already
+    # filled them).
+    fillable_checklist = _build_fillable_cells_checklist(template)
+    if fillable_checklist:
+        prompt += (
+            "\n\nFILLABLE CELLS YOU MUST ADDRESS (one cell_fill entry per "
+            "logical slot below; pick ANY column from the merged group "
+            "and the renderer will mirror across columns automatically):"
+            f"\n{fillable_checklist}"
+        )
+
     if template_images:
         prompt += (
             "\n\nThe TEMPLATE has been rendered to PNG image(s) attached "
@@ -630,6 +645,50 @@ def _merge_plans(prev: MappingPlan, addendum: MappingPlan) -> MappingPlan:
         paragraph_rewrites=rewrites,
         cell_fills=cell_fills,
     )
+
+
+def _build_fillable_cells_checklist(template: TemplateStructure) -> str:
+    """Group fillable cells by (table_index, row) and dedupe merged-cell
+    groups so the LLM sees one logical entry per slot instead of 8.
+
+    Example output line:
+        - (table=0, row=2, cols=[0..7]) current="1. OBJETIVO: (Descrição clara...)"
+          → emit cell_fill replacing the parenthesised hint with the
+            real objective text.
+    """
+    if not template.cells:
+        return ""
+
+    # Group by (table_index, row, normalized_text)
+    by_row: dict[tuple[int, int], list] = {}  # type: ignore[type-arg]
+    for c in template.cells:
+        if not c.is_fillable:
+            continue
+        by_row.setdefault((c.table_index, c.row), []).append(c)
+
+    lines: list[str] = []
+    for (ti, ri), cells in sorted(by_row.items()):
+        # Dedupe by text within the row (merged cells repeat the same string).
+        seen: set[str] = set()
+        for cell in cells:
+            key = cell.text.strip()
+            if key in seen:
+                continue
+            seen.add(key)
+            cols = [c.col for c in cells if c.text.strip() == key]
+            cols_repr = (
+                f"col={cols[0]}"
+                if len(cols) == 1
+                else f"cols=[{cols[0]}..{cols[-1]}]"
+            )
+            current = key.replace("\n", " ")[:140]
+            lines.append(
+                f"- (table={ti}, row={ri}, {cols_repr}) current={current!r} "
+                f"→ emit a cell_fill with content drawn from the SOURCE "
+                f"that matches this slot's heading / parenthesised hint."
+            )
+
+    return "\n".join(lines[:80])  # cap at 80 lines so prompt stays bounded
 
 
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")

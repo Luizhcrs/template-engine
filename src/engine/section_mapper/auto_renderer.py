@@ -88,7 +88,10 @@ def _apply_cell_fills(docx_path: Path, fills: list) -> None:  # type: ignore[typ
     (table_index, row, col).
 
     Used for mega-table layouts where the entire document is one
-    table and each fillable spot is a cell coordinate.
+    table and each fillable spot is a cell coordinate. When the
+    target cell is part of a merged-column group (multiple cells in
+    the same row sharing identical text), the fill is mirrored across
+    all sibling cells in that group.
     """
     if not fills:
         return
@@ -96,6 +99,22 @@ def _apply_cell_fills(docx_path: Path, fills: list) -> None:  # type: ignore[typ
     from docx import Document
 
     doc = Document(str(docx_path))
+
+    def _set_cell_text(cell, new_text: str) -> None:  # type: ignore[no-untyped-def]
+        if cell.paragraphs:
+            para = cell.paragraphs[0]
+            t_elements = para._p.findall(f".//{_W_NS}t")
+            if t_elements:
+                t_elements[0].text = new_text
+                for t in t_elements[1:]:
+                    t.text = ""
+            else:
+                para.add_run(new_text)
+            for extra_para in cell.paragraphs[1:]:
+                for t in extra_para._p.findall(f".//{_W_NS}t"):
+                    t.text = ""
+        else:
+            cell.text = new_text
 
     for fill in fills:
         if fill.table_index < 0 or fill.table_index >= len(doc.tables):
@@ -106,23 +125,14 @@ def _apply_cell_fills(docx_path: Path, fills: list) -> None:  # type: ignore[typ
         row = table.rows[fill.row]
         if fill.col < 0 or fill.col >= len(row.cells):
             continue
-        cell = row.cells[fill.col]
-        # Replace cell text preserving the first paragraph's run formatting.
-        if cell.paragraphs:
-            para = cell.paragraphs[0]
-            t_elements = para._p.findall(f".//{_W_NS}t")
-            if t_elements:
-                t_elements[0].text = fill.new_text
-                for t in t_elements[1:]:
-                    t.text = ""
-            else:
-                para.add_run(fill.new_text)
-            # Clear any subsequent paragraphs in the cell.
-            for extra_para in cell.paragraphs[1:]:
-                for t in extra_para._p.findall(f".//{_W_NS}t"):
-                    t.text = ""
-        else:
-            cell.text = fill.new_text
+        target_cell = row.cells[fill.col]
+        target_text = target_cell.text.strip()
+
+        # Apply to the target cell + every sibling in the same row that
+        # currently carries the same text (merged-column mirror).
+        for sibling in row.cells:
+            if sibling.text.strip() == target_text:
+                _set_cell_text(sibling, fill.new_text)
 
     doc.save(str(docx_path))
 

@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.9] - 2026-04-27 — Focused cell-fill checklist + merged-cell mirror
+
+### Added — fillable-cells checklist in prompt
+
+`auto_mapper._build_fillable_cells_checklist` deduplicates merged-cell
+groups and writes an explicit ``FILLABLE CELLS YOU MUST ADDRESS`` list
+into the prompt, one logical entry per row. The LLM no longer "thinks
+it filled them" because eight identical columns in the same row only
+appear once in the checklist.
+
+Format:
+
+    - (table=0, row=10, cols=[4..7]) current="Descrever passo a passo..."
+      → emit a cell_fill with content drawn from the SOURCE that
+        matches this slot's heading / parenthesised hint.
+
+### Added — merged-column mirror in renderer
+
+When the plan emits a ``cell_fill`` for one column of a merged group,
+``_apply_cell_fills`` now mirrors the new text across every sibling
+cell in the same row that carried the same original text. Mega-table
+layouts visually show one wide cell; previously only the addressed
+column got rewritten and the visible cell still showed the template
+default.
+
+### Result on Corentocantins POP
+
+Cells now correctly populated:
+
+- Title rows (0, 1) — ``PROCEDIMENTO OPERACIONAL PADRÃO POP DO
+  SERVIÇO DE ENFERMAGEM`` mirrored across cols 2-5.
+- Procedure rows (10, 11, 12) — ``1. Higienizar as mãos…``,
+  ``Vigiar sinais vitais…``, ``Resolução COFEN 564/2017…`` filled in
+  the executing-cells columns.
+- Footer rows (16, 17, 18) — Elaboração / Revisão / Data filled.
+
+Still empty (LLM still resists overwriting cells whose current text
+combines a numbered heading with a parenthesised hint, e.g. ``1.
+OBJETIVO: (Descrição clara…)``):
+
+- Rows 2-7 body slots (1.OBJETIVO, 2.INDICAÇÃO, 3.RESULTADOS, ...).
+- Row 19 (11.ANEXO).
+
+The checklist + mirror infrastructure is in place; closing rows 2-7
+is a prompt-tightening step (the model needs an explicit "REPLACE
+the parenthesised hint with the real content; keep the heading
+prefix") that's the next iteration.
+
 ## [0.10.8] - 2026-04-27 — Multimodal LLM + polymorphic source input
 
 ### Added — multimodal LLM (visual layout)
