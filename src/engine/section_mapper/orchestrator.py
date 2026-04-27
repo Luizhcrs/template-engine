@@ -212,6 +212,17 @@ def map_sections(
     if effective_specs:
         filled = fill_tables(template_path, output_path, effective_specs)
 
+    # Fill the template header (XXXX / Rev. 00 / Elaborado / Aprovado /
+    # Data / TITULO) with metadata extracted from the source's own header
+    # and revision-history table. Silently skipped when source carries
+    # nothing recognizable.
+    from engine.section_mapper.header_filler import (
+        extract_source_metadata,
+        fill_template_header,
+    )
+
+    fill_template_header(output_path, extract_source_metadata(source_path))
+
     orphans = detect_orphan_paragraphs(output_path)
 
     report = SectionMappingReport(
@@ -302,6 +313,17 @@ async def map_sections_async(
     filled = 0
     if effective_specs:
         filled = fill_tables(template_path, output_path, effective_specs)
+
+    # Fill the template header (XXXX / Rev. 00 / Elaborado / Aprovado /
+    # Data / TITULO) with metadata extracted from the source's own header
+    # and revision-history table. Silently skipped when source carries
+    # nothing recognizable.
+    from engine.section_mapper.header_filler import (
+        extract_source_metadata,
+        fill_template_header,
+    )
+
+    fill_template_header(output_path, extract_source_metadata(source_path))
 
     orphans = detect_orphan_paragraphs(output_path)
 

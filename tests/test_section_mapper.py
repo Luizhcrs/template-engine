@@ -850,6 +850,121 @@ def test_classify_history_columns_returns_none_when_no_change_col():
     assert _classify_history_columns(["FOO", "BAR"]) is None
 
 
+# ===== header_filler =====
+
+
+def test_extract_document_code_handles_run_split_prefix(tmp_path):
+    """Source headers split a doc code across multiple <w:t> elements
+    (``IT.PRO.`` + ``U`` + ``RE`` + ``.387.0005``). The extractor must
+    reassemble ``IT.PRO.URE.387.0005`` even when adjacent words like
+    ``TRABALHO`` glue into the prefix in the concatenated text.
+    """
+    from engine.section_mapper.header_filler import _extract_document_code
+
+    glued = "INSTRUÇÃO DE TRABALHOIT.PRO.URE.387.0005PARTIDA DA ÁREA"
+    spaced = "INSTRUÇÃO DE TRABALHO IT.PRO. U RE .38 7 .0 0 05 PARTIDA"
+    assert _extract_document_code(f"{glued}\n---\n{spaced}") == "IT.PRO.URE.387.0005"
+
+
+def test_extract_source_metadata_engeman_pair(tmp_path):
+    """End-to-end: extract every recognized field from a synthetic Engeman
+    style source .docx (header + revision-history table)."""
+    import zipfile as _zipfile
+
+    p = tmp_path / "src.docx"
+    # Build a minimal docx via python-docx with a revision-history table.
+    doc = Document()
+    doc.add_paragraph("body para")
+    table = doc.add_table(rows=2, cols=4)
+    h = table.rows[0].cells
+    h[0].text = "VERSÃO"
+    h[1].text = "DATA DE PUBLICAÇÃO"
+    h[2].text = "AUTOR / REVISOR"
+    h[3].text = "ALTERAÇÕES"
+    body = table.rows[1].cells
+    body[0].text = "01"
+    body[1].text = "31/08/2021"
+    body[2].text = "Marcos Britto"
+    body[3].text = "Emissão inicial"
+    doc.save(str(p))
+    # Inject a header XML carrying the doc-code prefix + title + approver.
+    header_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        "<w:p><w:r><w:t>IT.PRO.</w:t></w:r><w:r><w:t>U</w:t></w:r>"
+        "<w:r><w:t>RE</w:t></w:r><w:r><w:t>.387.0005</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>PARTIDA DA ÁREA DE SÍNTESE</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Ver.: 01</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Aprovador (es): Fabiano Roberto Gomes Arce</w:t></w:r></w:p>"
+        "</w:hdr>"
+    )
+    with _zipfile.ZipFile(str(p), "a") as z:
+        z.writestr("word/header1.xml", header_xml)
+
+    from engine.section_mapper.header_filler import extract_source_metadata
+
+    md = extract_source_metadata(p)
+    assert md.document_code == "IT.PRO.URE.387.0005"
+    assert md.title == "PARTIDA DA ÁREA DE SÍNTESE"
+    assert md.version == "01"
+    assert md.author == "Marcos Britto"
+    assert md.approver == "Fabiano Roberto Gomes Arce"
+    assert md.source_date == "31/08/2021"
+
+
+def test_fill_template_header_substitutes_placeholders(tmp_path):
+    """Substitution writes IT.PRO.URE.387.0005, Rev. 01, Elaborado:
+    ..., Aprovado: ..., Data: today, TITULO into the template header.
+    """
+    import zipfile as _zipfile
+
+    p = tmp_path / "tpl.docx"
+    doc = Document()
+    doc.add_paragraph("body")
+    doc.save(str(p))
+    template_header_xml = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        "<w:p><w:r><w:t>XXXX </w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Rev. 00</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Elaborado:</w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Aprovado: </w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>Data: </w:t></w:r></w:p>"
+        "<w:p><w:r><w:t>(</w:t></w:r><w:r><w:t>TITULO</w:t></w:r><w:r><w:t>)</w:t></w:r></w:p>"
+        "</w:hdr>"
+    )
+    with _zipfile.ZipFile(str(p), "a") as z:
+        z.writestr("word/header1.xml", template_header_xml)
+
+    from engine.section_mapper.header_filler import (
+        HeaderMetadata,
+        fill_template_header,
+    )
+
+    md = HeaderMetadata(
+        document_code="IT.PRO.URE.387.0005",
+        title="PARTIDA DA ÁREA DE SÍNTESE",
+        version="01",
+        author="Marcos Britto",
+        approver="Fabiano Roberto Gomes Arce",
+        source_date="31/08/2021",
+    )
+    n = fill_template_header(p, md)
+    assert n >= 5
+
+    with _zipfile.ZipFile(str(p)) as z:
+        out = z.read("word/header1.xml").decode("utf-8")
+    assert "IT.PRO.URE.387.0005" in out
+    assert "Rev. 01" in out
+    assert "Elaborado: Marcos Britto" in out
+    assert "Aprovado: Fabiano Roberto Gomes Arce" in out
+    assert "Data: 2026-" in out  # today's date
+    assert "PARTIDA DA ÁREA DE SÍNTESE" in out
+    # Original placeholders gone
+    assert "XXXX" not in out
+    assert ">TITULO<" not in out
+
+
 # ===== renderer line-kind detection + decoration =====
 
 

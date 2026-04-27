@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-04-27
+
+### Added — header filler
+
+The template's header carries placeholders the previous releases never
+touched: ``XXXX`` (document code), ``Rev. 00`` (revision), ``Elaborado:``
+(author), ``Aprovado:`` (approver), ``Data:`` (date), ``(TITULO)``
+(title). Industrial templates ship these blank so the orchestrator was
+producing valid body text under a placeholder header.
+
+#### New module — `engine.section_mapper.header_filler`
+
+- ``extract_source_metadata(source_path)`` reads the source ``.docx``
+  header (fragmented runs reassembled in two flavors: glued for dotted
+  document codes, spaced for multi-word titles) plus the body's
+  revision-history table; returns a ``HeaderMetadata`` record.
+- ``fill_template_header(output_path, metadata)`` walks every
+  ``word/header*.xml`` inside the docx zip and substitutes each
+  placeholder inline (run-preserving), saving back to the same file.
+
+Document-code extraction handles the common case where the source
+fragments the code across many ``<w:t>`` elements (``IT.PRO.`` + ``U`` +
+``RE`` + ``.387.0005``) AND the surrounding text glues a company tag in
+without a word boundary (``...TRABALHOIT.PRO.URE.387.0005...``). The
+prefix is located in the spaced flavor (where each run sits between
+spaces), then a state-machine walk over the glued flavor consumes the
+full code until a letter→digit boundary breaks the segment kind.
+
+#### Orchestrator wiring
+
+Both ``map_sections`` and ``map_sections_async`` call the header filler
+after table fill. When source metadata is missing for a placeholder,
+the placeholder is left in place so a downstream reviewer can spot the
+gap.
+
+### Tests
+
+3 new unit tests (348 → **351 passing**):
+
+- ``test_extract_document_code_handles_run_split_prefix`` — synthetic
+  glued/spaced pair; expects ``IT.PRO.URE.387.0005`` not the truncated
+  ``PRO.URE.387.0005``.
+- ``test_extract_source_metadata_engeman_pair`` — end-to-end on a
+  synthetic source carrying every recognised field.
+- ``test_fill_template_header_substitutes_placeholders`` — substitution
+  asserts, including replaced-not-duplicated placeholder.
+
+### Result on Engeman dados.docx
+
+Header before:
+
+    XXXX           Rev. 00       Elaborado:        Aprovado:        Data:
+    ENGEMAN ...                              (TITULO)
+
+Header after:
+
+    IT.PRO.URE.387.0005    Rev. 01    Elaborado: Marcos Britto
+    Aprovado: Fabiano Roberto Gomes Arce    Data: 2026-04-27
+    ENGEMAN ...                  (PARTIDA DA ÁREA DE SÍNTESE)
+
+Matches DOcStream's reference output.
+
 ## [0.9.6] - 2026-04-27
 
 ### Fixed — sub-headings turning blue
