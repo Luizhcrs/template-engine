@@ -38,6 +38,7 @@ from engine.section_mapper.parser import (
     DocxSection,
     TextSection,
     parse_docx,
+    parse_docx_source,
     parse_text,
 )
 from engine.section_mapper.renderer import detect_orphan_paragraphs, render_section_content
@@ -170,8 +171,7 @@ def map_sections(
     from engine.section_mapper.auto_tables import detect_default_specs, merge_specs
 
     target_sections = parse_docx(template_path)
-    source_text = extract(source_path).text
-    source_sections = _dedupe_sections_by_richest(parse_text(source_text))
+    source_sections = _dedupe_sections_by_richest(_parse_source(source_path))
 
     target_names = [s.name for s in target_sections]
     matches = _select_matches(
@@ -240,8 +240,7 @@ async def map_sections_async(
     from engine.section_mapper.auto_tables import detect_default_specs, merge_specs
 
     target_sections = parse_docx(template_path)
-    source_text = extract(source_path).text
-    source_sections = _dedupe_sections_by_richest(parse_text(source_text))
+    source_sections = _dedupe_sections_by_richest(_parse_source(source_path))
 
     target_names = [s.name for s in target_sections]
     if similarity_mode == "llm" and llm is not None:
@@ -289,6 +288,21 @@ async def map_sections_async(
         tables_filled=filled,
         orphan_paragraphs=orphans,
     )
+
+
+def _parse_source(source_path: Path) -> list[TextSection]:
+    """Route source parsing by file type.
+
+    ``.docx`` sources go through :func:`parse_docx_source` which preserves
+    Word's auto-numbering (numbered headings, sub-sections, list markers)
+    by resolving ``<w:numPr>`` against ``word/numbering.xml``. Everything
+    else falls back to plain-text extraction (PDF, txt, etc) where Word
+    has already rendered the numbering into the text.
+    """
+    if source_path.suffix.lower() == ".docx":
+        return parse_docx_source(source_path)
+    text = extract(source_path).text
+    return parse_text(text)
 
 
 def _dedupe_sections_by_richest(

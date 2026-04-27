@@ -38,6 +38,10 @@ print(report.to_dict())
 
 from __future__ import annotations
 
+from engine.section_mapper.numbering import (
+    NumberingResolver,
+    load_resolver_from_docx,
+)
 from engine.section_mapper.orchestrator import (
     SectionMappingReport,
     map_sections,
@@ -47,6 +51,7 @@ from engine.section_mapper.parser import (
     DocxSection,
     TextSection,
     parse_docx,
+    parse_docx_source,
     parse_text,
 )
 from engine.section_mapper.renderer import (
@@ -64,17 +69,20 @@ from engine.section_mapper.table_filler import TableSpec, fill_tables
 __all__ = [
     "DocxSection",
     "HeadingMatch",
+    "NumberingResolver",
     "SectionMappingReport",
     "TableSpec",
     "TextSection",
     "detect_orphan_paragraphs",
     "fill_tables",
+    "load_resolver_from_docx",
     "map_sections",
     "map_sections_async",
     "match_embeddings",
     "match_llm",
     "match_string",
     "parse_docx",
+    "parse_docx_source",
     "parse_text",
     "render_section_content",
 ]

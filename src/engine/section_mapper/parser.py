@@ -27,6 +27,11 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from engine.section_mapper.numbering import (
+    extract_num_pr,
+    load_resolver_from_docx,
+)
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -251,6 +256,88 @@ def parse_docx(path: Path) -> list[DocxSection]:
             "heading_idx": idx,
             "content_idxs": [],
         }
+
+    _flush()
+    return sections
+
+
+def parse_docx_source(path: Path) -> list[TextSection]:
+    """Parse a SOURCE ``.docx`` preserving auto-numbering as text prefixes.
+
+    Unlike :func:`parse_text` (which loses Word's auto-numbering when you
+    extract via ``pdfplumber`` / ``python-docx`` text-only), this resolves
+    ``<w:numPr>`` against ``word/numbering.xml`` and prepends the rendered
+    marker (``"1."``, ``"5.2.1."``, ``"a)"``, ``"•"``, ...) to every
+    numbered paragraph.
+
+    Top-level heuristic: a paragraph whose resolved ``ilvl == 0`` (or a
+    plain-text all-caps / numbered-pattern heading) opens a new
+    :class:`TextSection`. Deeper-level paragraphs become content lines
+    (with marker prefix) under the current section.
+    """
+    from docx import Document
+
+    doc = Document(str(path))
+    resolver = load_resolver_from_docx(path)
+
+    sections: list[TextSection] = []
+    current: dict | None = None
+    buffer: list[str] = []
+
+    def _flush() -> None:
+        nonlocal current, buffer
+        if current is None:
+            return
+        sections.append(
+            TextSection(
+                name=current["name"],
+                raw_heading=current["raw_heading"],
+                number=current["number"],
+                level=current["level"],
+                content="\n".join(buffer).strip(),
+            )
+        )
+        buffer = []
+
+    for para in doc.paragraphs:
+        text = para.text.strip()
+        if not text:
+            continue
+
+        np = extract_num_pr(para._p.xml)
+        marker = ""
+        ilvl = -1
+        if np is not None:
+            num_id, ilvl = np
+            marker = resolver.marker_for(num_id, ilvl)
+
+        # Heading detection: ilvl == 0 of a decimal-numbered list IS a
+        # top-level section heading. Otherwise fall through to text-only
+        # heuristics (numbered pattern / all-caps).
+        is_top_level_numpr_heading = ilvl == 0 and bool(marker) and marker[:1].isdigit()
+
+        head = _detect_heading(text, style_name=para.style.name if para.style else None)
+        if is_top_level_numpr_heading and head is None:
+            # Build a synthetic heading record from the paragraph text +
+            # rendered marker. ``number`` carries the marker stripped of
+            # trailing ``.``.
+            head = (_normalize_heading(text), marker.rstrip("."), 1)
+
+        if head is not None:
+            canonical, number, level = head
+            _flush()
+            raw = f"{marker} {text}".strip() if marker else text
+            current = {
+                "name": canonical,
+                "raw_heading": raw,
+                "number": number,
+                "level": level,
+            }
+            continue
+
+        if current is not None:
+            line = f"{marker} {text}".strip() if marker else text
+            buffer.append(line)
 
     _flush()
     return sections

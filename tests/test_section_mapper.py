@@ -17,7 +17,13 @@ from engine.section_mapper import (
     parse_text,
     render_section_content,
 )
-from engine.section_mapper.parser import _normalize_heading
+from engine.section_mapper.numbering import (
+    NumberingResolver,
+    _build_resolver,
+    _format_count,
+    extract_num_pr,
+)
+from engine.section_mapper.parser import _normalize_heading, parse_docx_source
 from engine.section_mapper.similarity import (
     _canonicalize,
     _string_match_one,
@@ -582,6 +588,141 @@ def test_regression_template_with_unnumbered_uppercase_headings(tmp_path):
     assert "OBJETIVO" in names
     assert "APLICACAO" in names
     assert "HISTORICO" in names
+
+
+# ===== numbering resolver (Wave L+) =====
+
+
+def test_numbering_resolver_decimal_top_level():
+    xml = """<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0">
+  <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>
+</w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>"""
+    r = _build_resolver(xml)
+    assert r.marker_for(1, 0) == "1."
+    assert r.marker_for(1, 0) == "2."
+    assert r.marker_for(1, 0) == "3."
+
+
+def test_numbering_resolver_nested_decimal():
+    xml = """<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0">
+  <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>
+  <w:lvl w:ilvl="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1.%2."/></w:lvl>
+  <w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1.%2.%3."/></w:lvl>
+</w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>"""
+    r = _build_resolver(xml)
+    assert r.marker_for(1, 0) == "1."
+    assert r.marker_for(1, 1) == "1.1."
+    assert r.marker_for(1, 1) == "1.2."
+    assert r.marker_for(1, 2) == "1.2.1."
+    assert r.marker_for(1, 2) == "1.2.2."
+    # ilvl=0 advances; deeper counters reset
+    assert r.marker_for(1, 0) == "2."
+    assert r.marker_for(1, 1) == "2.1."
+
+
+def test_numbering_resolver_lower_letter():
+    xml = """<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0">
+  <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="%1)"/></w:lvl>
+</w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>"""
+    r = _build_resolver(xml)
+    assert r.marker_for(1, 0) == "a)"
+    assert r.marker_for(1, 0) == "b)"
+    assert r.marker_for(1, 0) == "c)"
+
+
+def test_numbering_resolver_bullet_uses_universal_glyph():
+    xml = """<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0">
+  <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val=""/></w:lvl>
+</w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>"""
+    r = _build_resolver(xml)
+    # Wingdings glyph collapsed to portable "•"
+    assert r.marker_for(1, 0) == "•"
+    assert r.marker_for(1, 0) == "•"
+
+
+def test_numbering_resolver_format_count_letters_excel_style():
+    assert _format_count(1, "lowerLetter") == "a"
+    assert _format_count(26, "lowerLetter") == "z"
+    assert _format_count(27, "lowerLetter") == "aa"
+    assert _format_count(28, "lowerLetter") == "ab"
+    assert _format_count(1, "upperRoman") == "I"
+    assert _format_count(4, "upperRoman") == "IV"
+    assert _format_count(9, "upperRoman") == "IX"
+
+
+def test_numbering_resolver_unknown_numid_returns_empty_marker():
+    r = NumberingResolver()
+    assert r.marker_for(99, 0) == ""
+
+
+def test_extract_num_pr_handles_paragraph_without_numpr():
+    assert extract_num_pr("<w:p><w:r><w:t>plain</w:t></w:r></w:p>") is None
+
+
+def test_extract_num_pr_default_ilvl_is_zero():
+    xml = """<w:p>
+<w:pPr><w:numPr><w:numId w:val="3"/></w:numPr></w:pPr>
+<w:r><w:t>x</w:t></w:r>
+</w:p>"""
+    assert extract_num_pr(xml) == (3, 0)
+
+
+@pytest.mark.filterwarnings("ignore:Duplicate name:UserWarning")
+def test_parse_docx_source_resolves_section_numbering(tmp_path):
+    """Source .docx with auto-numbered headings (numPr ilvl=0) yields
+    sections whose raw_heading carries the rendered marker."""
+    from docx import Document
+    from docx.oxml.ns import qn
+    from lxml import etree
+
+    p = tmp_path / "src.docx"
+    doc = Document()
+    # Tag heading paragraphs with numPr so the resolver fires.
+    for title in ("OBJETIVO", "APLICACAO", "DEFINICOES"):
+        para = doc.add_paragraph(title)
+        pPr = para._p.get_or_add_pPr()
+        numPr = etree.SubElement(pPr, qn("w:numPr"))
+        ilvl = etree.SubElement(numPr, qn("w:ilvl"))
+        ilvl.set(qn("w:val"), "0")
+        numId = etree.SubElement(numPr, qn("w:numId"))
+        numId.set(qn("w:val"), "1")
+        # body paragraph
+        doc.add_paragraph(f"corpo de {title.lower()}")
+
+    # Build a numbering.xml with numId=1 -> decimal "%1."
+    numbering_xml = """<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0">
+  <w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/></w:lvl>
+</w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>"""
+    doc.save(str(p))
+
+    # python-docx doesn't write numbering.xml when none was used; inject it
+    import zipfile
+
+    with zipfile.ZipFile(str(p), "a") as z:
+        z.writestr("word/numbering.xml", numbering_xml)
+
+    sections = parse_docx_source(p)
+    names = [s.name for s in sections]
+    raw = [s.raw_heading for s in sections]
+    assert "OBJETIVO" in names
+    assert any(rh.startswith("1. ") for rh in raw)
+    assert any(rh.startswith("2. ") for rh in raw)
+    assert any(rh.startswith("3. ") for rh in raw)
 
 
 # Path import kept at runtime so pytest fixture annotations resolve

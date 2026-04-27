@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-04-27
+
+### Added — section_mapper preserves source `.docx` auto-numbering
+
+When the source is a Word document, headings, sub-sections and list items came out unnumbered because Word resolves `<w:numPr>` against `word/numbering.xml` at render time. Plain-text extraction loses everything: a paragraph whose XML says "this is the first item under numId=1, ilvl=0" carries the text `"OBJETIVO"` — the rendered marker `"1."` exists only in Word's view.
+
+Output diff against the first real-world Engeman procedure pair:
+
+| Aspect | Before (v0.9.1) | After (v0.9.2) |
+| --- | --- | --- |
+| Sub-section markers (`6.1.`, `6.2.1.`) | dropped | preserved as text prefix |
+| List markers (`•`) | dropped | preserved (faithful to numFmt) |
+| Source paragraph order | preserved | preserved |
+
+Top-level section markers (`1. OBJETIVO`) still come from the template's own numbering — the template's `<w:numPr>` is preserved and Word renders them when the output is opened.
+
+#### New module — `engine.section_mapper.numbering`
+
+- `NumberingResolver` — reads `word/numbering.xml`, walks paragraphs and returns the rendered marker for each `<w:numPr>` paragraph. Stateful counters per `numId`; advancing one level resets every deeper level.
+- Faithful to `numFmt`: `decimal`, `lowerLetter`, `upperLetter`, `lowerRoman`, `upperRoman` resolved against `lvlText` placeholders (`%1.`, `%1.%2.%3.`, `%4)`). `bullet` collapses to a portable `"•"` regardless of source glyph (Wingdings/Symbol).
+- `load_resolver_from_docx(path)`, `extract_num_pr(p_xml)` helpers.
+- Exported from `engine.section_mapper.__init__`.
+
+#### New parser — `parse_docx_source(path)`
+
+Routes `.docx` source through the resolver. Returns `list[TextSection]` whose `content` lines carry the rendered marker (`"5.1. Compete à gerência"`, `"• Todas as utilidades..."`) and whose `raw_heading` of each section is also numbered (`"1. OBJETIVO"`).
+
+#### Orchestrator routing
+
+`map_sections` and `map_sections_async` detect `source_path.suffix == ".docx"` and route through `parse_docx_source`; everything else (PDF, txt, etc) keeps the existing `extract → parse_text` path because Word has already rendered the numbering into the text.
+
+### Tests
+
+9 new unit tests in `tests/test_section_mapper.py` (319 → 328 passing) covering the resolver (decimal / nested decimal / lowerLetter / bullet collapse / Excel-style letter sequence / Roman / unknown numId / paragraph numPr extraction / end-to-end `parse_docx_source` against a synthetic source).
+
 ## [0.9.1] - 2026-04-27
 
 ### Changed — section_mapper goes zero-config
