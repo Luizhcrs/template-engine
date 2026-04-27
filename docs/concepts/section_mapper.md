@@ -1,10 +1,18 @@
 ---
-title: Section mapper (Wave L)
+title: Section mapper (Wave L + M)
 ---
 
 # Section mapper
 
-Companion to [`normalize_batch`][batch] for **structural** templates that ship with named-but-empty sections (`OBJETIVO`, `APLICAÇÃO`, ...) and rely on heading hierarchy plus tables instead of explicit `{{X}}` tokens. Built and validated against industrial procedure documents (Engeman, NR-12 / NR-13 style, ABNT-shaped academic templates).
+Companion to [`normalize_batch`][batch] for **structural** templates that ship with named-but-empty sections (`OBJETIVO`, `APLICAÇÃO`, ...) and rely on heading hierarchy + tables + cell layout instead of explicit `{{X}}` tokens.
+
+Two modes ship side-by-side:
+
+- **Wave L (`mode="rules"`)** — deterministic, free, zero LLM calls. Hardcoded heuristics tuned to Brazilian-PT industrial procedures (Engeman, NR-12 / NR-13). DOcStream parity on the first real-world Engeman pair.
+- **Wave M (`mode="llm"` / `"hybrid"`)** — vendor-agnostic. ONE multimodal LLM call (template rendered as PNG + structural JSON + source content) returns a complete `MappingPlan` covering header substitutions, section content, paragraph rewrites, table data, and cell-level fills. Validated against:
+  - The original Engeman pair (PT-BR industrial).
+  - Five synthetic adversarial pairs (English corporate, ABNT academic, bilingual gov form, legal contract, mega-table layout).
+  - Two real-world templates downloaded from public Brazilian institution sites (UNIFAP POP — universidade federal; Corentocantins POP — regional nursing council).
 
 [batch]: pipeline.md
 
@@ -279,33 +287,181 @@ rules-mode retry.
 
 ### Cross-vendor validation (Wave M)
 
-`tests/vendor_b/` ships a synthetic English corporate template that
-differs from the Engeman pair on every dimension:
+Five fixture pairs and two real-world public templates exercise the
+LLM mapper:
 
-| Dimension | Engeman (vendor A) | Vendor B (English corporate) |
-| --- | --- | --- |
-| Language | Portuguese | English |
-| Header placeholders | `XXXX`, `(TITULO)`, `Elaborado:`, `Aprovado:`, `Data:`, `Rev. 00` | `{{DOC_CODE}}`, `[Title]`, `Author:`, `Reviewer:`, `Issue Date:` |
-| Section taxonomy | `OBJETIVO`, `APLICAÇÃO`, `SISTEMÁTICA`, ... | `PURPOSE`, `SCOPE`, `PROCEDURE`, ... |
-| Tables | `Atividades \| Responsabilidade \| Responsabilidade` (duplicate primary) + `Rev. \| Data \| Alteração` | `Activity \| Owner` (single column) + `# \| Date \| Description` |
-| Migration row text | `Migração para o novo modelo padrão` | `Migration to new standard template` (LLM follows source language) |
+| Pair | Domain | Language | Notable shape |
+| --- | --- | --- | --- |
+| **A — Engeman** (`dados.docx`) | industrial procedure | PT-BR | `XXXX` / `(TITULO)` / `Elaborado:` / `Atividades \| Responsabilidade \| Responsabilidade` |
+| **B — English corporate** | corporate procedure | EN | `{{DOC_CODE}}` / `[Title]` / `Author:` / `Activity \| Owner` |
+| **C — ABNT academic** | thesis | PT-BR Title-case | `<<TITULO_DO_TRABALHO>>` / `§§§§§` / nested `1.2.1` / `__/__/____` |
+| **D — Bilingual gov form** | government form | PT-BR / EN | `[______]` / `< nome >` / `___.___.___-__` masks |
+| **E — Legal contract** | contract | PT-BR | parties block (multi-placeholder), numbered clauses 1-6 |
+| **UNIFAP POP** (real-world) | university procedure | PT-BR Title-case | `Descrição` / `Objetivos` / `XXXXXXXX` / contact table |
+| **Corentocantins POP** (real-world) | nursing-council POP | PT-BR | mega-table 20×8 with merged cells |
 
-Both pairs round-trip to a fully populated output via the same
-`mode="llm"` call, no synonym-table extension, no per-vendor rule
-edits. Regenerate the fixtures with:
+Result against gpt-4o (mode=`llm`):
+
+| Pair | Sections | Header subs | Tables | Cell fills | Orphans |
+| --- | --- | --- | --- | --- | --- |
+| A | 7/7 | 6 | 2 | n/a | 0 |
+| B | 7/7 | 5 | 2 | n/a | 0 |
+| C | 6/9 | 4 | 2 | n/a | 0 |
+| D | 5/5 | 8 | 1 | n/a | 1 |
+| E | 7/7 | 7 | 1 | n/a | 0 |
+| UNIFAP | 14 plan keys | 12 | 1 | covered | 0 |
+| Corentocantins | 4 sections | 5 | 0 | partial (title + procedure rows) | 0 |
+
+Regenerate via:
 
 ```bash
 python scripts/build_vendor_b_fixtures.py
+python scripts/build_adversarial_fixtures.py
+python scripts/build_real_world_source.py
+python scripts/run_adversarial_llm.py
+python scripts/run_real_world_llm.py
 ```
+
+### Multimodal vision (Wave M)
+
+The LLM call attaches PNG renders of the template (up to 3 pages) so
+the model can SEE merged cells, table geometry, embedded logos.
+Pipeline:
+
+```
+template.docx ──→ docx2pdf (Word COM / Pages) ──→ template.pdf
+                                                       │
+                                                       ▼
+                                           PyMuPDF (fitz) per-page
+                                                       │
+                                                       ▼
+                                              base64 PNG data URLs
+                                                       │
+                                                       ▼
+                                       OpenAI vision (gpt-4o)
+                                       multipart user message
+```
+
+`engine.section_mapper.template_renderer.render_pages(docx_path,
+max_pages=3)` returns `list[PageImage]`. Both `docx2pdf` and `pymupdf`
+are optional — when missing, the orchestrator falls back to text-only
+mode (logged at info level). Install via:
+
+```bash
+pip install docx2pdf pymupdf
+```
+
+### Cell-level fills (Wave M)
+
+Mega-table layouts (Corentocantins-style POPs) carry the entire
+document as one big table. Heading cells and body slot cells live in
+the same table grid. The Wave L renderer doesn't see inside cells.
+
+Wave M adds:
+
+- `TemplateCell(table_index, row, col, text, is_fillable)` — every
+  cell of every body table is profiled with a fillability heuristic
+  (empty / imperative-instruction text / `XX` mask / parenthesised
+  hint / label-no-value / known template defaults like `Fulano de
+  Tal`).
+- `MappingPlan.cell_fills: list[CellFill]` — LLM addresses each
+  fillable cell by `(table_index, row, col)`.
+- `auto_renderer._apply_cell_fills` — writes via `cell.text` while
+  preserving the first paragraph's run formatting. Mirrors the fill
+  across every sibling cell in the same row that shared the original
+  text (merged-column groups).
+- A deduplicated `FILLABLE CELLS YOU MUST ADDRESS` checklist is
+  appended to the prompt, grouping merged columns into one logical
+  entry per row, so the LLM no longer thinks it filled them.
+
+### Plan validation + retry
+
+After the initial LLM call, `_detect_plan_gaps` reports:
+
+- placeholders the LLM left empty
+- template headings empty in the plan when the source mentions a
+  matching keyword
+- empty template tables not addressed in `table_data`
+
+When gaps exist, a focused retry prompt lists exactly what's missing
+and asks the LLM to fill ONLY those slots. `_merge_plans` overlays the
+retry without erasing existing values. `max_retries=1` by default.
+
+### Plan cache
+
+`engine.section_mapper.plan_cache` persists every successful
+`MappingPlan` to `${XDG_CACHE_HOME:-~/.cache}/template-engine/plans/`
+keyed by `sha256(template_bytes) + sha256(source_bytes) +
+PROMPT_VERSION`. Same template + source pair → 0 LLM calls. Override
+the cache directory via `TEMPLATE_ENGINE_CACHE_DIR=/path`.
+
+Real-run benchmark (Vendor E, gpt-4o):
+
+| Run | Wall time | LLM calls |
+| --- | --- | --- |
+| First | ~20 s | 1 (call) + 0-1 (retry) |
+| Second (cache hit) | 4.6 s | 0 |
+
+CLI `--no-cache` skips the cache for one-off runs.
+
+### Polymorphic source input
+
+`profile_source` accepts:
+
+- `Path` / `str` — file path on disk
+- `bytes` / `bytearray` — raw docx bytes (written to a temp file)
+- `BytesIO` / any `io.IOBase` — read & buffered
+- URL strings (`http://` / `https://`) — downloaded via `urllib`
+- existing `SourceStructure` — passed through (idempotent)
+
+The same applies to source paths inside `map_sections_async`.
+
+### CLI command
+
+```bash
+template-engine map-sections \
+    --template ./template.docx \
+    --source ./source.docx \
+    --output ./output.docx \
+    --provider openai --api-key "$OPENAI_API_KEY" --model gpt-4o
+```
+
+Auto-picks `mode="llm"` when a provider is supplied, `"rules"`
+otherwise. `--no-cache` disables the plan cache. `--json <path>` emits
+the `SectionMappingReport`.
+
+### Smart-default mode
+
+`map_sections_async(... mode=None)` (default) auto-picks:
+
+- `llm` provider supplied → `mode="llm"`
+- no provider → `mode="rules"`
+
+Callers don't need to remember mode flags.
 
 ## Limits
 
-See [REAL-WORLD-LIMITS.md][limits] for the full list. Notable items for `section_mapper`:
+See [REAL-WORLD-LIMITS.md][limits] for the full list. Honest call-outs:
 
 [limits]: https://github.com/Luizhcrs/template-engine/blob/main/REAL-WORLD-LIMITS.md
+
+### Wave L (rules mode)
 
 - Scanned PDFs are not OCR'd. Use `.docx` source whenever possible.
 - Multi-column PDFs interleave columns at extraction time; convert to single-column first.
 - Source tables (other than the canonical Histórico / Responsabilidade) come through as flattened text.
 - Synonym table is Brazilian-Portuguese specific. Install the `[embeddings]` extra for cross-language matching, or supply an LLM provider for the long tail.
 - Sub-section hierarchy (`3.2.1.`) is preserved as text prefix, not as nested heading anchors.
+
+### Wave M (LLM mode)
+
+- **Determinism lost** — gpt-4o varies slightly across runs. The plan cache mitigates this for repeated pairs but not for first runs.
+- **Cost** — ~$0.05/doc with gpt-4o, ~$0.001/doc with Gemini Flash 2.5. Cache makes follow-up runs free.
+- **Multimodal optional** — when `docx2pdf` (Word COM) or `pymupdf` is missing, the orchestrator silently falls back to text-only mode. Install both for best mega-table coverage.
+- **Token-window cap** — template JSON capped at 30 000 chars, source JSON at 60 000 chars. Very large templates may be truncated.
+- **Mega-table body slots with imperative hints** still partially resist replacement (Corentocantins rows 2-7). The model preserves cells whose current text combines a numbered heading with a parenthesised hint. Closing this is a prompt-tightening target.
+
+### Universal
+
+- **Real-world template variance is endless.** Five vendors covered now (synthetic + real). Every new vendor is a new failure-mode discovery exercise; bugs reproduce per-template, not in the abstract.
+- **No CI integration test** for `mode="llm"` — the pipeline calls a paid API. Production use requires a smoke run against your own corpus.

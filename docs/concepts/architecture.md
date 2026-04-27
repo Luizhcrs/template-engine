@@ -45,6 +45,12 @@ engine/
     ├── table_filler.py      fill_tables (header-set match + subheaders)
     ├── auto_tables.py       detect_default_specs_with_source (Histórico + Resp from source)
     ├── header_filler.py     extract_source_metadata + fill_template_header
+    ├── template_profiler.py profile_template (Wave M: cells + placeholders + headings)
+    ├── source_profiler.py   profile_source (Wave M: polymorphic input, body fallback)
+    ├── auto_mapper.py       build_mapping_plan (Wave M: LLM call + retry + checklist)
+    ├── auto_renderer.py     apply_mapping_plan (Wave M: header/body subs + cell_fills)
+    ├── template_renderer.py render_pages (Wave M: docx → PDF → PNG for vision)
+    ├── plan_cache.py        load_plan / save_plan (Wave M: sha256-keyed plan cache)
     └── orchestrator.py      map_sections / map_sections_async + SectionMappingReport
 ```
 

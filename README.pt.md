@@ -115,12 +115,33 @@ print(f"sections mapeadas: {report.mapped_count}; tabelas: {report.tables_filled
 
 End-to-end em Engeman dados.docx com zero config (rules mode): 7/8 sections mapeadas, header preenchido (`IT.PRO.URE.387.0005`, `Rev. 01`, `Elaborado: ...`, `(PARTIDA DA ÁREA DE SÍNTESE)`), tabela Histórico extraída das revisões da fonte, tabela Responsabilidade populada dos parágrafos `Compete à gerência` / `Compete aos supervisores`.
 
-### LLM mode vendor-agnóstico (Wave M)
+### Modo LLM vendor-agnóstico (Wave M)
 
-`map_sections_async(..., mode="llm", llm=provider)` faz 1 chamada LLM que cobre QUALQUER par template+source. Sem heurística vendor hardcoded. Validado em:
+`map_sections_async(..., mode="llm", llm=provider)` faz UMA chamada multimodal que cobre QUALQUER par template+source. Sem heurística vendor hardcoded. Pipeline:
 
-- **Par Engeman** (PT-BR, `XXXX`/`(TITULO)`/`Elaborado:`/etc, tabela `Atividades | Responsabilidade | Responsabilidade`) — paridade DOcStream.
-- **Par Vendor B** (corporate inglês, `{{DOC_CODE}}`/`[Title]`/`Author:`/`Reviewer:`, tabela `Activity | Owner`) — fixtures em `tests/vendor_b/`. Texto da migration row segue idioma da fonte.
+```
+template.docx → docx2pdf → PDF → PyMuPDF → PNG pages
+                                              │
+template.docx + source.docx + PNG ──→ OpenAI gpt-4o vision
+                                              │
+                              MappingPlan (header subs, section content,
+                                           paragraph rewrites, table data,
+                                           cell-level fills)
+                                              │
+                                       apply to output.docx
+```
+
+Validado em 7 pares:
+
+- **Engeman** (real PT-BR industrial) — paridade DOcStream.
+- **Vendor B** (corporate inglês, sintético).
+- **Vendor C** (ABNT acadêmico, Title-case + `<<TITULO>>`, sintético).
+- **Vendor D** (formulário gov bilíngue, sintético).
+- **Vendor E** (contrato com cláusulas numeradas, sintético).
+- **UNIFAP POP** (real, `unifap.br`).
+- **Corentocantins POP** (real, `corentocantins.org.br`, mega-table).
+
+Smart-default: provider supplied → `"llm"`, sem → `"rules"`. `"hybrid"` roda rules + LLM cobre gaps. Plan cache (sha256 template+source) → re-runs grátis.
 
 ```python
 import asyncio
@@ -134,14 +155,21 @@ async def run():
         template_path=Path("template.docx"),
         source_path=Path("source.docx"),
         output_path=Path("output.docx"),
-        mode="llm",
-        llm=provider,
+        llm=provider,  # mode auto = "llm"
     )
 
 asyncio.run(run())
 ```
 
-Veja [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) para o pipeline completo + os profilers / auto-mapper que dirigem o Wave M.
+CLI:
+
+```bash
+template-engine map-sections \
+    --template template.docx --source source.docx --output out.docx \
+    --provider openai --model gpt-4o
+```
+
+Veja [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) pra reference completa Wave L (rules) + Wave M (LLM, multimodal vision, cell-level fills, retry, cache, source polimórfico, CLI).
 
 ## Rodada típica
 

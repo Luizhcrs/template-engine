@@ -100,6 +100,31 @@ substitutes the template header placeholders (`XXXX`, `Rev. 00`,
 metadata leaves the placeholder in place so a reviewer can spot the
 gap.
 
+### Wave M (LLM-driven, vendor-agnostic)
+
+`map_sections_async(mode="llm", llm=provider)` runs ONE multimodal call (template rendered as PNG + structural JSON + source content) and returns a complete `MappingPlan`. Validated against:
+
+- 1 real PT-BR industrial template (Engeman) — DOcStream parity.
+- 5 synthetic adversarial pairs (English corporate, ABNT academic, bilingual gov form, legal contract, mega-table).
+- 2 real-world public templates (UNIFAP POP — universidade federal; Corentocantins POP — regional nursing council).
+
+#### What Wave M does that rules-mode does not
+
+- Detects placeholders by SHAPE, not by name (`XXXX` / `(TITULO)` / `[FOO]` / `{{X}}` / `___` / `<<TITULO>>` / `§§§§` / dotted leaders / label-with-leader compounds).
+- Fills body multi-placeholder paragraphs (parties block, address line, signature block) via `paragraph_rewrites` — full-paragraph replacement when ≥2 placeholders share a line.
+- Profiles every cell of every body table (`TemplateCell`) and addresses each fillable cell directly via `(table_index, row, col)`. Mega-table layouts (Corentocantins) need this.
+- Mirrors `cell_fills` across merged-column groups (same row, identical original text).
+- Auto-attaches PNG pages of the template (up to 3) so the LLM SEES merged cells, table geometry, embedded logos.
+- Validates the plan post-call and retries focused on detected gaps (`_detect_plan_gaps` + `_merge_plans`).
+- Caches successful plans under `${XDG_CACHE_HOME:-~/.cache}/template-engine/plans/` keyed by sha256(template) + sha256(source) + prompt-version. Re-runs of the same pair pay 0 LLM calls.
+- Polymorphic source input: accepts `Path` / `str` / `bytes` / `BytesIO` / URL / existing `SourceStructure`.
+
+#### What Wave M still doesn't fully solve
+
+- Mega-table body slots whose current text combines a numbered heading with a parenthesised hint (`1. OBJETIVO: (Descrição clara…)`) sometimes resist replacement. The LLM treats the heading prefix as protected and skips overwriting. Closing this requires either a dedicated retry pass focused on these cells or a sharper prompt directive.
+- Tokens caps (template JSON 30 000 chars / source JSON 60 000 chars) silently truncate very large pairs.
+- Determinism is lost — gpt-4o varies slightly across calls. Use `mode="rules"` when bit-for-bit reproducibility is required.
+
 ### What still doesn't work
 
 - **Scanned PDFs**: extractor falls back to whatever `pdfplumber` can

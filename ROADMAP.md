@@ -32,19 +32,19 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 | v0.7.0 | [done] tagged | `v0.7.0` (2026-04-26) | Wave I shipped (renderer fix + 10 formats + PyPI workflow + drop examples) |
 | v0.7.1 | [done] tagged | `v0.7.1` (2026-04-26) | Rename PyPI distribution to template-engine-ia |
 | v0.8.0 | [done] tagged | `v0.8.0` (2026-04-27) | Wave K shipped — clears all 22 findings; PyPI publish unblocked |
-| v0.9.0 | [wip] preparado | — | Wave L shipped — section_mapper for structural templates |
-| v0.4+ | [plan] planejado | — | OCR + extractors + renderer expandido |
+| v0.9.0-0.9.7 | [done] tagged | `v0.9.0`-`v0.9.7` (2026-04-27) | Wave L shipped — section_mapper rules-mode pipeline (parser + numbering + similarity + renderer + tables + auto-tables + header_filler + style decoration) — DOcStream parity on Engeman |
+| v0.10.0-0.10.9 | [done] tagged | `v0.10.0`-`v0.10.9` (2026-04-27) | Wave M shipped — LLM-driven vendor-agnostic mapping (template/source profilers + auto-mapper + auto-renderer + multimodal vision + cell-level fills + plan validation/retry + plan cache + polymorphic source + CLI). Validated against 5 synthetic + 2 real-world templates (UNIFAP + Corentocantins). |
+| v0.11+ | [plan] planejado | — | OCR fallback for scanned PDFs + non-Engeman vendor pack expansion |
 
-**Onde estamos hoje (2026-04-26):**
+**Onde estamos hoje (2026-04-27):**
 
-- Lib estável com 6 providers + LLMRouter
-- Wave A entrega regex inference automatica → reduz dependencia de LLM
-- Wave A v2 adiciona grex (optional) → generaliza patterns aprendidos
-- Wave D entrega orquestrador batch — caso de uso real "1 template + N docs → N normalizados" via CLI `template-engine normalize`
-- 172 tests passing, CI verde matrix py3.11/3.12/3.13
-- Próximo: Wave E (consolidação) → Wave F (conformidade multi-dim como juiz LLM)
+- Lib estável com 6 providers + LLMRouter, 363 tests passando, CI verde matrix py3.11/3.12/3.13.
+- **Wave L** entregou rules-mode section_mapper — DOcStream parity em template Engeman real (PT-BR industrial).
+- **Wave M** entrega LLM-driven full-doc mapping vendor-agnóstico — uma chamada multimodal cobrindo header subs, section content, paragraph rewrites, table data, cell-level fills.
+- 7 pares testados: 1 real Engeman + 5 sintéticos adversariais + 2 real-world públicos (UNIFAP universidade + Corentocantins enfermagem).
+- Plan cache (sha256 template+source) → re-runs grátis. Polymorphic source (Path/bytes/BytesIO/URL). CLI `template-engine map-sections`. Smart-default mode.
 
-**Tese central comprovada:** LLM como rede de segurança, não motor. 49/49 campos extraidos via regex puro em 6 designs diversos (laudo/contrato/branded/creative/minimalist/form). LLM só atua quando regex falha (Wave D hybrid_mapper) ou pra auditar conformidade final (semantic_diff).
+**Tese central:** LLM como agente de full-doc mapping quando rules não cobrem o vendor. Rules-mode permanece grátis e determinístico para casos canônicos PT-BR; LLM-mode generaliza para qualquer vendor + idioma + layout via uma chamada multimodal cacheada.
 
 ---
 

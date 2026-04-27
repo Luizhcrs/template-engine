@@ -119,10 +119,31 @@ End-to-end on Engeman dados.docx with zero config (rules mode): 7/8 sections map
 
 ### Vendor-agnostic LLM mode (Wave M)
 
-`map_sections_async(..., mode="llm", llm=provider)` runs a single batched LLM call that handles ANY template + source pair. No hardcoded vendor heuristics. Validated against:
+`map_sections_async(..., mode="llm", llm=provider)` runs a single multimodal LLM call that handles ANY template + source pair. No hardcoded vendor heuristics. Pipeline:
 
-- **Engeman pair** (PT-BR, `XXXX`/`(TITULO)`/`Elaborado:`/etc placeholders, `Atividades | Responsabilidade | Responsabilidade` table) — full DOcStream parity.
-- **Vendor B pair** (English corporate, `{{DOC_CODE}}`/`[Title]`/`Author:`/`Reviewer:` placeholders, `Activity | Owner` table) — fixtures in `tests/vendor_b/`. The migration row's text follows the source's language automatically.
+```
+template.docx → docx2pdf → PDF → PyMuPDF → PNG pages
+                                              │
+template.docx + source.docx + PNG ──→ OpenAI gpt-4o vision
+                                              │
+                              MappingPlan (header subs, section content,
+                                           paragraph rewrites, table data,
+                                           cell-level fills)
+                                              │
+                                       apply to output.docx
+```
+
+Validated against 7 fixture pairs:
+
+- **Engeman** (real-world PT-BR industrial) — DOcStream parity.
+- **Vendor B** (English corporate, synthetic).
+- **Vendor C** (ABNT academic, Title-case + `<<TITULO>>` placeholders, synthetic).
+- **Vendor D** (bilingual gov form with multi-placeholder address lines, synthetic).
+- **Vendor E** (legal contract with parties + numbered clauses, synthetic).
+- **UNIFAP POP** (real-world, downloaded from `unifap.br`).
+- **Corentocantins POP** (real-world, downloaded from `corentocantins.org.br`, mega-table layout).
+
+Smart-default mode auto-picks `"llm"` when a provider is supplied, `"rules"` otherwise. `"hybrid"` runs rules first then asks the LLM to fill gaps. Plan cache (sha256 of template + source) means re-runs of the same pair pay 0 LLM calls.
 
 ```python
 import asyncio
@@ -136,14 +157,21 @@ async def run():
         template_path=Path("template.docx"),
         source_path=Path("source.docx"),
         output_path=Path("output.docx"),
-        mode="llm",
-        llm=provider,
+        llm=provider,  # mode auto-picks "llm"
     )
 
 asyncio.run(run())
 ```
 
-See [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) for the full pipeline (parser → numbering resolver → similarity matcher → renderer with line-kind decoration → tables → header filler) and the LLM-mode profilers + auto-mapper that drive Wave M.
+CLI:
+
+```bash
+template-engine map-sections \
+    --template template.docx --source source.docx --output out.docx \
+    --provider openai --model gpt-4o
+```
+
+See [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) for the complete Wave L (rules) + Wave M (LLM, multimodal vision, cell-level fills, retry, cache, polymorphic source, CLI) reference.
 
 ## Typical batch run
 

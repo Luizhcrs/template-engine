@@ -1,10 +1,18 @@
 ---
-title: Section mapper (Wave L)
+title: Section mapper (Wave L + M)
 ---
 
 # Section mapper
 
-Companheiro do [`normalize_batch`][batch] para templates **estruturais** que vêm com seções nomeadas porém vazias (`OBJETIVO`, `APLICAÇÃO`, ...) e dependem de hierarquia de heading + tabelas em vez de tokens `{{X}}` explícitos. Construído e validado contra documentos industriais (Engeman, NR-12 / NR-13, ABNT acadêmico).
+Companheiro do [`normalize_batch`][batch] para templates **estruturais** que vêm com seções nomeadas porém vazias (`OBJETIVO`, `APLICAÇÃO`, ...) e dependem de hierarquia de heading + tabelas + layout de células em vez de tokens `{{X}}` explícitos.
+
+Dois modos lado-a-lado:
+
+- **Wave L (`mode="rules"`)** — determinístico, grátis, zero LLM. Heurísticas hardcoded PT-BR/Engeman. Paridade DOcStream no primeiro par real Engeman.
+- **Wave M (`mode="llm"` / `"hybrid"`)** — vendor-agnostic. UMA chamada multimodal LLM (template renderizado em PNG + JSON estrutural + content fonte) retorna `MappingPlan` completo cobrindo header subs, section content, paragraph rewrites, table data, e cell-level fills. Validado em:
+  - Par Engeman original (PT-BR industrial).
+  - 5 pares sintéticos adversariais (English corporate, ABNT acadêmico, gov form bilíngue, contrato legal, mega-table layout).
+  - 2 templates reais baixados de sites públicos (UNIFAP POP — universidade federal; Corentocantins POP — conselho regional de enfermagem).
 
 [batch]: pipeline.pt.md
 
@@ -297,14 +305,132 @@ fixtures com:
 python scripts/build_vendor_b_fixtures.py
 ```
 
+## Modos de operação (Wave M)
+
+| Modo | Quando | Custo (Gemini Flash 2.5) |
+| --- | --- | --- |
+| `rules` (default em `map_sections`) | PT-BR / Engeman; reprodutibilidade bit-for-bit | $0.0000 |
+| `llm` (`map_sections_async(mode="llm", llm=...)`) | qualquer vendor / idioma; precisa provider | ~$0.001 |
+| `hybrid` (`mode="hybrid", llm=...`) | rules primeiro, LLM cobre gaps | ~$0.001 quando gaps |
+
+### Pipeline LLM ponta-a-ponta
+
+```python
+import asyncio
+from pathlib import Path
+from engine.llm.openai_provider import OpenAIProvider
+from engine.section_mapper import map_sections_async
+
+async def main() -> None:
+    provider = OpenAIProvider(api_key="sk-...", model="gpt-4o", timeout=300.0)
+    await map_sections_async(
+        template_path=Path("template.docx"),
+        source_path=Path("source.docx"),
+        output_path=Path("output.docx"),
+        mode="llm", llm=provider,
+    )
+
+asyncio.run(main())
+```
+
+`mode=None` (default) auto-pick: provider→llm, sem→rules.
+
+### Multimodal vision (Wave M)
+
+LLM call recebe PNG renderizado do template (até 3 pages) → vê células merged, geometria de tabela, logos. Pipeline:
+
+```
+template.docx → docx2pdf (Word COM) → PDF → PyMuPDF → PNG → base64 → OpenAI gpt-4o vision
+```
+
+`engine.section_mapper.template_renderer.render_pages(docx_path, max_pages=3)` retorna `list[PageImage]`. `docx2pdf` + `pymupdf` opcionais — quando faltam, fallback pra text-only. Install: `pip install docx2pdf pymupdf`.
+
+### Cell-level fills (Wave M)
+
+Mega-tables (Corentocantins) tem documento inteiro como tabela. `TemplateCell(table_index, row, col, text, is_fillable)` profile cada célula com heurística de fillability. `MappingPlan.cell_fills` endereça cada célula via coordenadas. `_apply_cell_fills` mirra fill em colunas merged (mesmo texto em N cols → preenche N).
+
+Checklist deduplicado de fillable cells é appended ao prompt — LLM recebe lista uma-entry-por-slot ao invés de 8 idênticas.
+
+### Plan validation + retry
+
+Após call inicial, `_detect_plan_gaps` detecta:
+
+- placeholders empty no plan
+- headings empty quando source menciona keyword relevante
+- tables empty não endereçadas
+
+Retry focado pede só os slots faltantes. `_merge_plans` overlaya sem apagar valores prévios. `max_retries=1` default.
+
+### Plan cache
+
+`engine.section_mapper.plan_cache` persiste planos em `${XDG_CACHE_HOME:-~/.cache}/template-engine/plans/` keyed por `sha256(template) + sha256(source) + PROMPT_VERSION`. Mesmo par → 0 LLM calls. Override: `TEMPLATE_ENGINE_CACHE_DIR=/path`.
+
+Benchmark Vendor E gpt-4o: 1ª run 20s | 2ª run (cache hit) 4.6s.
+
+CLI `--no-cache` skip pra one-off runs.
+
+### Source polimórfico
+
+`profile_source` aceita `Path | str | bytes | bytearray | BytesIO | URL | SourceStructure`. Bytes/streams/URLs vão pra `NamedTemporaryFile` antes do walk.
+
+### CLI
+
+```bash
+template-engine map-sections \
+    --template ./template.docx \
+    --source ./source.docx \
+    --output ./output.docx \
+    --provider openai --api-key "$OPENAI_API_KEY" --model gpt-4o
+```
+
+Auto-pick mode quando provider supplied. `--no-cache` desliga cache. `--json <path>` emite report.
+
+### Validação cross-vendor
+
+| Par | Domínio | Idioma | Forma |
+| --- | --- | --- | --- |
+| **A — Engeman** | procedimento industrial | PT-BR | `XXXX` / `(TITULO)` / Atividades \| Resp \| Resp |
+| **B — English corporate** | procedimento corporate | EN | `{{DOC_CODE}}` / `[Title]` / Activity \| Owner |
+| **C — ABNT academic** | tese | PT-BR Title-case | `<<TITULO>>` / `§§§§§` / nested |
+| **D — Bilingual gov form** | formulário | PT-BR / EN | `[______]` / `< nome >` / CNPJ mask |
+| **E — Legal contract** | contrato | PT-BR | parties block / cláusulas 1-6 |
+| **UNIFAP POP** (real) | procedimento universitário | PT-BR | Title-case / `XXXXXXXX` / contact table |
+| **Corentocantins POP** (real) | POP enfermagem | PT-BR | mega-table 20×8 merged |
+
+Resultado vs gpt-4o: A/B/E 7/7 sections; C 6/9 (3 source-empty); D 5/5; UNIFAP 14 plan keys; Corentocantins partial mega-table.
+
+Regenerate via:
+```bash
+python scripts/build_vendor_b_fixtures.py
+python scripts/build_adversarial_fixtures.py
+python scripts/build_real_world_source.py
+python scripts/run_adversarial_llm.py
+python scripts/run_real_world_llm.py
+```
+
 ## Limites
 
-Veja [REAL-WORLD-LIMITS.md][limits] pra lista completa. Notáveis para `section_mapper`:
+Veja [REAL-WORLD-LIMITS.md][limits] pra lista completa. Honest call-outs:
 
 [limits]: https://github.com/Luizhcrs/template-engine/blob/main/REAL-WORLD-LIMITS.md
 
-- PDFs escaneados não passam por OCR. Use fonte `.docx` quando possível.
-- PDFs multi-coluna interleavam colunas no extract; converta pra coluna única primeiro.
-- Tabelas da fonte (exceto Histórico/Responsabilidade canônicos) vêm como texto flatten.
-- Tabela de sinônimos é PT-BR. Instale `[embeddings]` pra match cross-language ou use LLM provider.
-- Hierarquia de sub-seção (`3.2.1.`) preservada como text prefix, não como anchors hierárquicos aninhados.
+### Wave L (rules)
+
+- PDFs escaneados não passam por OCR. Use `.docx` quando possível.
+- PDFs multi-coluna interleavam — converta pra single-column.
+- Tabelas source não-canônicas vêm flatten.
+- Synonym table PT-BR only. Instale `[embeddings]` ou use LLM.
+- Sub-seção (`3.2.1.`) preservada como text prefix.
+
+### Wave M (LLM)
+
+- **Determinismo perdido** — gpt-4o varia entre runs. Cache mitiga em re-runs.
+- **Custo** — ~$0.05/doc gpt-4o, ~$0.001 Gemini Flash. Cache torna follow-up grátis.
+- **Multimodal opcional** — sem `docx2pdf`/`pymupdf` cai pra text-only.
+- **Token cap** — template JSON 30k chars, source JSON 60k chars. Templates muito grandes truncam.
+- **Mega-table body slots** com hint imperativo + heading numerado ainda parcialmente resistem (Corentocantins rows 2-7).
+
+### Universal
+
+- **Variância de templates real é infinita.** 5 vendors hoje. Cada novo vendor é descoberta de novo failure-mode.
+- **Sem CI integration test** pra `mode="llm"` (chama API paga). Produção exige smoke real no corpus do cliente.
