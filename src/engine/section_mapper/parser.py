@@ -37,13 +37,21 @@ if TYPE_CHECKING:
 
 
 _NUMBERED_HEADING_RE = re.compile(
-    r"^\s*(\d+(?:\.\d+)*)\.?\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÀ-ÿ\s\-/]{2,80}?)\s*$",
+    r"^\s*(\d+(?:\.\d+)*)\.?\s+([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÀ-ÿ\s\-/—–:&,()'’]{2,80}?)\s*$",
 )
 # All-caps unnumbered heading (template style): "OBJETIVO", "APLICAÇÃO",
 # "NORMAS E DOCUMENTOS DE REFERÊNCIA". Allows letters / spaces / hyphens.
 # Length 3-80; rejects single-word lowercase or sentence-cased text.
 _ALLCAPS_HEADING_RE = re.compile(
-    r"^\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s\-/]{2,80})\s*$",
+    r"^\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s\-/—–&]{2,80})\s*$",
+)
+# Title-case heading (academic / professional style): "Resumo",
+# "Abstract", "Conclusão", "Referências", "Roles and Responsibilities".
+# Each token starts with a capital letter; whole line ≤ 60 chars; no
+# trailing period (a real heading rarely ends with a sentence-period).
+_TITLE_CASE_HEADING_RE = re.compile(
+    r"^\s*([A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-zà-ÿ]{1,30}"
+    r"(?:\s+(?:[A-ZÁÉÍÓÚÂÊÔÃÕÇ][a-zà-ÿ]{1,30}|de|da|do|dos|das|e|of|the|and|in)){0,7})\s*$",
 )
 _HEADING_STYLE_RE = re.compile(r"^Heading\s*(\d+)\s*$", re.IGNORECASE)
 
@@ -104,8 +112,19 @@ class DocxSection:
     content_paragraph_idxs: list[int] = field(default_factory=list)
 
 
-def _detect_heading(paragraph_text: str, style_name: str | None) -> tuple[str, str | None, int] | None:
-    """Return (canonical_name, number, level) or None when not a heading."""
+def _detect_heading(
+    paragraph_text: str,
+    style_name: str | None,
+    *,
+    is_bold: bool = False,
+) -> tuple[str, str | None, int] | None:
+    """Return (canonical_name, number, level) or None when not a heading.
+
+    ``is_bold`` is an optional hint from the docx — when ``True``, a
+    short Title-case paragraph (``Resumo``, ``Abstract``, ``Glossary``)
+    is accepted as a level-1 heading even though it would otherwise be
+    rejected as ordinary body text.
+    """
     text = paragraph_text.strip()
     if not text:
         return None
@@ -123,6 +142,12 @@ def _detect_heading(paragraph_text: str, style_name: str | None) -> tuple[str, s
         title = m.group(2)
         level = number.count(".") + 1
         return _normalize_heading(title), number, level
+
+    # Title-case bold heading — academic / professional style.
+    if is_bold and not text.endswith((".", ",", ";", ":", "?", "!")):
+        m = _TITLE_CASE_HEADING_RE.match(text)
+        if m and len(text) <= 60 and " " * 0 == "":
+            return _normalize_heading(text), None, 1
 
     # All-caps unnumbered heading — template style ("OBJETIVO", "APLICACAO").
     # Heuristic guards against false positives. Each rule is documented
@@ -240,7 +265,8 @@ def parse_docx(path: Path) -> list[DocxSection]:
 
     for idx, para in enumerate(doc.paragraphs):
         style_name = para.style.name if para.style else None
-        head = _detect_heading(para.text, style_name)
+        is_bold = bool(para.runs and para.runs[0].font and para.runs[0].font.bold)
+        head = _detect_heading(para.text, style_name, is_bold=is_bold)
         if head is None:
             if current is not None:
                 current["content_idxs"].append(idx)

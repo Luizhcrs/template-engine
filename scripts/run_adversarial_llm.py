@@ -49,6 +49,21 @@ async def main() -> None:
             print(f"[skip] {vendor}: missing fixture")
             continue
         print(f"[run] {vendor}")
+        # Debug: capture the raw mapping plan separately so we can see
+        # exactly what the LLM returned per vendor.
+        from engine.section_mapper.auto_mapper import build_mapping_plan
+        from engine.section_mapper.source_profiler import profile_source
+        from engine.section_mapper.template_profiler import profile_template
+
+        ts = profile_template(template_path)
+        ss = profile_source(source_path)
+        plan = await build_mapping_plan(ts, ss, llm=provider)
+        plan_path = base / "plan.json"
+        plan_path.write_text(
+            json.dumps(plan.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
         report = await map_sections_async(
             template_path=template_path,
             source_path=source_path,
@@ -60,10 +75,14 @@ async def main() -> None:
             json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        non_empty_sections = sum(1 for v in plan.section_content.values() if v.strip())
+        total_sections = len(plan.section_content)
         print(
-            f"  mapped={report.mapped_count} tables={report.tables_filled} "
-            f"unfilled_target={len(report.unfilled_target_headings)} "
-            f"orphans={len(report.orphan_paragraphs)}"
+            f"  filled={non_empty_sections}/{total_sections} sections "
+            f"+ {len(plan.paragraph_rewrites)} rewrites "
+            f"+ {report.tables_filled} tables "
+            f"+ {len(plan.header_substitutions)} header subs "
+            f"| orphans={len(report.orphan_paragraphs)}"
         )
 
 

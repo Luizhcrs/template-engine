@@ -124,8 +124,9 @@ The plan covers three things:
    Output an empty string only if the source carries nothing relevant
    for that placeholder.
 
-2. **Section content** — for every TEMPLATE heading, decide what body
-   text from the SOURCE goes under it. The SOURCE may carry the content
+2. **Section content** — for every TEMPLATE heading, you MUST output a
+   non-empty body unless the source genuinely has nothing semantically
+   relevant. This is the highest-priority instruction. The SOURCE may carry the content
    as already-segmented ``sections`` (each with name + content) OR, when
    heading detection failed (e.g. English / Title-case sources), as a
    flat ``body_paragraphs`` list — in which case YOU segment it: pick
@@ -162,6 +163,26 @@ The plan covers three things:
    leave the source paragraph at its original position — the template
    provides the canonical structure.
 
+   For LEGAL CONTRACTS: each numbered clause expects a specific topic.
+   ``DO OBJETO`` / ``OBJECT`` clause carries the object-of-the-contract
+   description. ``DAS OBRIGAÇÕES`` / ``OBLIGATIONS`` clause carries
+   the parties' obligations. ``DO PREÇO`` / ``PAYMENT`` clause carries
+   amount + payment schedule. ``DA VIGÊNCIA`` / ``TERM`` clause carries
+   contract duration. ``DA RESCISÃO`` / ``TERMINATION`` clause carries
+   termination conditions. ``DO FORO`` / ``JURISDICTION`` clause
+   carries the chosen court. Map source paragraphs to the matching
+   clause by topic, never leave a clause empty when the source covers
+   that topic.
+
+   For ACADEMIC theses: ``Resumo`` and ``Abstract`` should carry the
+   abstract paragraph (in PT-BR and EN respectively when source has
+   both, or the same text both times when source has only one).
+   ``Introdução`` carries the motivation + objectives. ``Metodologia``
+   carries the methodology. ``Resultados`` / ``Discussão`` /
+   ``Conclusão`` carry their respective topical paragraphs. Long
+   numbered sub-sections (3.1, 3.2.1) inside one parent should appear
+   under that parent as inline sub-headings.
+
 4. **Paragraph rewrites** — when a body paragraph carries TWO OR MORE
    placeholders interleaved with literal prefix/connector text (parties
    block: ``CONTRATANTE: <razão social>, inscrita no CNPJ sob o nº
@@ -185,9 +206,20 @@ The plan covers three things:
      no CNPJ sob o nº 12.345.678/0001-90, com sede na Avenida Paulista,
      1000, São Paulo/SP.``
 
-   Use paragraph_rewrites for ANY body paragraph whose text carries 2+
-   placeholders. For simple single-placeholder paragraphs (just
-   ``[Title]`` on its own line), prefer header_substitutions.
+   Use paragraph_rewrites for ANY body paragraph whose text:
+
+   - carries 2+ placeholders (parties / address / signature blocks); OR
+   - carries a label-with-leader compound like ``Autor:
+     __________________``, ``Orientador: ____________``, ``Data:
+     __/__/____``, ``CPF / TAX ID: ___.___.___-__``, ``Local e Data:
+     ____________________``, ``Assinatura: ____________``. The
+     match_text is the WHOLE paragraph (label + colon + leader);
+     replacement_text is the WHOLE filled paragraph (label + colon +
+     filled value).
+
+   For simple single-placeholder paragraphs that carry only a delimited
+   token like ``[Title]`` or ``{{DOC_CODE}}`` on its own line, prefer
+   header_substitutions.
 
 3. **Table data** — for every TEMPLATE empty table, decide rows.
 

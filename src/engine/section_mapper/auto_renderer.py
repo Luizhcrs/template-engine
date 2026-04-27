@@ -223,36 +223,51 @@ def _apply_paragraph_rewrites(docx_path: Path, rewrites: list) -> None:  # type:
 
 
 def _apply_body_substitutions(docx_path: Path, subs: dict[str, str]) -> None:
-    """Same in-run substitution as the header path, but applied to
-    ``word/document.xml`` so cover-page placeholders get filled too.
+    """Substitute placeholders inside body paragraph text via python-docx
+    (so XML-escaped chars like ``&lt;&lt;TITULO&gt;&gt;`` are matched
+    against their unescaped form ``<<TITULO>>``).
+
+    Walks every paragraph text node in body, body-tables, and cell
+    sub-paragraphs. Header paragraphs are left to ``_apply_header_substitutions``.
     """
     if not subs:
         return
 
-    with tempfile.NamedTemporaryFile(
-        suffix=".docx",
-        delete=False,
-        dir=str(docx_path.parent),
-    ) as tmp:
-        tmp_path = Path(tmp.name)
+    from docx import Document
 
-    try:
-        with (
-            zipfile.ZipFile(str(docx_path), "r") as zin,
-            zipfile.ZipFile(str(tmp_path), "w", zipfile.ZIP_DEFLATED) as zout,
-        ):
-            for item in zin.infolist():
-                data = zin.read(item.filename)
-                if _BODY_FILE_RE.match(item.filename):
-                    text = data.decode("utf-8")
-                    text = _replace_in_runs(text, subs)
-                    data = text.encode("utf-8")
-                zout.writestr(item, data)
-        shutil.move(str(tmp_path), str(docx_path))
-    except Exception:
-        if tmp_path.exists():
-            tmp_path.unlink()
-        raise
+    doc = Document(str(docx_path))
+
+    def _replace_in_para(para) -> None:  # type: ignore[no-untyped-def]
+        text = para.text
+        if not text:
+            return
+        new_text = text
+        replaced = False
+        for placeholder, replacement in subs.items():
+            if placeholder and placeholder in new_text:
+                new_text = new_text.replace(placeholder, replacement)
+                replaced = True
+        if not replaced or new_text == text:
+            return
+        # Preserve first run's formatting; clear trailing runs.
+        t_elements = para._p.findall(f".//{_W_NS}t")
+        if t_elements:
+            t_elements[0].text = new_text
+            for t in t_elements[1:]:
+                t.text = ""
+        else:
+            para.add_run(new_text)
+
+    for para in doc.paragraphs:
+        _replace_in_para(para)
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    _replace_in_para(para)
+
+    doc.save(str(docx_path))
 
 
 def _replace_in_runs(xml: str, subs: dict[str, str]) -> str:

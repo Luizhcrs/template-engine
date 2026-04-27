@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-04-27 — Adversarial vendors all green
+
+Closes the failures the v0.10.3 stress test surfaced. Vendor C / D / E
+now round-trip end-to-end with **zero orphans** and every section
+filled.
+
+### Fixed — Title-case heading detection
+
+`parse_docx` previously rejected ``Resumo`` / ``Abstract`` /
+``Conclusão`` / ``Referências`` because the all-caps heuristic
+required UPPERCASE. Numbered headings rejected ``1. CLÁUSULA PRIMEIRA
+— DO OBJETO`` because the em-dash (``—``, U+2014) was missing from
+the title character class.
+
+`_detect_heading` now accepts:
+
+- Numbered headings with em-dash, en-dash, colon, ampersand and
+  curly-apostrophe in the title.
+- Title-case headings (``Resumo``, ``Abstract``, ``Roles and
+  Responsibilities``) when the paragraph's first run is bold and the
+  text doesn't end in a sentence-period. ``parse_docx`` now passes
+  the bold flag from python-docx.
+
+Result: vendor_c template detects all 9 headings (was 6); vendor_e
+detects all 7 (was 1).
+
+### Fixed — body XML escape mismatch
+
+`_apply_body_substitutions` was substring-matching against raw
+`word/document.xml`, where ``<<TITULO>>`` is stored XML-escaped as
+``&lt;&lt;TITULO&gt;&gt;``. Substitution silently failed. The body
+substitution path now uses python-docx (which unescapes inside
+``paragraph.text``), so distinctive placeholders match against their
+unescaped form.
+
+### Improved — paragraph_rewrites prompt coverage
+
+The LLM was told to emit `paragraph_rewrites` only when ≥2
+placeholders share a paragraph. The prompt now also mandates rewrites
+for label-with-leader compounds (``Autor: __________``, ``Data:
+__/__/____``, ``CPF: ___.___.___-__``, ``Local e Data:
+____________``). With this change the cover-page lines and signature
+blocks finally get filled.
+
+### Adversarial run results (gpt-4o)
+
+| Vendor | Sections filled | Paragraph rewrites | Tables | Orphans |
+| --- | --- | --- | --- | --- |
+| **C** ABNT academic | 6 / 9 | 3 | 2 | **0** |
+| **D** Bilingual gov form | 5 / 5 | 6 | 1 | **0** |
+| **E** Legal contract | 7 / 7 | 7 | 1 | **0** |
+
+Vendor C unfilled sections (``REVISAO DA LITERATURA``, ``DISCUSSAO``,
+``REFERENCIAS``) are honest empties — the source document does not
+carry equivalent content.
+
 ## [0.10.3] - 2026-04-27 — Adversarial vendor stress test + paragraph rewrites
 
 Three new fixture pairs (`tests/vendor_c/d/e`) target weaknesses that
