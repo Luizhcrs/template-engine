@@ -69,6 +69,25 @@ class ParagraphRewrite:
 
 
 @dataclass(frozen=True)
+class CellFill:
+    """Fill a specific table cell by (table_index, row, col).
+
+    Mega-table layouts (Corentocantins POPs) carry the whole document
+    as one big table where heading cells alternate with body slot
+    cells. The LLM addresses each fillable cell directly via these
+    coordinates.
+    """
+
+    table_index: int
+    row: int
+    col: int
+    new_text: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class MappingPlan:
     """The LLM's complete substitution plan for one template+source pair.
 
@@ -84,6 +103,7 @@ class MappingPlan:
     section_content: dict[str, str] = field(default_factory=dict)
     table_data: list[TableFillData] = field(default_factory=list)
     paragraph_rewrites: list[ParagraphRewrite] = field(default_factory=list)
+    cell_fills: list[CellFill] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -91,6 +111,7 @@ class MappingPlan:
             "section_content": dict(self.section_content),
             "table_data": [t.to_dict() for t in self.table_data],
             "paragraph_rewrites": [r.to_dict() for r in self.paragraph_rewrites],
+            "cell_fills": [c.to_dict() for c in self.cell_fills],
         }
 
 
@@ -222,6 +243,28 @@ The plan covers three things:
    token like ``[Title]`` or ``{{DOC_CODE}}`` on its own line, prefer
    header_substitutions.
 
+5. **Cell fills** — for mega-table templates where the entire
+   document is laid out as ONE BIG TABLE (heading cells alternating
+   with body slot cells, common in Corentocantins-style nursing-council
+   POPs and other government forms), use ``cell_fills`` to address
+   each fillable cell by ``(table_index, row, col)``. Inspect
+   ``TEMPLATE.cells`` — every cell carries ``is_fillable`` and current
+   text. For each fillable cell, emit a ``CellFill`` with the source
+   content that matches the heading or label of an adjacent cell in
+   the same row.
+
+   Example: row 4 has cells [``"1. OBJETIVO:"``,
+   ``"(Descrição clara e direta do objetivo)"``] (col 1 is heading,
+   col 2 is body slot). Emit:
+     {"table_index": 0, "row": 4, "col": 2,
+      "new_text": "Padronizar a técnica de administração..."}
+
+   Also use cell_fills for parameter cells like
+   ``Logomarca ou logotipo`` (insert a placeholder description),
+   ``XX/2022`` version masks, ``(TÍTULO DO POP)`` parenthesised
+   prompts. Even ``Fulano de Tal`` / ``Ciclano (Substituto)`` template
+   defaults should be replaced via cell_fills.
+
 3. **Table data** — for every TEMPLATE empty table, decide rows.
 
    Revision-history tables (any of Rev. / Versão / Data / Alteração /
@@ -315,12 +358,27 @@ def _build_schema(template: TemplateStructure) -> dict:
                     "required": ["match_text", "replacement_text"],
                 },
             },
+            "cell_fills": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "table_index": {"type": "integer"},
+                        "row": {"type": "integer"},
+                        "col": {"type": "integer"},
+                        "new_text": {"type": "string"},
+                    },
+                    "required": ["table_index", "row", "col", "new_text"],
+                },
+            },
         },
         "required": [
             "header_substitutions",
             "section_content",
             "table_data",
             "paragraph_rewrites",
+            "cell_fills",
         ],
     }
 
@@ -544,11 +602,17 @@ def _merge_plans(prev: MappingPlan, addendum: MappingPlan) -> MappingPlan:
         r for r in addendum.paragraph_rewrites if r.match_text not in seen_rewrites
     ]
 
+    seen_cells = {(c.table_index, c.row, c.col) for c in prev.cell_fills}
+    cell_fills = list(prev.cell_fills) + [
+        c for c in addendum.cell_fills if (c.table_index, c.row, c.col) not in seen_cells
+    ]
+
     return MappingPlan(
         header_substitutions=headers,
         section_content=sections,
         table_data=tables,
         paragraph_rewrites=rewrites,
+        cell_fills=cell_fills,
     )
 
 
@@ -572,6 +636,7 @@ def _parse_response(response: object) -> MappingPlan:
     sections_raw = response.get("section_content") or {}
     tables_raw = response.get("table_data") or []
     rewrites_raw = response.get("paragraph_rewrites") or []
+    cell_fills_raw = response.get("cell_fills") or []
 
     headers = {
         _clean(str(k)): _clean(str(v))
@@ -614,11 +679,29 @@ def _parse_response(response: object) -> MappingPlan:
             if isinstance(mt, str) and isinstance(rt, str) and mt.strip():
                 rewrites.append(ParagraphRewrite(match_text=mt, replacement_text=rt))
 
+    cell_fills: list[CellFill] = []
+    if isinstance(cell_fills_raw, list):
+        for entry in cell_fills_raw:
+            if not isinstance(entry, dict):
+                continue
+            try:
+                cell_fills.append(
+                    CellFill(
+                        table_index=int(entry["table_index"]),
+                        row=int(entry["row"]),
+                        col=int(entry["col"]),
+                        new_text=_clean(str(entry.get("new_text", ""))),
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                log.warning("section_mapper.auto_mapper.bad_cell_fill", error=str(exc))
+
     return MappingPlan(
         header_substitutions=headers,
         section_content=sections,
         table_data=tables,
         paragraph_rewrites=rewrites,
+        cell_fills=cell_fills,
     )
 
 

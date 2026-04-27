@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.7] - 2026-04-27 — Cell-level fill (mega-table layouts)
+
+Mega-table templates (Corentocantins-style POPs where the entire
+document is one big table with embedded heading + body slot cells)
+were almost completely uncovered by previous releases — heading
+detection found cells but the renderer never wrote anything inside
+them.
+
+### Added — `TemplateCell`
+
+`engine.section_mapper.template_profiler.TemplateCell` captures every
+cell in every body table:
+
+- `(table_index, row, col)` coordinate
+- `text` — current cell content
+- `is_fillable` — heuristic flag based on imperative-instruction
+  prefix (``Descrever`` / ``Identificar`` / ``Listar`` / ...), XX/0/_/
+  dot mask, parenthesised hint shape, label-with-no-value, or known
+  template defaults (``Fulano de Tal`` / ``Ciclano (Substituto)``).
+
+`TemplateStructure.cells` exports the full grid so the LLM can address
+each fillable cell directly.
+
+### Added — `MappingPlan.cell_fills`
+
+```python
+{"table_index": 0, "row": 4, "col": 1, "new_text": "..."}
+```
+
+LLM emits one entry per cell that needs filling. Renderer applies via
+``cell.text = new_text`` while preserving the first paragraph's run
+formatting.
+
+### Added — prompt instruction for cell_fills
+
+LLM is now told to use ``cell_fills`` for mega-table layouts with
+worked examples for ``(TÍTULO DO POP)`` parentheses, ``XX/2022``
+masks, ``Fulano de Tal`` defaults, and merged-cell heading rows.
+
+### Result on Corentocantins POP (real-world)
+
+Cells the LLM populated:
+
+- ``Versão`` / ``02/2024``
+- ``Data de Aprovação`` / ``27/04/2026``
+- ``Administração de Medicação Endovenosa`` (title cells, all 8 columns of merged row)
+- ``Elaboração Data: 27/04/2026`` (footer signature row)
+
+Still TODO:
+
+- ``1. OBJETIVO:`` body slots (rows 2-7 stayed as instruction text;
+  LLM emitted cells for some slots but not all — merged-cell layout
+  with the same text in 8 adjacent columns confuses the model).
+
+The cell-fill primitive is in place; closing the remaining gaps is a
+prompt-engineering exercise (and a multimodal-image upgrade — visual
+layout would help the model disambiguate merged cells).
+
 ## [0.10.6] - 2026-04-27 — Real-world templates (UNIFAP + Corentocantins)
 
 Two POP templates downloaded from public Brazilian institution sites

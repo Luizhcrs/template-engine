@@ -113,6 +113,36 @@ class TemplateEmptyTable:
 
 
 @dataclass(frozen=True)
+class TemplateCell:
+    """A single cell in any template table.
+
+    Captures cell-level layout so the LLM can fill ``mega-table``
+    layouts (Corentocantins-style POPs where the entire document is
+    one big table with embedded headings + body slots).
+
+    Attributes:
+        table_index: index in ``doc.tables`` order.
+        row: 0-based row index inside the table.
+        col: 0-based column index.
+        text: current cell text (template default / placeholder /
+            empty).
+        is_fillable: heuristic flag — ``True`` when the cell looks
+            like a slot the user is expected to fill (empty, contains
+            imperative help text, contains ``XX`` / ``___`` masks,
+            ends in ``:`` with no value, etc).
+    """
+
+    table_index: int
+    row: int
+    col: int
+    text: str
+    is_fillable: bool
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class TemplateHeading:
     """A heading paragraph from the template.
 
@@ -153,12 +183,16 @@ class TemplateStructure:
         headings: list of detected heading paragraphs.
         placeholders: list of detected placeholders (header/footer/body).
         empty_tables: list of empty tables awaiting data.
+        cells: every cell of every body table — captures cell-level
+            layout for mega-tables where heading + body live in
+            adjacent cells (Corentocantins-style POPs).
     """
 
     template_path: str
     headings: list[TemplateHeading]
     placeholders: list[TemplatePlaceholder]
     empty_tables: list[TemplateEmptyTable]
+    cells: list[TemplateCell] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -166,6 +200,7 @@ class TemplateStructure:
             "headings": [h.to_dict() for h in self.headings],
             "placeholders": [p.to_dict() for p in self.placeholders],
             "empty_tables": [t.to_dict() for t in self.empty_tables],
+            "cells": [c.to_dict() for c in self.cells],
         }
 
 
@@ -181,12 +216,14 @@ def profile_template(template_path: Path) -> TemplateStructure:
     headings = [TemplateHeading.from_section(s) for s in parse_docx(template_path)]
     placeholders = _detect_placeholders(doc, template_path)
     empty_tables = _detect_empty_tables(doc)
+    cells = _detect_cells(doc)
 
     return TemplateStructure(
         template_path=str(template_path),
         headings=headings,
         placeholders=placeholders,
         empty_tables=empty_tables,
+        cells=cells,
     )
 
 
@@ -404,6 +441,65 @@ def _scan_paragraph_text(
     return out
 
 
+_IMPERATIVE_INSTRUCTION_RE = re.compile(
+    r"^\s*(Descrever|Identificar|Listar|Citar|Apontar|Indicar|Informar|Mencionar|"
+    r"Inserir|Detalhar|Especificar|Descreva|Cite|Liste|Aponte|"
+    r"Describe|List|Identify|State|Specify|Explain)\b",
+    re.IGNORECASE,
+)
+_XX_MASK_RE = re.compile(r"X{2,}|0{2,}|_{3,}|\.{6,}|/{2,}")
+_PARENTHESIZED_HINT_RE = re.compile(r"^\s*\(.+\)\s*$")
+_LABEL_NO_VALUE_RE = re.compile(r"^[\w\sÀ-ÿ/]{2,40}:\s*$")
+
+
+def _is_cell_fillable(text: str) -> bool:
+    """Heuristic: does this cell look like a fill-me slot?
+
+    Empty, imperative instruction, mask shape, parenthesized hint,
+    label-with-empty-value — all qualify.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if _IMPERATIVE_INSTRUCTION_RE.match(stripped):
+        return True
+    if _XX_MASK_RE.search(stripped):
+        return True
+    if _PARENTHESIZED_HINT_RE.match(stripped) and len(stripped) <= 80:
+        return True
+    if _LABEL_NO_VALUE_RE.match(stripped):
+        return True
+    # Default-placeholder names commonly used by templates.
+    return stripped in {
+        "Fulano",
+        "Fulano de Tal",
+        "Fulano (Titular)",
+        "Ciclano",
+        "Ciclano (Substituto)",
+        "Beltrano",
+        "Beltrano de Tal",
+    }
+
+
+def _detect_cells(doc) -> list[TemplateCell]:  # type: ignore[no-untyped-def]
+    """Return every cell of every body table, with fillability flag."""
+    out: list[TemplateCell] = []
+    for ti, table in enumerate(doc.tables):
+        for ri, row in enumerate(table.rows):
+            for ci, cell in enumerate(row.cells):
+                text = cell.text.strip()
+                out.append(
+                    TemplateCell(
+                        table_index=ti,
+                        row=ri,
+                        col=ci,
+                        text=text,
+                        is_fillable=_is_cell_fillable(text),
+                    )
+                )
+    return out
+
+
 def _detect_empty_tables(doc) -> list[TemplateEmptyTable]:  # type: ignore[no-untyped-def]
     """Find every table with at least one fully-empty data row."""
     out: list[TemplateEmptyTable] = []
@@ -439,6 +535,7 @@ def _detect_empty_tables(doc) -> list[TemplateEmptyTable]:  # type: ignore[no-un
 
 
 __all__ = [
+    "TemplateCell",
     "TemplateEmptyTable",
     "TemplateHeading",
     "TemplatePlaceholder",

@@ -77,7 +77,54 @@ def apply_mapping_plan(
     if plan.paragraph_rewrites:
         _apply_paragraph_rewrites(output_path, plan.paragraph_rewrites)
 
+    if plan.cell_fills:
+        _apply_cell_fills(output_path, plan.cell_fills)
+
     return filled
+
+
+def _apply_cell_fills(docx_path: Path, fills: list) -> None:  # type: ignore[type-arg]
+    """Replace text inside specific table cells addressed by
+    (table_index, row, col).
+
+    Used for mega-table layouts where the entire document is one
+    table and each fillable spot is a cell coordinate.
+    """
+    if not fills:
+        return
+
+    from docx import Document
+
+    doc = Document(str(docx_path))
+
+    for fill in fills:
+        if fill.table_index < 0 or fill.table_index >= len(doc.tables):
+            continue
+        table = doc.tables[fill.table_index]
+        if fill.row < 0 or fill.row >= len(table.rows):
+            continue
+        row = table.rows[fill.row]
+        if fill.col < 0 or fill.col >= len(row.cells):
+            continue
+        cell = row.cells[fill.col]
+        # Replace cell text preserving the first paragraph's run formatting.
+        if cell.paragraphs:
+            para = cell.paragraphs[0]
+            t_elements = para._p.findall(f".//{_W_NS}t")
+            if t_elements:
+                t_elements[0].text = fill.new_text
+                for t in t_elements[1:]:
+                    t.text = ""
+            else:
+                para.add_run(fill.new_text)
+            # Clear any subsequent paragraphs in the cell.
+            for extra_para in cell.paragraphs[1:]:
+                for t in extra_para._p.findall(f".//{_W_NS}t"):
+                    t.text = ""
+        else:
+            cell.text = fill.new_text
+
+    doc.save(str(docx_path))
 
 
 _DISTINCT_PLACEHOLDER_RE = re.compile(
