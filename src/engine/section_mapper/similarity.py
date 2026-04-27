@@ -193,6 +193,9 @@ def match_embeddings(
         log.info("section_mapper.embeddings_unavailable")
         return match_string(source_sections, target_names)
 
+    if not source_sections or not target_names:
+        return []
+
     from sentence_transformers import SentenceTransformer, util  # type: ignore[import-not-found]
 
     model = SentenceTransformer(model_name)

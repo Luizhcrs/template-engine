@@ -26,6 +26,7 @@ plans.
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
@@ -329,12 +330,44 @@ async def build_mapping_plan(
     source: SourceStructure,
     *,
     llm: LLMProvider,
+    max_retries: int = 1,
 ) -> MappingPlan:
-    """Issue ONE batched LLM call and return the parsed plan.
+    """Issue a batched LLM call and return the parsed plan.
 
-    On failure (provider error, schema mismatch) returns an empty
+    The first call uses the canonical prompt. If the response leaves
+    significant gaps (unfilled placeholders, empty sections that the
+    source could fill, empty empty-tables), up to ``max_retries`` extra
+    calls are issued with a focused prompt that lists exactly what was
+    missing.
+
+    On total failure (provider error, schema mismatch) returns an empty
     :class:`MappingPlan` so the caller can fall back to the rules path.
     """
+    plan = await _build_initial_plan(template, source, llm=llm)
+
+    for attempt in range(max_retries):
+        gaps = _detect_plan_gaps(plan, template, source)
+        if not gaps.has_gaps():
+            break
+        log.info(
+            "section_mapper.auto_mapper.retry",
+            attempt=attempt + 1,
+            missing_placeholders=len(gaps.missing_placeholders),
+            empty_sections=len(gaps.empty_sections),
+            unfilled_tables=len(gaps.unfilled_tables),
+        )
+        retry_plan = await _build_retry_plan(template, source, plan, gaps, llm=llm)
+        plan = _merge_plans(plan, retry_plan)
+
+    return plan
+
+
+async def _build_initial_plan(
+    template: TemplateStructure,
+    source: SourceStructure,
+    *,
+    llm: LLMProvider,
+) -> MappingPlan:
     import json
     from datetime import UTC, datetime
 
@@ -343,8 +376,6 @@ async def build_mapping_plan(
     template_json = json.dumps(template.to_dict(), ensure_ascii=False, indent=None)
     source_json = json.dumps(source.to_dict(), ensure_ascii=False, indent=None)
 
-    # Use replace() rather than .format() so JSON examples in the
-    # prompt body (with their own curly braces) don't trigger KeyError.
     prompt = (
         _PROMPT.replace("{template_json}", template_json[:30000])
         .replace("{source_json}", source_json[:60000])
@@ -360,6 +391,165 @@ async def build_mapping_plan(
         return MappingPlan()
 
     return _parse_response(response)
+
+
+@dataclass(frozen=True)
+class _PlanGaps:
+    missing_placeholders: list[str]  # placeholder texts with empty sub
+    empty_sections: list[str]  # heading canonical names with empty content
+    unfilled_tables: list[int]  # template_table_index of empty tables not addressed
+
+    def has_gaps(self) -> bool:
+        return bool(
+            self.missing_placeholders or self.empty_sections or self.unfilled_tables,
+        )
+
+
+def _detect_plan_gaps(
+    plan: MappingPlan,
+    template: TemplateStructure,
+    source: SourceStructure,
+) -> _PlanGaps:
+    """Inspect the plan + template + source and report what the LLM
+    plausibly should have filled but did not.
+
+    A section is "plausibly fillable" when the source has at least one
+    body paragraph that mentions a key word from the heading (loose
+    semantic check — better than nothing, no LLM required).
+    """
+    missing: list[str] = []
+    for ph in template.placeholders:
+        replacement = plan.header_substitutions.get(ph.text, "")
+        if not replacement.strip():
+            missing.append(ph.text)
+
+    body_text_lower = " ".join(source.body_paragraphs).lower()
+    if not body_text_lower:
+        body_text_lower = " ".join(s.content for s in source.sections).lower()
+
+    empty_sections: list[str] = []
+    for h in template.headings:
+        body = plan.section_content.get(h.name, "")
+        if body.strip():
+            continue
+        # Plausible only if the source mentions a keyword from the
+        # heading (split on spaces, drop short tokens).
+        keywords = [
+            kw.lower()
+            for kw in re.findall(r"\b\w{4,}\b", h.raw_heading)
+            if kw.lower() not in {"para", "the", "and", "uma", "uns", "umas"}
+        ]
+        if any(kw in body_text_lower for kw in keywords):
+            empty_sections.append(h.name)
+
+    addressed_tables = {entry.template_table_index for entry in plan.table_data}
+    unfilled_tables = [t.index for t in template.empty_tables if t.index not in addressed_tables]
+
+    return _PlanGaps(
+        missing_placeholders=missing,
+        empty_sections=empty_sections,
+        unfilled_tables=unfilled_tables,
+    )
+
+
+_RETRY_PROMPT = """\
+The previous mapping plan you produced left these slots EMPTY despite
+the source carrying relevant material:
+
+Empty placeholders (header_substitutions value was ""):
+{missing_placeholders}
+
+Empty section_content keys (template heading exists, source has matching
+content):
+{empty_sections}
+
+Empty template tables (template_table_index NOT in your table_data):
+{unfilled_tables}
+
+Re-examine the SOURCE below and emit a JSON object with the SAME schema
+as before, but populate ONLY the fields listed above. Leave fields you
+already filled out as empty strings / arrays — they will be merged with
+the previous plan.
+
+TEMPLATE structure:
+{template_json}
+
+SOURCE structure:
+{source_json}
+
+TODAY'S DATE: {today}
+
+Output JSON. No markdown, no prose.
+"""
+
+
+async def _build_retry_plan(
+    template: TemplateStructure,
+    source: SourceStructure,
+    prev: MappingPlan,
+    gaps: _PlanGaps,
+    *,
+    llm: LLMProvider,
+) -> MappingPlan:
+    import json
+    from datetime import UTC, datetime
+
+    today = datetime.now(UTC).date().isoformat()
+    template_json = json.dumps(template.to_dict(), ensure_ascii=False, indent=None)
+    source_json = json.dumps(source.to_dict(), ensure_ascii=False, indent=None)
+
+    prompt = (
+        _RETRY_PROMPT.replace(
+            "{missing_placeholders}", json.dumps(gaps.missing_placeholders, ensure_ascii=False)
+        )
+        .replace("{empty_sections}", json.dumps(gaps.empty_sections, ensure_ascii=False))
+        .replace("{unfilled_tables}", json.dumps(gaps.unfilled_tables))
+        .replace("{template_json}", template_json[:30000])
+        .replace("{source_json}", source_json[:60000])
+        .replace("{today}", today)
+    )
+
+    schema = _build_schema(template)
+
+    try:
+        response = await llm.generate_structured(prompt, schema)
+    except Exception as exc:
+        log.warning("section_mapper.auto_mapper.retry_failed", error=str(exc))
+        return MappingPlan()
+
+    return _parse_response(response)
+
+
+def _merge_plans(prev: MappingPlan, addendum: MappingPlan) -> MappingPlan:
+    """Take the previous plan and overlay non-empty values from the
+    retry. Retry never erases a previously-set value.
+    """
+    headers = dict(prev.header_substitutions)
+    for k, v in addendum.header_substitutions.items():
+        if v.strip() and not headers.get(k, "").strip():
+            headers[k] = v
+
+    sections = dict(prev.section_content)
+    for k, v in addendum.section_content.items():
+        if v.strip() and not sections.get(k, "").strip():
+            sections[k] = v
+
+    addressed = {entry.template_table_index for entry in prev.table_data}
+    tables = list(prev.table_data) + [
+        entry for entry in addendum.table_data if entry.template_table_index not in addressed
+    ]
+
+    seen_rewrites = {r.match_text for r in prev.paragraph_rewrites}
+    rewrites = list(prev.paragraph_rewrites) + [
+        r for r in addendum.paragraph_rewrites if r.match_text not in seen_rewrites
+    ]
+
+    return MappingPlan(
+        header_substitutions=headers,
+        section_content=sections,
+        table_data=tables,
+        paragraph_rewrites=rewrites,
+    )
 
 
 def _parse_response(response: object) -> MappingPlan:

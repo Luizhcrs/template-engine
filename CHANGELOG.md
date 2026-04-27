@@ -7,6 +7,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-04-27 — Enterprise hardening (smart default + retry + cache + CLI)
+
+Four fixes that take Wave M from "works once" to "production-ready
+out of the box". No new features — every change makes the existing
+LLM mode safer and cheaper to run repeatedly.
+
+### Smart-default mode
+
+`map_sections_async(... mode=None)` now auto-picks the strategy based
+on whether an LLM provider was supplied:
+
+- `llm` provider supplied → `mode="llm"`.
+- no provider → `mode="rules"`.
+
+Callers no longer need to remember to set `mode="llm"` when they pass
+a provider. The CLI `--mode` flag mirrors this default.
+
+### Plan validation + retry
+
+After the LLM call, `_detect_plan_gaps` inspects the plan against the
+template + source structure and reports:
+
+- placeholders the LLM left empty,
+- template headings empty in the plan when the source mentions a
+  keyword from the heading,
+- empty template tables not addressed in `table_data`.
+
+When gaps are detected, a focused retry prompt lists exactly what's
+missing and asks the LLM to fill ONLY those slots. The retry response
+is merged via `_merge_plans` (retry never erases a previously-set
+value). `max_retries=1` by default; raise to widen the recovery
+window.
+
+### Plan cache
+
+`engine.section_mapper.plan_cache` persists every successful
+`MappingPlan` to `${XDG_CACHE_HOME:-~/.cache}/template-engine/plans/`,
+keyed by `sha256(template) + sha256(source) + prompt-version`. Same
+template + source pair → no LLM call. Override with
+`TEMPLATE_ENGINE_CACHE_DIR=/path` (used by tests). Cache key includes
+a `PROMPT_VERSION` tag so prompt rewrites invalidate stale plans.
+
+The orchestrator's `_run_llm_mode` accepts `use_cache: bool = True`
+and saves to cache only when the plan carries data (empty plans from
+LLM failures are not cached).
+
+CLI `--no-cache` skips the cache for one-off runs.
+
+### CLI `map-sections` command
+
+```bash
+template-engine map-sections \
+    --template ./template.docx \
+    --source ./source.docx \
+    --output ./output.docx \
+    --provider openai --model gpt-4o
+```
+
+`--provider`/`--api-key`/`--model` plug into the same provider
+registry as the existing `normalize` and `conformity` commands. When
+no provider is given the CLI runs in pure-rules mode (free,
+deterministic). With a provider, mode auto-picks `llm`. `--no-cache`
+disables the plan cache for the run. `--json <path>` emits the
+`SectionMappingReport` summary alongside the docx output.
+
+### Tests
+
+5 new unit tests covering plan-gap detection, plan merge, cache
+round-trip, cache miss, and the smart-mode default
+(358 → **363 passing**).
+
+### Misc
+
+`match_embeddings` now short-circuits on empty `source_sections` /
+`target_names` (was crashing with a torch shape mismatch when source
+heading detection returned `[]` for Title-case docs).
+
 ## [0.10.4] - 2026-04-27 — Adversarial vendors all green
 
 Closes the failures the v0.10.3 stress test surfaced. Vendor C / D / E

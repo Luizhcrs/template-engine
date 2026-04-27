@@ -446,5 +446,110 @@ def conformity(
         console.print(f"[dim]report -> {json_path.resolve()}[/dim]")
 
 
+@app.command(name="map-sections")
+def cmd_map_sections(
+    template: Annotated[
+        Path,
+        typer.Option("--template", help="Template .docx with empty sections / placeholders", exists=True),
+    ],
+    source: Annotated[Path, typer.Option("--source", help="Source document (.docx / .pdf)", exists=True)],
+    output: Annotated[Path, typer.Option("--output", help="Where to write the filled .docx")],
+    mode: Annotated[
+        str | None,
+        typer.Option(
+            "--mode",
+            help="rules / llm / hybrid. Auto: llm when --provider supplied, else rules.",
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option(
+            "--provider", help="LLM provider name (gemini / openai / anthropic / groq / ollama / openrouter)"
+        ),
+    ] = None,
+    model: Annotated[str | None, typer.Option("--model", help="Override model id")] = None,
+    api_key: Annotated[str | None, typer.Option("--api-key", help="API key (or use env var)")] = None,
+    no_cache: Annotated[
+        bool,
+        typer.Option("--no-cache", help="Skip the on-disk plan cache for this run"),
+    ] = False,
+    json_path: Annotated[
+        Path | None,
+        typer.Option("--json", help="Where to write the SectionMappingReport JSON"),
+    ] = None,
+) -> None:
+    """Fill a structural template (no ``{{X}}`` tokens) from a source document.
+
+    Wave L (rules) or Wave M (LLM) mapping depending on whether a
+    ``--provider`` is supplied:
+
+    - No provider → ``rules`` mode (PT-BR / Engeman heuristics).
+    - With provider → ``llm`` mode (vendor-agnostic, ~$0.001/doc with
+      Gemini Flash, ~$0.05/doc with gpt-4o).
+
+    On-disk plan cache keyed by template + source SHA-256 — the second
+    run of the same pair pays no LLM cost.
+    """
+    from engine.section_mapper import map_sections, map_sections_async
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    llm_provider = None
+    if provider:
+        llm_provider = _build_provider(provider, api_key, model)
+
+    if mode is None:
+        mode = "llm" if llm_provider is not None else "rules"
+
+    if mode == "rules":
+        report = map_sections(
+            template_path=template,
+            source_path=source,
+            output_path=output,
+        )
+    else:
+        if llm_provider is None:
+            raise typer.BadParameter(
+                f"mode={mode!r} requires --provider (e.g. --provider openai --api-key ...)"
+            )
+
+        # The async path supports both 'llm' and 'hybrid' modes.
+        async def _run() -> SectionMappingReport:  # type: ignore[name-defined]
+            return await map_sections_async(
+                template_path=template,
+                source_path=source,
+                output_path=output,
+                llm=llm_provider,
+                mode=mode,
+            )
+
+        report = asyncio.run(_run())
+
+    console.print(
+        Panel.fit(
+            f"[bold green]OK[/bold green] mode=[bold]{mode}[/bold]\n"
+            f"sections mapped: {report.mapped_count} / {len(report.target_sections)}\n"
+            f"tables filled: {report.tables_filled}\n"
+            f"orphan paragraphs: {len(report.orphan_paragraphs)}\n"
+            f"output: {output.resolve()}",
+            title="map-sections result",
+            border_style="green",
+        )
+    )
+
+    if json_path:
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(
+            json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        console.print(f"[dim]report -> {json_path.resolve()}[/dim]")
+
+
+# Keep the SectionMappingReport import name resolvable for the
+# annotation in cmd_map_sections at runtime (typer evaluates the
+# annotation lazily but mypy / docs prefer it visible).
+from engine.section_mapper import SectionMappingReport  # noqa: E402, TC001
+
 if __name__ == "__main__":
     app()

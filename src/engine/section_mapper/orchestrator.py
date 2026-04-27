@@ -260,27 +260,31 @@ async def map_sections_async(
     llm: LLMProvider | None = None,
     table_specs: list[TableSpec] | None = None,
     auto_tables: bool = True,
-    mode: str = "rules",
+    mode: str | None = None,
 ) -> SectionMappingReport:
     """Async entry — supports the ``llm`` similarity mode in addition to
     ``auto`` / ``string`` / ``embeddings``.
 
-    ``mode`` selects the orchestration strategy:
+    ``mode`` selects the orchestration strategy. ``None`` (default)
+    auto-picks the smartest mode for the inputs:
 
-    - ``"rules"`` (default) — runs the Wave L rules pipeline.
-    - ``"llm"`` — single LLM call builds a complete substitution plan
-      from the template + source structure profilers. Requires a
-      provider. Generalises across vendors and languages.
+    - ``llm`` provider supplied → ``"llm"``.
+    - no provider → ``"rules"``.
+
+    Explicit values:
+
+    - ``"rules"`` — Wave L rules pipeline only (PT-BR / Engeman style).
+    - ``"llm"`` — single LLM call for vendor-agnostic mapping. Requires
+      a provider.
     - ``"hybrid"`` — runs the rules pipeline first, then asks the LLM
-      to fill any gaps the rules left behind (unmapped source headings,
-      empty tables the auto-table detector did not recognise, header
-      placeholders the rule-based filler could not match). Requires a
-      provider.
+      to fill any gaps the rules left behind. Requires a provider.
 
     The ``similarity_mode`` flag controls heading similarity and is
     independent of ``mode`` — it still applies in ``rules`` and as the
     initial pass in ``hybrid``.
     """
+    if mode is None:
+        mode = "llm" if llm is not None else "rules"
     from engine.section_mapper.auto_tables import (
         detect_default_specs_with_source,
         merge_specs,
@@ -372,12 +376,22 @@ async def _run_llm_mode(
     output_path: Path,
     *,
     llm: LLMProvider | None,
+    use_cache: bool = True,
 ) -> SectionMappingReport:
     """Wave M LLM-driven path: profile both docs, ask the LLM for a
     complete substitution plan, render the plan onto the template.
+
+    ``use_cache=True`` (default) checks the on-disk plan cache keyed by
+    template hash + source hash before hitting the LLM. Successful plans
+    are persisted on save.
     """
     from engine.section_mapper.auto_mapper import build_mapping_plan
     from engine.section_mapper.auto_renderer import apply_mapping_plan
+    from engine.section_mapper.plan_cache import (
+        cache_key_for,
+        load_plan,
+        save_plan,
+    )
     from engine.section_mapper.source_profiler import profile_source
     from engine.section_mapper.template_profiler import profile_template
 
@@ -387,7 +401,22 @@ async def _run_llm_mode(
     template_struct = profile_template(template_path)
     source_struct = profile_source(source_path)
 
-    plan = await build_mapping_plan(template_struct, source_struct, llm=llm)
+    plan = None
+    cache_key = None
+    if use_cache:
+        cache_key = cache_key_for(template_path, source_path)
+        plan = load_plan(cache_key)
+        if plan is not None:
+            log.info("section_mapper.plan_cache.hit", key=cache_key.filename)
+
+    if plan is None:
+        plan = await build_mapping_plan(template_struct, source_struct, llm=llm)
+        if (
+            use_cache
+            and cache_key is not None
+            and (plan.header_substitutions or plan.section_content or plan.table_data)
+        ):
+            save_plan(cache_key, plan)
     filled = apply_mapping_plan(
         template_path,
         output_path,

@@ -1317,5 +1317,166 @@ def test_auto_renderer_header_substitution_low_level(tmp_path):
     assert ">XXXX<" not in hdr_xml
 
 
+# ===== Wave M enterprise hardening: validation + cache + smart-default =====
+
+
+def test_detect_plan_gaps_reports_empty_placeholders():
+    from engine.section_mapper.auto_mapper import (
+        MappingPlan,
+        _detect_plan_gaps,
+    )
+    from engine.section_mapper.source_profiler import SourceStructure
+    from engine.section_mapper.template_profiler import (
+        TemplateHeading,
+        TemplatePlaceholder,
+        TemplateStructure,
+    )
+
+    template = TemplateStructure(
+        template_path="x.docx",
+        headings=[
+            TemplateHeading(name="OBJETIVO", raw_heading="OBJETIVO", number=None, level=1, paragraph_idx=0)
+        ],
+        placeholders=[
+            TemplatePlaceholder(
+                text="XXXX", kind="repeated", location="header", paragraph_idx=-1, context="XXXX"
+            ),
+            TemplatePlaceholder(
+                text="TITULO", kind="parens", location="header", paragraph_idx=-1, context="(TITULO)"
+            ),
+        ],
+        empty_tables=[],
+    )
+    source = SourceStructure(
+        source_path="y.docx",
+        sections=[],
+        tables=[],
+        header_text_glued="",
+        header_text_spaced="",
+        body_paragraphs=["O objetivo é listar tarefas..."],
+    )
+    plan = MappingPlan(
+        header_substitutions={"XXXX": "IT.PRO", "TITULO": ""},
+        section_content={"OBJETIVO": ""},
+    )
+    gaps = _detect_plan_gaps(plan, template, source)
+    assert "TITULO" in gaps.missing_placeholders
+    assert "XXXX" not in gaps.missing_placeholders
+    # OBJETIVO empty + body has "objetivo" keyword → flagged
+    assert "OBJETIVO" in gaps.empty_sections
+    assert gaps.has_gaps()
+
+
+def test_merge_plans_overlays_non_empty():
+    from engine.section_mapper.auto_mapper import (
+        MappingPlan,
+        ParagraphRewrite,
+        TableFillData,
+        _merge_plans,
+    )
+
+    prev = MappingPlan(
+        header_substitutions={"XXXX": "OLD", "TITULO": ""},
+        section_content={"OBJETIVO": "old body", "APLICACAO": ""},
+        table_data=[TableFillData(template_table_index=0, sub_headers=[], rows=[{"a": "1"}])],
+        paragraph_rewrites=[ParagraphRewrite(match_text="A", replacement_text="A1")],
+    )
+    addendum = MappingPlan(
+        header_substitutions={"XXXX": "NEW", "TITULO": "Filled"},  # XXXX should NOT overwrite
+        section_content={"OBJETIVO": "newer body", "APLICACAO": "filled"},
+        table_data=[
+            TableFillData(template_table_index=0, sub_headers=[], rows=[{"x": "999"}]),  # ignored
+            TableFillData(template_table_index=1, sub_headers=[], rows=[{"b": "2"}]),  # added
+        ],
+        paragraph_rewrites=[
+            ParagraphRewrite(match_text="A", replacement_text="A2"),  # ignored, already have A
+            ParagraphRewrite(match_text="B", replacement_text="B1"),
+        ],
+    )
+    merged = _merge_plans(prev, addendum)
+    assert merged.header_substitutions["XXXX"] == "OLD"  # not overwritten
+    assert merged.header_substitutions["TITULO"] == "Filled"
+    assert merged.section_content["OBJETIVO"] == "old body"
+    assert merged.section_content["APLICACAO"] == "filled"
+    assert {entry.template_table_index for entry in merged.table_data} == {0, 1}
+    assert {r.match_text for r in merged.paragraph_rewrites} == {"A", "B"}
+
+
+def test_plan_cache_round_trip(tmp_path, monkeypatch):
+    """Plan saved to cache, loaded back identical."""
+    monkeypatch.setenv("TEMPLATE_ENGINE_CACHE_DIR", str(tmp_path))
+
+    from engine.section_mapper.auto_mapper import (
+        MappingPlan,
+        ParagraphRewrite,
+        TableFillData,
+    )
+    from engine.section_mapper.plan_cache import (
+        CacheKey,
+        load_plan,
+        save_plan,
+    )
+
+    plan = MappingPlan(
+        header_substitutions={"XXXX": "DOC-001"},
+        section_content={"OBJETIVO": "body text"},
+        table_data=[TableFillData(template_table_index=0, sub_headers=[], rows=[{"k": "v"}])],
+        paragraph_rewrites=[ParagraphRewrite(match_text="src", replacement_text="dst")],
+    )
+    key = CacheKey(template_hash="a" * 64, source_hash="b" * 64)
+
+    save_plan(key, plan)
+    loaded = load_plan(key)
+
+    assert loaded is not None
+    assert loaded.header_substitutions == plan.header_substitutions
+    assert loaded.section_content == plan.section_content
+    assert len(loaded.table_data) == 1
+    assert loaded.table_data[0].rows == [{"k": "v"}]
+    assert len(loaded.paragraph_rewrites) == 1
+
+
+def test_plan_cache_miss_returns_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("TEMPLATE_ENGINE_CACHE_DIR", str(tmp_path))
+
+    from engine.section_mapper.plan_cache import CacheKey, load_plan
+
+    key = CacheKey(template_hash="x" * 64, source_hash="y" * 64)
+    assert load_plan(key) is None
+
+
+def test_smart_mode_default_picks_rules_without_provider(tmp_path):
+    """When mode=None and llm=None, the orchestrator picks 'rules'."""
+    import asyncio
+
+    from engine.section_mapper import map_sections_async
+
+    # Build a tiny template + source.
+    p_tpl = tmp_path / "tpl.docx"
+    p_src = tmp_path / "src.docx"
+    p_out = tmp_path / "out.docx"
+
+    doc_tpl = Document()
+    doc_tpl.add_paragraph("OBJETIVO")
+    doc_tpl.add_paragraph("")
+    doc_tpl.save(str(p_tpl))
+
+    doc_src = Document()
+    doc_src.add_paragraph("OBJETIVO")
+    doc_src.add_paragraph("body content")
+    doc_src.save(str(p_src))
+
+    # mode=None + no provider → rules path runs without error.
+    report = asyncio.run(
+        map_sections_async(
+            template_path=p_tpl,
+            source_path=p_src,
+            output_path=p_out,
+        )
+    )
+    assert p_out.exists()
+    assert report.target_sections
+
+
 # Path import kept at runtime so pytest fixture annotations resolve
 _ = Path
