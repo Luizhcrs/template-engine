@@ -284,7 +284,10 @@ async def map_sections_async(
     initial pass in ``hybrid``.
     """
     if mode is None:
-        mode = "llm" if llm is not None else "rules"
+        mode = "auto" if llm is not None else "rules"
+
+    if mode == "auto":
+        return await _run_auto_mode(template_path, source_path, output_path, llm=llm)
     from engine.section_mapper.auto_tables import (
         detect_default_specs_with_source,
         merge_specs,
@@ -366,6 +369,82 @@ async def map_sections_async(
         source_sections=source_sections,
         matches=matches,
         tables_filled=filled,
+        orphan_paragraphs=orphans,
+    )
+
+
+async def _run_auto_mode(
+    template_path: Path,
+    source_path: Path,
+    output_path: Path,
+    *,
+    llm: LLMProvider | None,
+) -> SectionMappingReport:
+    """Wave N — Slot-only pipeline.
+
+    Profile every slot in the template, render the template as PNG
+    pages, ask the LLM ``{slot_id: new_text}``, apply each fill in
+    place. Template structure is preserved verbatim — only slot
+    contents change.
+    """
+    from engine.section_mapper.slot_filler import fill_slots
+    from engine.section_mapper.slot_profiler import profile_slots
+    from engine.section_mapper.slot_renderer import apply_slot_fills
+    from engine.section_mapper.source_profiler import profile_source
+
+    if llm is None:
+        raise ValueError("mode='auto' requires an llm provider")
+
+    inventory = profile_slots(template_path)
+    source_struct = profile_source(source_path)
+
+    template_image_urls: list[str] = []
+    try:
+        from engine.section_mapper.template_renderer import render_pages
+
+        pages = render_pages(template_path, max_pages=3)
+        template_image_urls = [p.as_data_url() for p in pages]
+    except Exception as exc:
+        log.info("section_mapper.auto_mode.render_skipped", error=str(exc))
+
+    fills = await fill_slots(
+        inventory,
+        source_struct,
+        llm=llm,
+        template_images=template_image_urls or None,
+    )
+
+    n = apply_slot_fills(
+        template_path,
+        output_path,
+        inventory=inventory,
+        fills=fills,
+    )
+
+    target_sections = parse_docx(template_path)
+    source_sections = _dedupe_sections_by_richest(_parse_source(source_path))
+    matches = [
+        HeadingMatch(source_name=s.name, target_name=s.name, score=1.0, method="slot-fill")
+        for s in source_sections
+    ]
+    orphans = detect_orphan_paragraphs(output_path)
+
+    log.info(
+        "section_mapper.auto_mode_done",
+        slots_total=len(inventory.slots),
+        slots_fillable=len(inventory.fillable()),
+        slots_filled=n,
+        orphans=len(orphans),
+    )
+
+    return SectionMappingReport(
+        template_path=template_path,
+        source_path=source_path,
+        output_path=output_path,
+        target_sections=target_sections,
+        source_sections=source_sections,
+        matches=matches,
+        tables_filled=0,
         orphan_paragraphs=orphans,
     )
 

@@ -7,6 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-27 — Wave N (Slot-only architecture)
+
+Wave M split fill operations across 5 fields (`header_substitutions`,
+`section_content`, `table_data`, `paragraph_rewrites`, `cell_fills`).
+Each had its own renderer path. Coordinating them was brittle: source
+content sometimes got APPENDED next to template instructions instead
+of REPLACING them.
+
+Wave N collapses every fillable place in a docx into one shape:
+**`Slot`**. The LLM returns `{slot_id: new_text}`. The renderer
+substitutes each slot in place. No cloning, no inserting, no strategy
+decisions. The template stays sacred — slots are the only thing that
+change.
+
+### Added — `Slot` abstraction (`engine.section_mapper.slots`)
+
+```python
+Slot(
+    id="cell_t0_r2_c0",  # stable identifier
+    address=SlotAddress(location="table_cell", table_index=0, row=2, col=0),
+    current_text="1. OBJETIVO: (Descrição clara…)",
+    kind="heading_with_hint",  # empty / placeholder / label_value /
+                                # instruction / heading_with_hint /
+                                # heading / data
+    context="...",
+    is_fillable=True,
+)
+```
+
+### Added — `profile_slots` flat profiler
+
+`engine.section_mapper.slot_profiler.profile_slots(template_path)`
+emits a complete `SlotInventory` covering:
+
+- Body paragraphs.
+- Body table cells (every cell of every body table).
+- Header / footer paragraphs (via raw XML, so paragraphs nested in
+  `<w:txbxContent>` text boxes get profiled too).
+
+Each slot is classified — `empty` / `placeholder` / `label_value` /
+`instruction` / `heading_with_hint` / `heading` / `data`.
+
+### Added — vision-driven slot fill
+
+`engine.section_mapper.slot_filler.fill_slots(inventory, source, *,
+llm, template_images)` issues ONE LLM call (multimodal when PNG pages
+are available) that returns `{slot_id: new_text}` for every slot the
+LLM decides to fill. Slots the LLM omits keep their current text
+untouched.
+
+JSON Schema constrains `slot_id` to the actual fillable IDs. ASCII
+control characters in responses are stripped (mitigates OpenAI
+strict-mode `\x1d` glitch on Portuguese accents).
+
+### Added — `apply_slot_fills` renderer
+
+`engine.section_mapper.slot_renderer.apply_slot_fills(template,
+output, *, inventory, fills)` writes each fill at its exact address.
+Body paragraphs and cells go via python-docx (so XML escapes match
+unescaped). Header / footer parts are rewritten directly inside the
+docx zip's `word/headerN.xml` / `word/footerN.xml`.
+
+Mega-table merged-column groups: when a cell fill targets one column
+of a merged group (multiple cells in the same row sharing identical
+text), the new text is mirrored across every sibling.
+
+### Added — `mode="auto"` (default when provider supplied)
+
+`map_sections_async(... mode=None)` now picks `"auto"` (Wave N
+slot-only) when an LLM provider is passed, `"rules"` otherwise. The
+old `"llm"` and `"hybrid"` modes still work but are no longer the
+default.
+
+### Result on real-world templates
+
+| Template | Slots fillable | Slots filled (Wave N) | Outcome |
+| --- | --- | --- | --- |
+| **UNIFAP POP** (real-world) | 83 | 18 | imperative `Descrever…` / `Apontar…` / `Identificar…` instructions REPLACED in place by source content (vs Wave M which appended next to them) |
+| **Corentocantins POP** (real-world, mega-table 20×8) | 153 | 128 | every body slot `1. OBJETIVO: (Descrição…)` REPLACED with `1. OBJETIVO: <real>` (vs Wave M which left them as template default) |
+
+UNIFAP `Pré-requisitos` instruction and a couple of activities-table
+explanatory cells still resist replacement — known limit of the
+current prompt. Corentocantins `2. INDICAÇÃO/CONTRAINDICAÇÃO` skipped
+because the source has no equivalent (correct behaviour). Wave N
+delivers the "template sacred + slot-only fill" promise that Wave M
+couldn't.
+
 ## [0.10.9] - 2026-04-27 — Focused cell-fill checklist + merged-cell mirror
 
 ### Added — fillable-cells checklist in prompt
