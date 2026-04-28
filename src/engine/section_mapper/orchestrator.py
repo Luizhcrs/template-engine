@@ -395,6 +395,9 @@ async def _run_auto_mode(
     )
     from engine.section_mapper.record_extractor import extract_records
     from engine.section_mapper.schemas.detector import detect_table_schema
+    from engine.section_mapper.schemas.detector_vision import (
+        detect_schema_from_table_async,
+    )
     from engine.section_mapper.slot_filler import fill_slots
     from engine.section_mapper.slot_profiler import (
         _is_vmerge_continuation,
@@ -449,7 +452,35 @@ async def _run_auto_mode(
             header_texts = [_tc_text(tc).strip() for tc in header_cells]
             schema = detect_table_schema(header_texts)
             if schema is None:
-                continue
+                # Builtin schemas didn't match — fall back to the
+                # vision detector. Sample the first body row's text
+                # so the LLM can disambiguate columns whose header
+                # name alone is ambiguous (``Atividade`` could be a
+                # verb or a label).
+                if len(tr_elements) > 1 and any(h.strip() for h in header_texts):
+                    sample_tcs = _iter_row_tcs(tr_elements[1])
+                    sample_texts = [_tc_text(tc).strip() for tc in sample_tcs]
+                    try:
+                        schema = await detect_schema_from_table_async(
+                            headers=header_texts,
+                            sample_row_texts=sample_texts,
+                            llm=llm,
+                        )
+                    except Exception as exc:
+                        log.info(
+                            "section_mapper.auto_mode.vision_detect_failed",
+                            table=ti,
+                            error=str(exc),
+                        )
+                        schema = None
+                if schema is None:
+                    continue
+                log.info(
+                    "section_mapper.auto_mode.vision_schema_detected",
+                    table=ti,
+                    schema=schema.name,
+                    columns=len(schema.columns),
+                )
 
             # Build TableInventory describing every row's structural
             # shape — vmerge + per-cell fillable flags VISUAL-COLUMN

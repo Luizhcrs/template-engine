@@ -1,0 +1,20 @@
+{
+  "schema_name": "vendor_table",
+  "columns": [
+    {
+      "name": "Item",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "Descrição",
+      "type": "free",
+      "required": true
+    },
+    {
+      "name": "Qtde",
+      "type": "number",
+      "required": false
+    }
+  ]
+}

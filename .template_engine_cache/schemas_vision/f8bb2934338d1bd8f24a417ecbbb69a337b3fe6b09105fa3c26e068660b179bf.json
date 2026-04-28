@@ -1,0 +1,21 @@
+{
+  "schema_name": "activity_schedule",
+  "columns": [
+    {
+      "name": "Nº",
+      "type": "number"
+    },
+    {
+      "name": "Atividade/Descrição",
+      "type": "free"
+    },
+    {
+      "name": "Resp.",
+      "type": "name"
+    },
+    {
+      "name": "Tempo",
+      "type": "number"
+    }
+  ]
+}

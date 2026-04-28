@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-04-28
+
+Schema-from-vision (Phase 1 of the master roadmap). Tables that no
+builtin schema covers now fall through to a vision-driven detector
+that asks the LLM to produce a TableSchema on the fly given the
+header row + a sample body row. Result is cached on disk
+(sha256-keyed) so repeat runs against the same template are free.
+
+Plan: docs/superpowers/plans/2026-04-28-master-roadmap.md (this is
+Phase 1 of 6 — OCR, validators, semantic schema detection, model
+upgrade and golden corpus follow).
+
+### Added
+
+- `engine.section_mapper.schemas.detector_vision.detect_schema_from_table_async(headers, sample_row_texts, llm, cache_dir=None)`
+  — single LLM call, JSON-Schema constrained, returns a TableSchema
+  or None. Disk-backed cache keyed by sha256(headers + sample row).
+- Orchestrator wiring: when `detect_table_schema` returns None, the
+  vision detector runs. Detected schema joins the schema-driven
+  pipeline same as a builtin (record extraction → align → typed_fill).
+- 7 new tests in `tests/test_schemas_vision.py` covering happy path,
+  prompt content, empty / malformed / exception responses, cache hit
+  and cache-miss paths.
+
+### Real-world impact (UNIFAP POP)
+
+| Table                                                | Before                       | After                                        |
+|------------------------------------------------------|------------------------------|----------------------------------------------|
+| Table 2 (Nº / Atividade / Resp / Tempo)              | uncovered, slot-only fill    | vision-detected as `activity_schedule`; 16 cells filled across 4 workflow rows |
+
+Corentocantins mega-table is now also vision-detected
+(`operational_procedure_table`); fill rate is small (1 cell) but the
+schema layer now has a hook for further refinement instead of
+silently falling back.
+
+### Known limitations
+
+- Vision detector occasionally mis-types columns (UNIFAP table 2 got
+  `Tempo` as `number` instead of `free`, so values like ``"1 dia"`` /
+  ``"2 horas"`` got written as the integer ``0``). Phase 4 (semantic
+  schema detection) and Phase 5 (model upgrade) target this.
+- One LLM call per uncached table at first encounter. Cost stays
+  flat after the first run thanks to disk cache.
+
 ## [0.13.3] - 2026-04-28
 
 ### Fixed

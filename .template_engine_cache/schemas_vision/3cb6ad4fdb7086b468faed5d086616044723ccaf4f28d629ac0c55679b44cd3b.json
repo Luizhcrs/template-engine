@@ -1,0 +1,21 @@
+{
+  "schema_name": "operational_procedure_table",
+  "columns": [
+    {
+      "name": "Logomarca ou logotipo da Instituição",
+      "type": "free"
+    },
+    {
+      "name": "PROCEDIMENTO OPERACIONAL PADRÃO POP 001(TÍTULO DO POP)",
+      "type": "free"
+    },
+    {
+      "name": "Versão",
+      "type": "version"
+    },
+    {
+      "name": "XX/2022",
+      "type": "date"
+    }
+  ]
+}
