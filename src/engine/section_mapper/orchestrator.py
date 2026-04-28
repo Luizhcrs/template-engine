@@ -423,8 +423,11 @@ async def _run_auto_mode(
     )
 
     # Closed-loop self-review: render the just-produced docx, show it
-    # to the LLM, ask for corrections. Skipped when the multimodal
-    # renderer can't produce images (docx2pdf / pymupdf missing).
+    # to the LLM, ask for corrections. ONE round only — multi-round
+    # had the LLM "fixing" already-correct fills on subsequent passes
+    # (it would invent reasons to rewrite a good cell), regressing
+    # quality round over round. Skipped when the multimodal renderer
+    # can't produce images (docx2pdf / pymupdf missing).
     review_count = 0
     try:
         corrections = await review_slots(

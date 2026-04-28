@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-04-28
+
+Tightening pass for the closed-loop reviewer. The first cut shipped
+in 0.12.0 over-corrected on subsequent rounds and occasionally
+overwrote real data with template defaults.
+
+### Changed
+
+- `_run_auto_mode` runs ONE review round instead of looping. Empirical
+  finding: round-2+ reviews tended to "fix" already-correct fills,
+  regressing quality round-over-round.
+
+- `slot_reviewer` prompt now opens with an explicit
+  ``DEFAULT IS NO CHANGE`` instruction. The LLM only proposes a
+  correction when it can quote a specific source value or point to a
+  specific column mismatch.
+
+- Each table-cell slot's payload now carries an explicit
+  ``expected_column`` field (lifted from the ``column="..."`` anchor
+  inside the context string). The reviewer was missing wrong-column
+  mistakes because the anchor was buried inside a longer context.
+
+### Added
+
+- Banned-token filter on reviewer corrections. Proposed ``new_text``
+  containing common BR-PT template defaults
+  (``Fulano de Tal``, ``Ciclano``, ``Sicrano``, ``Beltrano``,
+  ``XXXXX``, ``XX/XX``, ``x.xx.xxx.xx``) is rejected silently — those
+  signal the reviewer is going BACKWARDS, replacing real data with a
+  generic placeholder.
+
+### Tests
+
+- ``test_extract_column_header_pulls_anchor_from_context``
+- ``test_review_slots_lifts_expected_column_into_payload``
+- ``test_review_slots_drops_corrections_with_template_default_tokens``
+
+### Known limitations
+
+The reviewer is best-effort. On UNIFAP it both improves Section 10
+(fills the empty fill row with real participants) AND occasionally
+mis-corrects (proposes wrong substituto pairings in LISTA DE
+CONTATOS). Net effect is positive for first-pass output that has
+clear placeholders, neutral or slightly negative for first-pass
+output that was already correct. Multi-round review is gated until
+we add anchor-based confidence scoring.
+
 ## [0.12.0] - 2026-04-28
 
 Closed-loop self-review pass. After the first fill, the orchestrator

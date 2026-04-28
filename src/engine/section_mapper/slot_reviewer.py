@@ -44,6 +44,12 @@ You are reviewing a docx that has already been filled by an earlier
 pass. Your job is to spot mistakes the first pass made and propose
 specific corrections.
 
+DEFAULT IS NO CHANGE. Only propose a correction when you are
+HIGHLY CONFIDENT the current text is wrong AND you can justify the
+new text with a specific quote from SOURCE or a specific column
+mismatch in the rendered PNG. If you are unsure, OMIT the slot.
+Rewriting an already-correct cell is worse than leaving it alone.
+
 You receive:
 
 1. RENDERED PAGES — PNG renders of the OUTPUT docx (after first-pass
@@ -53,24 +59,41 @@ You receive:
    ``current_text`` (post-fill text in the output), ``kind``,
    ``context``).
 
-Look for these specific failure modes:
+Each slot entry may carry an ``expected_column`` field. If present,
+the ``current_text`` MUST semantically match that column header:
 
-- Cell content placed in the WRONG column (a name in a Telefone
-  column, an e-mail in a Phone column, a date in a Nome column,
-  template-default text left where a real value should sit).
-- Row-index columns (``column="Nº"``, ``column="#"``,
-  ``column="Item"``) carrying repeated values instead of distinct
-  incrementing integers (``1, 2, 3, 4`` not ``1, 1, 2, 3``).
+  expected_column="Telefone"   -> phone number ((96) 1234-5678)
+  expected_column="e-mail"     -> e-mail address (foo@bar.br)
+  expected_column="Data"       -> date (DD/MM/YYYY)
+  expected_column="Nome"       -> person name
+  expected_column="Setor"      -> department / unit name
+  expected_column="Função"     -> role / job title
+  expected_column="Versão"     -> version number
+  expected_column="Nº" / "#"   -> distinct incrementing integer
+
+If ``current_text`` does not match its ``expected_column``, propose a
+correction. Look at the surrounding rows in the rendered PNG to find
+the right value (a name shoved into a Telefone column has typically
+displaced the real phone number — recover it from the page).
+
+Other failure modes:
+
+- Row-index columns (``Nº`` / ``#`` / ``Item``) carrying repeated
+  values: must be distinct ascending integers (``1, 2, 3, 4`` not
+  ``1, 1, 2, 3``). Re-number the whole column if you spot a repeat.
 - Placeholder cells (``Gestor do processo X``,
   ``Diretor do Departamento X``, ``Chefe da Divisão XXXXX``) left
   unchanged when the source carries a real role / value.
 - Duplicate rows where the first pass copied a template-default
-  example into the empty fill row instead of using real source data.
+  example (``Fulano de Tal | Reitoria | Secretário da Reitoria``)
+  into an empty fill row instead of using real source data.
 - Visible template tokens still showing in the output:
   ``{{X}}``, ``[FOO]``, ``<<X>>``, ``XXXXX``, ``XX/XX/2022``,
-  ``Fulano de Tal``, ``Sicrano``, etc.
+  ``Fulano (Titular)``, ``Ciclano (Substituto)``, ``Sicrano``, etc.
 - Cells that received a value when they should have stayed empty
   (the LLM filled a logo cell with header text, etc).
+- Same string repeated across two adjacent cells of the same row
+  (LLM duplicated content instead of producing distinct values).
 
 Output JSON ONLY, with one key:
 
@@ -100,10 +123,20 @@ Output JSON only. No prose. No markdown.
 
 
 _CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_COLUMN_HEADER_RE = re.compile(r'column="([^"]+)"')
 
 
 def _clean(s: str) -> str:
     return _CONTROL_CHAR_RE.sub("", s)
+
+
+def _extract_column_header(context: str) -> str:
+    """Pull the ``column="<name>"`` anchor out of a slot's context
+    string, if present. Returns ``""`` for body paragraphs / header
+    cells / anything without a column anchor.
+    """
+    m = _COLUMN_HEADER_RE.search(context)
+    return m.group(1) if m else ""
 
 
 def _build_schema(inventory: SlotInventory) -> dict:
@@ -170,14 +203,20 @@ async def review_slots(
     post_fill_texts = _read_current_texts(output_path, inventory)
     slots_payload = []
     for s in fillable:
-        slots_payload.append(
-            {
-                "id": s.id,
-                "kind": s.kind,
-                "context": s.context,
-                "current_text": post_fill_texts.get(s.id, s.current_text),
-            }
-        )
+        entry: dict[str, object] = {
+            "id": s.id,
+            "kind": s.kind,
+            "context": s.context,
+            "current_text": post_fill_texts.get(s.id, s.current_text),
+        }
+        # Lift the column name out of the context so the LLM does not
+        # have to parse the ``column="..."`` prefix itself. Reviewer
+        # was missing wrong-column mistakes because the anchor was
+        # buried in the context string.
+        col = _extract_column_header(s.context)
+        if col:
+            entry["expected_column"] = col
+        slots_payload.append(entry)
 
     slots_json = json.dumps(slots_payload, ensure_ascii=False)
     source_json = json.dumps(source.to_dict(), ensure_ascii=False)
@@ -241,6 +280,15 @@ def _read_current_texts(
     return out
 
 
+# Common BR-PT template-default tokens. A reviewer correction
+# proposing any of these is the LLM going BACKWARDS — replacing real
+# data with a generic placeholder. Reject the correction silently.
+_BANNED_NEW_TEXT_RE = re.compile(
+    r"\b(?:Fulano(?:\s+de\s+Tal)?|Ciclano|Sicrano|Beltrano|XXXXX|XX/XX|x\.xx\.xxx\.xx)\b",
+    re.IGNORECASE,
+)
+
+
 def _parse_response(response: object) -> dict[str, str]:
     if not isinstance(response, dict):
         return {}
@@ -257,6 +305,13 @@ def _parse_response(response: object) -> dict[str, str]:
             continue
         cleaned = _clean(text).strip()
         if not cleaned:
+            continue
+        if _BANNED_NEW_TEXT_RE.search(cleaned):
+            log.info(
+                "section_mapper.slot_reviewer.banned_correction_dropped",
+                slot_id=sid,
+                proposed=cleaned[:60],
+            )
             continue
         out[sid] = cleaned
     return out

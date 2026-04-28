@@ -154,6 +154,74 @@ async def test_review_slots_drops_corrections_for_unknown_slot_ids(tmp_path: Pat
 
 
 @pytest.mark.asyncio
+async def test_review_slots_drops_corrections_with_template_default_tokens(
+    tmp_path: Path,
+) -> None:
+    """Reviewer occasionally proposes ``Fulano de Tal``,
+    ``XXXXX``, ``x.xx.xxx.xx`` — i.e. asks us to OVERWRITE real data
+    with a template default. Such corrections must be dropped."""
+    inv = _make_inventory()
+    src = _FakeSource()
+    llm = _MockLLM(
+        response={
+            "corrections": [
+                {"slot_id": "cell_t0_r1_c2", "new_text": "Fulano de Tal"},
+                {"slot_id": "cell_t0_r1_c3", "new_text": "real@email.br"},
+            ]
+        }
+    )
+
+    out = await review_slots(
+        tmp_path / "fake_output.docx",
+        inv,
+        src,
+        llm=llm,
+        output_image_urls=["data:image/png;base64,FAKE"],
+    )
+
+    # The Fulano de Tal correction is rejected; the real-looking one
+    # comes through.
+    assert out == {"cell_t0_r1_c3": "real@email.br"}
+
+
+def test_extract_column_header_pulls_anchor_from_context() -> None:
+    """The reviewer enriches each slot's payload with the explicit
+    ``expected_column`` field so the LLM does not have to parse the
+    ``column="..."`` prefix itself."""
+    from engine.section_mapper.slot_reviewer import _extract_column_header
+
+    assert _extract_column_header('column="Telefone" | 1 | Fulano (Titular)') == "Telefone"
+    assert _extract_column_header('column="e-mail" | 2') == "e-mail"
+    assert _extract_column_header("just sibling text | foo | bar") == ""
+    assert _extract_column_header("") == ""
+
+
+@pytest.mark.asyncio
+async def test_review_slots_lifts_expected_column_into_payload(tmp_path: Path) -> None:
+    """Each table-cell slot whose context starts with column="..."
+    must arrive at the LLM with an explicit ``expected_column`` field
+    in its payload — not just buried inside ``context``."""
+    inv = _make_inventory()
+    src = _FakeSource()
+    llm = _MockLLM(response={"corrections": []})
+
+    await review_slots(
+        tmp_path / "fake_output.docx",
+        inv,
+        src,
+        llm=llm,
+        output_image_urls=["data:image/png;base64,FAKE"],
+    )
+
+    assert len(llm.calls) == 1
+    prompt = llm.calls[0]["prompt"]
+    # Payload is JSON-encoded inside the prompt; spot-check the column
+    # anchors are surfaced there as their own field.
+    assert '"expected_column": "Telefone"' in prompt
+    assert '"expected_column": "e-mail"' in prompt
+
+
+@pytest.mark.asyncio
 async def test_review_slots_handles_llm_exception(tmp_path: Path) -> None:
     """If the LLM call raises (rate limit, timeout, malformed response
     from upstream), the reviewer logs and returns an empty dict so the
