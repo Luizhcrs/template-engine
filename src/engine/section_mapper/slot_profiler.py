@@ -153,8 +153,22 @@ def profile_slots(template_path: Path) -> SlotInventory:
     # even when columns are MERGED (same underlying ``<w:tc>`` repeats).
     # Dedupe by the underlying XML element identity so the LLM sees one
     # logical slot per merged group instead of 8 of the same cell.
+    # Column-header context anchors are only useful when row 0 is a
+    # genuine data-header row (short, name-like cells like
+    # ``Nº | Nome | Telefone``). Mega-table layouts where row 0
+    # carries layout strings ("Logomarca", "PROCEDIMENTO PADRÃO POP")
+    # produce misleading column anchors that confuse the LLM (Corentoc
+    # mega-table started filling step cells with version numbers
+    # because row 0 said ``Versão``). Only emit the anchor when the
+    # table matches a known schema.
+    from engine.section_mapper.schemas.detector import detect_table_schema
+
     for ti, table in enumerate(doc.tables):
-        header_texts = _row_tc_texts(_iter_row_tcs(table.rows[0]._tr)) if table.rows else []
+        header_texts: list[str] = []
+        if table.rows:
+            row0_texts = _row_tc_texts(_iter_row_tcs(table.rows[0]._tr))
+            if detect_table_schema(row0_texts) is not None:
+                header_texts = row0_texts
         for ri, row in enumerate(table.rows):
             row_tcs = _iter_row_tcs(row._tr)
             row_texts = _row_tc_texts(row_tcs)

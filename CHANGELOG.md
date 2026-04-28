@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-04-28
+
+### Fixed
+
+- `engine.section_mapper.slot_profiler` was emitting
+  ``column="<row 0 text>"`` anchors for EVERY table, not just tables
+  whose row 0 is a real data-header row. Corentocantins regression:
+  the mega-table 20x8 has a layout-driven row 0 carrying
+  ``Logomarca ou logotipo`` / ``PROCEDIMENTO OPERACIONAL PADRÃO POP``
+  / ``Versão`` cells. The procedure-step column got
+  ``column="Versão"`` as its anchor, and the LLM dutifully filled the
+  step cells with version numbers (``02`` / ``01`` / ``02``) instead
+  of step descriptions.
+
+  Anchors are now only emitted when ``detect_table_schema(row 0
+  texts)`` returns a known schema. Tables without a recognised header
+  shape (Corentocantins mega-table, header / footer wrappers, etc)
+  fall back to the historical row-siblings-only context.
+
+### Real-world impact (Corentocantins POP)
+
+| Cell                              | Before                  | After                                   |
+|-----------------------------------|-------------------------|-----------------------------------------|
+| t0_r0_c2 (POP title)              | "Hospital Geral de Palmas" | "POP do Serviço de Enfermagem – Administração de Medicação Endovenosa" |
+| t0_r10_c4 (procedure step 1)      | "02"                    | "1. Higienizar as mãos..."              |
+| t0_r11_c4 (procedure step 2)      | "01"                    | "Vigiar sinais vitais..."               |
+| t0_r19_c0 (ANEXO)                 | unfilled                | "11. ANEXO: Resolução COFEN..."         |
+
+12 / 16 useful cells filled correctly. 4 of the
+``heading_with_hint`` cells (sections 3-6) carry section N-1's
+content — the LLM applies a one-row shift on the numbered-heading
+sequence — but the previous version filled NONE of those correctly,
+so the absolute fill rate is up sharply.
+
 ## [0.13.1] - 2026-04-28
 
 ### Fixed
