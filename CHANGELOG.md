@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.3] - 2026-04-28
+
+### Fixed
+
+- `engine.section_mapper.slot_profiler` was emitting BOTH a
+  ``label_value`` slot AND the slot immediately below it
+  (``instruction`` or empty body para under the cap-2 rule) as
+  fillable. The LLM filled both with the same source content —
+  UNIFAP rendered ``Responsáveis:`` as a heading line containing the
+  full responsibility list AND the body paragraph below it carried
+  the same list, producing visible duplication.
+
+  New helper ``_label_value_acting_as_section_heading`` flags a bare
+  ``Label:`` as a heading (non-fillable) when:
+  - the immediately-next non-empty paragraph is an instruction, OR
+  - the label is followed by an empty paragraph (which the cap-2
+    rule will mark fillable).
+
+  Label-with-leader rows (``Author: ____``) are unaffected — they
+  carry an explicit underscore leader and remain fillable.
+
+### Real-world impact (UNIFAP POP)
+
+| Section | Before                                                         | After                                          |
+|---------|----------------------------------------------------------------|------------------------------------------------|
+| 5. Responsáveis | heading + body para both with the responsibility list | heading shows ``Responsáveis:``; body has the list |
+| a. LISTA DE CONTATOS | heading + body para both with contact list              | heading shows ``LISTA DE CONTATOS:``; body has the list |
+
+### Added tests
+
+- ``test_label_value_followed_by_instruction_is_section_heading``
+- ``test_label_value_followed_by_plain_data_is_not_section_heading``
+- ``test_label_value_followed_by_empty_paragraph_is_section_heading``
+- ``test_label_value_followed_by_empty_then_instruction_is_section_heading``
+
 ## [0.13.2] - 2026-04-28
 
 ### Fixed

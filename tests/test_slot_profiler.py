@@ -108,6 +108,64 @@ def test_empty_at_top_of_doc_is_not_fillable() -> None:
     assert _empty_idxs_under_headings(paras) == set()
 
 
+# --- label_value acting as section heading ----------------------------------
+
+
+def test_label_value_followed_by_instruction_is_section_heading() -> None:
+    """UNIFAP regression: ``Responsáveis:`` followed by
+    ``Identificar as pessoas...`` (instruction kind) — the label is a
+    section heading, the instruction below is the fill area. Filling
+    both produces duplicate content."""
+    from engine.section_mapper.slot_profiler import (
+        _label_value_acting_as_section_heading,
+    )
+
+    paras = _build(
+        [
+            "Responsáveis:",
+            "Identificar as pessoas que detêm papel primário no POP.",
+        ]
+    )
+    assert _label_value_acting_as_section_heading(paras) == {0}
+
+
+def test_label_value_followed_by_plain_data_is_not_section_heading() -> None:
+    """If the next paragraph is plain ``data`` (not an instruction)
+    AND the label is not directly followed by an empty (which the
+    cap-2 rule would mark fillable), the label_value stays fillable."""
+    from engine.section_mapper.slot_profiler import (
+        _label_value_acting_as_section_heading,
+    )
+
+    paras = _build(["Author:", "Maria Lopes wrote this document."])
+    assert _label_value_acting_as_section_heading(paras) == set()
+
+
+def test_label_value_followed_by_empty_paragraph_is_section_heading() -> None:
+    """UNIFAP regression #2: ``LISTA DE CONTATOS:`` followed by a
+    blank line and then ``LEGENDA`` — the blank line is a fillable
+    body slot under the cap-2 rule, so filling BOTH the label and
+    the blank produces duplicate content. Treat the label as a
+    section heading."""
+    from engine.section_mapper.slot_profiler import (
+        _label_value_acting_as_section_heading,
+    )
+
+    paras = _build(["LISTA DE CONTATOS:", "", "LEGENDA"])
+    assert _label_value_acting_as_section_heading(paras) == {0}
+
+
+def test_label_value_followed_by_empty_then_instruction_is_section_heading() -> None:
+    """An empty paragraph between the label and the instruction does
+    NOT change the relationship — still a section heading."""
+    from engine.section_mapper.slot_profiler import (
+        _label_value_acting_as_section_heading,
+    )
+
+    paras = _build(["Atividades:", "", "Prover a descrição das atividades."])
+    assert _label_value_acting_as_section_heading(paras) == {0}
+
+
 # --- vMerge continuation + image cells ---------------------------------------
 
 

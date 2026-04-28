@@ -133,10 +133,22 @@ def profile_slots(template_path: Path) -> SlotInventory:
     # every empty paragraph (including spacer / separator paragraphs
     # above tables) as a slot and fills them with arbitrary content.
     fillable_empty_idxs = _empty_idxs_under_headings(doc.paragraphs)
+    label_heading_idxs = _label_value_acting_as_section_heading(doc.paragraphs)
     for idx, para in enumerate(doc.paragraphs):
         text = para.text
         kind, fillable = _classify(text)
         if kind == "empty" and idx not in fillable_empty_idxs:
+            fillable = False
+        # A bare ``Label:`` paragraph immediately followed by an
+        # instruction (or empty body slot) is a SECTION HEADING — its
+        # job is to label the section, not to receive a value. The
+        # value goes in the instruction / empty-body slot below. Mark
+        # it non-fillable so the LLM does not duplicate content
+        # across both slots (UNIFAP regression: ``Responsáveis:`` +
+        # ``Identificar as pessoas...`` both got filled with the same
+        # responsibility list).
+        if idx in label_heading_idxs:
+            kind = "heading"
             fillable = False
         out.append(
             Slot(
@@ -208,6 +220,52 @@ def profile_slots(template_path: Path) -> SlotInventory:
 
 
 _MAX_EMPTY_RUN_AS_SLOT = 2
+
+
+def _label_value_acting_as_section_heading(paragraphs: list) -> set[int]:  # type: ignore[type-arg]
+    """Return the indices of ``label_value`` paragraphs that act as
+    SECTION HEADINGS rather than as fillable label-with-leader slots.
+
+    Heuristic: a bare ``Label:`` (matched by ``_LABEL_NO_VALUE_RE``)
+    is a section heading IF either of these is true:
+    - the immediately-next non-empty paragraph is classified as
+      ``instruction`` — the instruction below is the actual fill area;
+    - it is followed directly by ≥1 empty paragraph that the cap-2
+      rule will mark fillable (an "empty body slot under heading").
+
+    Filling both the label AND the slot below it produces duplicated
+    content (UNIFAP regression: ``Responsáveis:`` +
+    ``Identificar...`` both received the same list, and
+    ``LISTA DE CONTATOS:`` + the empty body slot below it both got
+    the same contact list).
+
+    Label-with-leader rows (``Author: ____``) are NOT covered by
+    this rule — they have an explicit leader and ARE the fill
+    location.
+    """
+    out: set[int] = set()
+    for i, p in enumerate(paragraphs):
+        text = (p.text or "").strip()
+        if not _LABEL_NO_VALUE_RE.match(text):
+            continue
+        # Case 1: next non-empty paragraph is an instruction.
+        next_kind = None
+        for j in range(i + 1, len(paragraphs)):
+            t = (paragraphs[j].text or "").strip()
+            if not t:
+                continue
+            next_kind, _ = _classify(t)
+            break
+        if next_kind == "instruction":
+            out.add(i)
+            continue
+        # Case 2: directly followed by ≥1 empty paragraph. The cap-2
+        # rule will already mark those empties fillable when the
+        # label is a heading-like line, so the label MUST step aside
+        # to avoid duplicate content.
+        if i + 1 < len(paragraphs) and not (paragraphs[i + 1].text or "").strip():
+            out.add(i)
+    return out
 
 
 def _empty_idxs_under_headings(paragraphs: list) -> set[int]:  # type: ignore[type-arg]
