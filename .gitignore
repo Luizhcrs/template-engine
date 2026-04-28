@@ -44,3 +44,4 @@ tests/vendor_*/plan.json
 tests/real_world/output_*.docx
 tests/real_world/report_*.json
 
+.template_engine_cache/
