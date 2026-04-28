@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-04-28
+
+### Fixed
+
+- `engine.section_mapper.typed_fill._column_aligned_tc` walked
+  ``tr.findall(w:tc)`` (direct children only) before falling back to
+  descendants. UNIFAP regression: the revision table mixes 1 direct
+  tc + 1 sdt-wrapped date-picker tc + 2 more direct tcs per row, so
+  ``target_col=1`` returned the SECOND direct tc (visual column 2)
+  instead of the sdt-wrapped one at visual column 1. Every record's
+  Data value landed in the Descrição column, every Descrição landed
+  in the Requisitado column, every Requisitado dropped off the row.
+  Now always iterates `tr.iter(w:tc)` so sdt-wrapped cells stay in
+  position.
+
+### Added
+
+- `tests/test_golden.py` — parametrised golden fixture suite (Task 8
+  of the schema-driven plan). Locks expected cell-by-cell output
+  against `tests/golden/<name>_canned_records.json` +
+  `tests/golden/<name>_expected.json`. Mocks the LLM via canned
+  records so the suite runs deterministic in CI without API spend.
+  First case: UNIFAP POP with 3 schema-matched tables (contact_list,
+  participant_table, revision_table); 26 expected cells asserted.
+
+### Real-world impact (UNIFAP POP, table 5 — revision history)
+
+| Cell           | Before                 | After                          |
+|----------------|------------------------|--------------------------------|
+| row_1_col_1    | `15/10/2014` (template) | `15/03/2023`                   |
+| row_1_col_2    | `15/03/2023` (shifted)  | `Versão inicial`               |
+| row_1_col_3    | empty                   | `Maria Lopes`                  |
+
 ## [0.13.0] - 2026-04-28
 
 Schema-driven table fill pipeline. The flat slot pipeline shipped

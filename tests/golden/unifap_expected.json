@@ -1,0 +1,39 @@
+{
+  "_doc": "Expected cell values after running the schema-driven pipeline against pop_unifap.docx with the canned records in unifap_canned_records.json. Cells absent from the expected map are not asserted (typically header rows + cells that the schema layer does not touch).",
+  "table_1": {
+    "row_1_col_1": "Maria Lopes",
+    "row_1_col_2": "(96) 3213-1010",
+    "row_1_col_3": "diplan@unifap.br",
+    "row_2_col_1": "Substituta da Maria",
+    "row_2_col_2": "(96) 3213-1011",
+    "row_2_col_3": "subst1@unifap.br",
+    "row_3_col_1": "João Pedro",
+    "row_3_col_2": "(96) 3213-1020",
+    "row_3_col_3": "dimat@unifap.br",
+    "row_4_col_1": "Substituto do João",
+    "row_4_col_2": "(96) 3213-1021",
+    "row_4_col_3": "subst2@unifap.br"
+  },
+  "table_3": {
+    "row_1_col_0": "Maria Lopes",
+    "row_1_col_1": "DIPLAN",
+    "row_1_col_2": "Chefe da Divisão",
+    "row_2_col_0": "João Pedro",
+    "row_2_col_1": "DIMAT",
+    "row_2_col_2": "Chefe da Divisão"
+  },
+  "table_5": {
+    "row_1_col_0": "1.0",
+    "row_1_col_1": "15/03/2023",
+    "row_1_col_2": "Versão inicial",
+    "row_1_col_3": "Maria Lopes",
+    "row_2_col_0": "1.1",
+    "row_2_col_1": "10/09/2023",
+    "row_2_col_2": "Adequação à Lei 14.133",
+    "row_2_col_3": "Maria Lopes",
+    "row_3_col_0": "1.2",
+    "row_3_col_1": "22/04/2024",
+    "row_3_col_2": "Inclusão fluxo procuradoria",
+    "row_3_col_3": "Beatriz Rocha"
+  }
+}

@@ -154,8 +154,15 @@ def apply_typed_fills(
 
 
 def _column_aligned_tc(tr, target_col: int):  # type: ignore[no-untyped-def]
-    """Walk *tr*'s direct ``<w:tc>`` children in document order and
+    """Walk every ``<w:tc>`` descendant of *tr* in document order
+    (including ones nested inside ``<w:sdt><w:sdtContent>``) and
     return the tc that occupies VISUAL column *target_col*.
+
+    Mixing direct children + sdt-wrapped children is common in
+    enterprise templates (UNIFAP's revision table has 1 direct tc +
+    1 sdt-wrapped tc + 2 more direct tcs), so we MUST use descendants
+    iteration — direct-child indexing skips sdt cells and shifts the
+    target column by one for every sdt seen earlier in the row.
 
     Vertical-merge continuation cells (``<w:vMerge/>`` without
     ``w:val="restart"``) DO occupy a visual column — they're part of
@@ -163,21 +170,14 @@ def _column_aligned_tc(tr, target_col: int):  # type: ignore[no-untyped-def]
     Return None for those so the caller skips the write rather than
     silently shifting subsequent columns.
     """
-    from docx.oxml.ns import qn
-
     from engine.section_mapper.slot_profiler import _is_vmerge_continuation
 
-    direct = list(tr.findall(qn("w:tc")))
-    if direct and target_col < len(direct):
-        tc = direct[target_col]
-        return None if _is_vmerge_continuation(tc) else tc
-    # Fall back to descendants (sdt-wrapped tcs live deeper).
     wp = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
     descendants = list(tr.iter(f"{wp}tc"))
-    if target_col < len(descendants):
-        tc = descendants[target_col]
-        return None if _is_vmerge_continuation(tc) else tc
-    return None
+    if target_col >= len(descendants):
+        return None
+    tc = descendants[target_col]
+    return None if _is_vmerge_continuation(tc) else tc
 
 
 __all__ = [

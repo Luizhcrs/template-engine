@@ -1,0 +1,30 @@
+{
+  "_doc": "Pre-extracted records per schema-matched table for UNIFAP POP. These would normally come from extract_records() against the LLM, but golden tests use them directly so the suite is deterministic, fast, and CI-friendly (no API key, no spend).",
+  "tables": {
+    "1": {
+      "schema": "contact_list",
+      "records": [
+        {"Nº": 1, "Nome": "Maria Lopes", "Telefone": "(96) 3213-1010", "e-mail": "diplan@unifap.br"},
+        {"Nº": 1, "Nome": "Substituta da Maria", "Telefone": "(96) 3213-1011", "e-mail": "subst1@unifap.br"},
+        {"Nº": 2, "Nome": "João Pedro", "Telefone": "(96) 3213-1020", "e-mail": "dimat@unifap.br"},
+        {"Nº": 2, "Nome": "Substituto do João", "Telefone": "(96) 3213-1021", "e-mail": "subst2@unifap.br"}
+      ]
+    },
+    "3": {
+      "schema": "participant_table",
+      "records": [
+        {"Nome": "Maria Lopes", "Setor": "DIPLAN", "Função": "Chefe da Divisão"},
+        {"Nome": "João Pedro", "Setor": "DIMAT", "Função": "Chefe da Divisão"},
+        {"Nome": "Beatriz Rocha", "Setor": "Procuradoria", "Função": "Procuradora chefe"}
+      ]
+    },
+    "5": {
+      "schema": "revision_table",
+      "records": [
+        {"Versão": "1.0", "Data": "15/03/2023", "Descrição das mudanças": "Versão inicial", "Requisitado por:": "Maria Lopes"},
+        {"Versão": "1.1", "Data": "10/09/2023", "Descrição das mudanças": "Adequação à Lei 14.133", "Requisitado por:": "Maria Lopes"},
+        {"Versão": "1.2", "Data": "22/04/2024", "Descrição das mudanças": "Inclusão fluxo procuradoria", "Requisitado por:": "Beatriz Rocha"}
+      ]
+    }
+  }
+}
