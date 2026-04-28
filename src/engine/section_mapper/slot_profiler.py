@@ -162,6 +162,12 @@ def profile_slots(template_path: Path) -> SlotInventory:
                 text = _tc_text(tc)
                 if _tc_has_drawing(tc):
                     kind, fillable = "data", False
+                elif _tc_sdt_control_type(tc) is not None:
+                    # Word content control (date picker / dropdown /
+                    # plain-text). The tc IS a placeholder regardless
+                    # of its current text — that text is the template
+                    # default, not user data.
+                    kind, fillable = "placeholder", True
                 else:
                     kind, fillable = _classify(text)
                 out.append(
@@ -263,6 +269,20 @@ _W_TCPR = f"{_WP_NS}tcPr"
 _W_VMERGE = f"{_WP_NS}vMerge"
 _W_VAL = f"{_WP_NS}val"
 _W_DRAWING = f"{_WP_NS}drawing"
+_W_SDT = f"{_WP_NS}sdt"
+_W_SDTPR = f"{_WP_NS}sdtPr"
+# Content-control types that mark a wrapped tc as a fillable
+# placeholder regardless of its current text. Date pickers, dropdowns
+# and plain-text controls are the common ones in BR-PT enterprise
+# templates (UNIFAP's revision dates live inside ``<w:date>`` and
+# ``<w:dropDownList>`` inside ``<w:sdtPr>``).
+_SDT_CONTROL_TAGS = {
+    f"{_WP_NS}date",
+    f"{_WP_NS}dropDownList",
+    f"{_WP_NS}comboBox",
+    f"{_WP_NS}text",
+    f"{_WP_NS}picture",
+}
 
 
 def _iter_row_tcs(tr) -> list:  # type: ignore[no-untyped-def, type-arg]
@@ -321,6 +341,33 @@ def _tc_has_drawing(tc) -> bool:  # type: ignore[no-untyped-def]
     Such cells are visual content and must NOT be flagged fillable.
     """
     return next(tc.iter(_W_DRAWING), None) is not None
+
+
+def _tc_sdt_control_type(tc) -> str | None:  # type: ignore[no-untyped-def]
+    """If *tc* is wrapped in an ``<w:sdt>`` (Word content control)
+    whose ``<w:sdtPr>`` declares a known control type, return that
+    type's local name (e.g. ``"date"``, ``"dropDownList"``). Else None.
+
+    The wrapping shape is ``<w:sdt><w:sdtPr>...</w:sdtPr><w:sdtContent>
+    <w:tc>...</w:tc></w:sdtContent></w:sdt>``, so we walk parents until
+    we find an ``<w:sdt>`` sibling-of ``<w:tr>``.
+    """
+    parent = tc.getparent()
+    # Walk up at most a few levels: tc → sdtContent → sdt
+    for _ in range(4):
+        if parent is None:
+            return None
+        if parent.tag == _W_SDT:
+            sdtPr = parent.find(_W_SDTPR)
+            if sdtPr is None:
+                return None
+            for child in sdtPr:
+                if child.tag in _SDT_CONTROL_TAGS:
+                    # local name without namespace prefix
+                    return child.tag.split("}", 1)[-1]
+            return None
+        parent = parent.getparent()
+    return None
 
 
 def _row_tc_texts(tcs) -> list[str]:  # type: ignore[no-untyped-def, type-arg]

@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.6] - 2026-04-28
+
+Detect Word content-control type from the parent ``<w:sdt>`` so cells
+wrapped in date pickers / dropdowns / plain-text controls are
+recognised as placeholders even when their current text looks
+"complete" (e.g. ``15/10/2014``).
+
+### Fixed
+
+- `engine.section_mapper.slot_profiler.profile_slots` — a tc whose
+  ancestor ``<w:sdt>`` carries one of ``<w:date>``,
+  ``<w:dropDownList>``, ``<w:comboBox>``, ``<w:text>``,
+  ``<w:picture>`` inside ``<w:sdtPr>`` is now classified as
+  ``placeholder``/``fillable=True`` regardless of the visible text.
+  UNIFAP regression: the four ``15/10/2014`` template-default dates
+  in the mega-header table and the four in the revision table sit
+  inside ``<w:sdt><w:sdtPr><w:date>`` — they were visible to the
+  profiler since v0.11.5 but classified as ``data`` because the text
+  alone (a concrete date) gave no placeholder signal. With the
+  control-type signal, they now fill correctly.
+
+### Impact (UNIFAP POP, real-world fixture — full pipeline run)
+
+| Metric              | v0.11.4 | v0.11.5 | v0.11.6 |
+|---------------------|--------:|--------:|--------:|
+| Fillable slots      |      60 |      61 |      73 |
+| Slots filled by LLM |      55 |      59 |  **73** |
+| Fill rate           |    92 % |    97 % | **100 %** |
+
+All eight template-default ``15/10/2014`` dates across the mega-header
+and revision tables are now replaced with real source dates
+(``15/03/2023``, ``10/09/2023``, ``22/04/2024``).
+
+### Added
+
+- ``tests/test_slot_profiler.py::test_sdt_date_picker_cell_is_placeholder_even_with_concrete_date``
+  — synthesises a ``<w:sdt><w:date>`` wrapper around a tc with
+  concrete date text and asserts the slot kind is ``placeholder``.
+- ``tests/test_slot_profiler.py::test_sdt_dropdown_cell_is_placeholder``
+  — same shape for ``<w:dropDownList>`` controls.
+
 ## [0.11.5] - 2026-04-28
 
 Profiler hardening pass driven by visual inspection of the UNIFAP POP

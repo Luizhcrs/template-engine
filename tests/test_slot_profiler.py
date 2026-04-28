@@ -202,6 +202,97 @@ def test_classify_cell_with_image_is_data(
     assert cell_slots[0].kind == "data"
 
 
+# --- sdt content-control type detection --------------------------------------
+
+
+def test_sdt_date_picker_cell_is_placeholder_even_with_concrete_date(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    """UNIFAP regression part 2: a date-picker content control whose
+    current text is a concrete date like ``15/10/2014`` must still be
+    treated as a placeholder. The signal lives in the parent
+    ``<w:sdt><w:sdtPr><w:date>`` — not in the cell text itself."""
+    import shutil
+
+    from engine.section_mapper.slot_profiler import profile_slots
+
+    base = _make_minimal_docx(tmp_path / "base.docx")
+    target = tmp_path / "datepicker.docx"
+    shutil.copy(base, target)
+
+    table_xml = """<w:tbl xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>
+      <w:tr>
+        <w:sdt>
+          <w:sdtPr>
+            <w:date w:fullDate="2014-10-15T00:00:00Z">
+              <w:dateFormat w:val="dd/MM/yyyy"/>
+            </w:date>
+          </w:sdtPr>
+          <w:sdtContent>
+            <w:tc>
+              <w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>
+              <w:p><w:r><w:t>15/10/2014</w:t></w:r></w:p>
+            </w:tc>
+          </w:sdtContent>
+        </w:sdt>
+      </w:tr>
+    </w:tbl>"""
+
+    _inject_table_into_docx(target, table_xml)
+
+    inv = profile_slots(target)
+    cell_slots = [s for s in inv.slots if s.address.location == "table_cell"]
+    assert len(cell_slots) == 1
+    slot = cell_slots[0]
+    assert slot.kind == "placeholder", f"expected placeholder, got {slot.kind}"
+    assert slot.is_fillable is True
+    assert slot.current_text.strip() == "15/10/2014"
+
+
+def test_sdt_dropdown_cell_is_placeholder(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    """``<w:dropDownList>`` content control inside a tc — still a
+    placeholder regardless of the visible text."""
+    import shutil
+
+    from engine.section_mapper.slot_profiler import profile_slots
+
+    base = _make_minimal_docx(tmp_path / "base.docx")
+    target = tmp_path / "dropdown.docx"
+    shutil.copy(base, target)
+
+    table_xml = """<w:tbl xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>
+      <w:tr>
+        <w:sdt>
+          <w:sdtPr>
+            <w:dropDownList>
+              <w:listItem w:value="A"/>
+              <w:listItem w:value="B"/>
+            </w:dropDownList>
+          </w:sdtPr>
+          <w:sdtContent>
+            <w:tc>
+              <w:p><w:r><w:t>Pre-selected option</w:t></w:r></w:p>
+            </w:tc>
+          </w:sdtContent>
+        </w:sdt>
+      </w:tr>
+    </w:tbl>"""
+
+    _inject_table_into_docx(target, table_xml)
+
+    inv = profile_slots(target)
+    cell_slots = [s for s in inv.slots if s.address.location == "table_cell"]
+    assert len(cell_slots) == 1
+    assert cell_slots[0].kind == "placeholder"
+    assert cell_slots[0].is_fillable is True
+
+
 # --- _classify: placeholder shapes -------------------------------------------
 
 
