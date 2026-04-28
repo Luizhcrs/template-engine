@@ -105,23 +105,19 @@ def _write_body(
         if ti < 0 or ti >= len(doc.tables):
             continue
         table = doc.tables[ti]
-        if ri < 0 or ri >= len(table.rows):
+        rows = list(table.rows)
+        if ri < 0 or ri >= len(rows):
             continue
-        row = table.rows[ri]
-        if ci < 0 or ci >= len(row.cells):
+        # Walk every ``<w:tc>`` descendant of the row, including ones
+        # nested inside ``<w:sdt><w:sdtContent>``. The profiler used
+        # the same iteration order, so position ``ci`` here lines up
+        # with the slot id that was emitted.
+        from engine.section_mapper.slot_profiler import _iter_row_tcs
+
+        row_tcs = _iter_row_tcs(rows[ri]._tr)
+        if ci < 0 or ci >= len(row_tcs):
             continue
-        target = row.cells[ci]
-        # python-docx's row.cells gives N entries even when cells are
-        # MERGED — same underlying ``<w:tc>`` shows up multiple times.
-        # Setting text on each "duplicate" replaces the same cell N
-        # times with the same content. Skip cells we've already
-        # touched (identity check via the underlying XML element).
-        seen_tcs: set[int] = set()
-        target_tc_id = id(target._tc)
-        if target_tc_id in seen_tcs:
-            continue
-        seen_tcs.add(target_tc_id)
-        _set_cell_text(target, new_text)
+        _set_tc_text(row_tcs[ci], new_text)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(output_path))
@@ -138,21 +134,30 @@ def _set_paragraph_text(paragraph, text: str) -> None:  # type: ignore[no-untype
     paragraph.add_run(text)
 
 
-def _set_cell_text(cell, new_text: str) -> None:  # type: ignore[no-untyped-def]
-    if cell.paragraphs:
-        para = cell.paragraphs[0]
-        t_elements = para._p.findall(f".//{_W_NS}t")
-        if t_elements:
-            t_elements[0].text = new_text
-            for t in t_elements[1:]:
-                t.text = ""
-        else:
-            para.add_run(new_text)
-        for extra in cell.paragraphs[1:]:
-            for t in extra._p.findall(f".//{_W_NS}t"):
-                t.text = ""
-    else:
-        cell.text = new_text
+def _set_tc_text(tc, new_text: str) -> None:  # type: ignore[no-untyped-def]
+    """Rewrite the inner ``<w:t>`` text of *tc* (an lxml ``<w:tc>``
+    element) in place. First ``<w:t>`` gets the new text, the rest get
+    cleared so the visible text matches *new_text* exactly.
+
+    Works for plain table cells AND for cells nested inside
+    ``<w:sdt><w:sdtContent>`` content controls — same XML shape.
+    """
+    t_elements = list(tc.iter(f"{_W_NS}t"))
+    if not t_elements:
+        # Cell has no <w:t> at all — find the first <w:p> and add a run.
+        p_elements = list(tc.iter(f"{_W_NS}p"))
+        if not p_elements:
+            return
+        p = p_elements[0]
+        from lxml import etree  # type: ignore[import-untyped]
+
+        run = etree.SubElement(p, f"{_W_NS}r")
+        t = etree.SubElement(run, f"{_W_NS}t")
+        t.text = new_text
+        return
+    t_elements[0].text = new_text
+    for t in t_elements[1:]:
+        t.text = ""
 
 
 def _write_header_footer(

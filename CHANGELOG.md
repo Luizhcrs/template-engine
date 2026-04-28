@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.5] - 2026-04-28
+
+Profiler hardening pass driven by visual inspection of the UNIFAP POP
+output: walk all ``<w:tc>`` descendants of a row, skip vMerge
+continuations, recognise more placeholder shapes, leave image cells
+alone.
+
+### Fixed
+
+- `engine.section_mapper.slot_profiler.profile_slots` /
+  `engine.section_mapper.slot_renderer.apply_slot_fills` — python-docx's
+  ``row.cells`` only returns ``<w:tc>`` elements that are DIRECT
+  children of ``<w:tr>``. Enterprise templates wrap date / dropdown /
+  plain-text cells inside ``<w:sdt><w:sdtContent><w:tc>``, so those
+  cells were invisible. UNIFAP's revision tables had four
+  ``15/10/2014`` cells nested in date-picker content controls that the
+  profiler never emitted slots for. New helper
+  ``_iter_row_tcs(tr)`` walks every ``<w:tc>`` descendant in document
+  order; profiler and renderer share it.
+
+- vMerge continuation cells now skipped — a vertically-merged group
+  (e.g. an institution logo stretching across 3 rows) used to produce
+  one slot per row of the merge, flooding the LLM with phantom empty
+  cells. Only the ``<w:vMerge w:val="restart"/>`` cell at the top of
+  the group is emitted.
+
+- Cells containing a ``<w:drawing>`` (logo, picture) are now
+  classified as ``data`` and never marked fillable. Previously, an
+  empty paragraph adjacent to a logo image was treated as a writable
+  body slot — the LLM then dropped arbitrary header text into the
+  logo cell.
+
+- ``_classify`` placeholder detection broadened:
+  - ``X{2,}`` tightened to ``X{3,}`` and the 40-char length cap
+    dropped, so inline placeholders like
+    ``Chefe da Divisão XXXXX ou Diretor XXXX, etc`` are now flagged.
+  - New ``_ROLE_TRAILING_X_RE`` — strings beginning with a known
+    BR-PT role token (Diretor, Chefe, Gestor, Reitor, Pró-Reitor,
+    Procurador, Departamento, Divisão, Setor, …) and ending in an
+    isolated trailing ``X`` (``Gestor do processo X``,
+    ``Diretor do Departamento X``) are placeholders. Plain prose like
+    ``O paciente fez raio X`` stays as ``data``.
+
+### Impact (UNIFAP POP, real-world fixture)
+
+| Surface                           | Before  | After  |
+|-----------------------------------|--------:|-------:|
+| Total slots discovered            |    163  |   167  |
+| Fillable slots                    |     60  |    61  |
+| Slots filled by the LLM           |     55  |    59  |
+| Logo cells (table 0 col 0)        | flagged | left alone |
+| ``Chefe da Divisão XXXXX``        | unfilled | replaced with real role |
+
+### Added
+
+- ``tests/test_slot_profiler.py`` — five new tests:
+  ``test_profile_slots_finds_cells_inside_sdt_content_controls``,
+  ``test_iter_row_tcs_skips_vmerge_continuation_cells``,
+  ``test_classify_cell_with_image_is_data``,
+  ``test_classify_long_xxx_placeholder_inline_in_prose``,
+  ``test_classify_trailing_isolated_x_is_placeholder`` /
+  ``test_classify_trailing_isolated_x_does_not_match_normal_words``.
+
 ## [0.11.4] - 2026-04-28
 
 Anchor table-cell slot context with the column header so the LLM

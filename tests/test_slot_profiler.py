@@ -108,6 +108,236 @@ def test_empty_at_top_of_doc_is_not_fillable() -> None:
     assert _empty_idxs_under_headings(paras) == set()
 
 
+# --- vMerge continuation + image cells ---------------------------------------
+
+
+def test_iter_row_tcs_skips_vmerge_continuation_cells(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    """A vertically-merged group should produce ONE slot per logical
+    cell, not one per row participating in the merge. The restart cell
+    carries the content; the continuation cells are visual padding and
+    must NOT be returned."""
+    import shutil
+
+    from engine.section_mapper.slot_profiler import _iter_row_tcs
+
+    base = _make_minimal_docx(tmp_path / "base.docx")
+    target = tmp_path / "vmerge.docx"
+    shutil.copy(base, target)
+
+    table_xml = """<w:tbl xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>
+      <w:tr>
+        <w:tc>
+          <w:tcPr><w:vMerge w:val="restart"/></w:tcPr>
+          <w:p><w:r><w:t>logo cell</w:t></w:r></w:p>
+        </w:tc>
+        <w:tc>
+          <w:p><w:r><w:t>r0c1</w:t></w:r></w:p>
+        </w:tc>
+      </w:tr>
+      <w:tr>
+        <w:tc>
+          <w:tcPr><w:vMerge/></w:tcPr>
+          <w:p/>
+        </w:tc>
+        <w:tc>
+          <w:p><w:r><w:t>r1c1</w:t></w:r></w:p>
+        </w:tc>
+      </w:tr>
+    </w:tbl>"""
+
+    _inject_table_into_docx(target, table_xml)
+
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    doc = Document(str(target))
+    tab = doc.tables[0]
+    rows = tab._tbl.findall(qn("w:tr"))
+    # Row 0 has 2 cells (restart + normal). Row 1 should yield 1 cell
+    # (the vMerge continuation must be skipped).
+    assert len(_iter_row_tcs(rows[0])) == 2
+    assert len(_iter_row_tcs(rows[1])) == 1
+
+
+def test_classify_cell_with_image_is_data(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    """Cells containing a drawing (logo, picture) must NOT be marked
+    fillable — the LLM has nothing useful to write into them."""
+    import shutil
+
+    from engine.section_mapper.slot_profiler import profile_slots
+
+    base = _make_minimal_docx(tmp_path / "base.docx")
+    target = tmp_path / "image.docx"
+    shutil.copy(base, target)
+
+    # A tc that carries an empty paragraph but also has a <w:drawing>
+    # descendant. The text is empty so the old rule would flag it as
+    # fillable.
+    table_xml = """<w:tbl xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="2000"/></w:tblGrid>
+      <w:tr>
+        <w:tc>
+          <w:p>
+            <w:r>
+              <w:drawing/>
+            </w:r>
+          </w:p>
+        </w:tc>
+      </w:tr>
+    </w:tbl>"""
+
+    _inject_table_into_docx(target, table_xml)
+
+    inv = profile_slots(target)
+    cell_slots = [s for s in inv.slots if s.address.location == "table_cell"]
+    assert len(cell_slots) == 1
+    assert cell_slots[0].is_fillable is False
+    assert cell_slots[0].kind == "data"
+
+
+# --- _classify: placeholder shapes -------------------------------------------
+
+
+def test_classify_long_xxx_placeholder_inline_in_prose() -> None:
+    """UNIFAP regression: ``Chefe da Divisão XXXXX ou Diretor XXXX, etc``
+    is a placeholder even though the text is longer than 40 chars."""
+    from engine.section_mapper.slot_profiler import _classify
+
+    kind, fillable = _classify("Chefe da Divisão XXXXX ou Diretor XXXX, etc")
+    assert kind == "placeholder"
+    assert fillable is True
+
+
+def test_classify_trailing_isolated_x_is_placeholder() -> None:
+    """UNIFAP regression: ``Gestor do processo X`` and ``Diretor do
+    Departamento X`` end with an isolated ``X`` token used as
+    placeholder marker."""
+    from engine.section_mapper.slot_profiler import _classify
+
+    kind, _ = _classify("Gestor do processo X")
+    assert kind == "placeholder"
+    kind, _ = _classify("Diretor do Departamento X")
+    assert kind == "placeholder"
+    kind, _ = _classify("Chefe da Divisão X")
+    assert kind == "placeholder"
+
+
+def test_classify_trailing_isolated_x_does_not_match_normal_words() -> None:
+    """``Mr X`` / ``raio X`` are too short to be POP-style placeholders,
+    AND a trailing X surrounded by long prose isn't a marker either —
+    only treat it as placeholder for short-ish role/title strings."""
+    from engine.section_mapper.slot_profiler import _classify
+
+    # Plain prose that happens to mention an isolated X — keep as data.
+    kind, _ = _classify("O paciente fez raio X.")
+    assert kind == "data"
+
+
+# --- sdt-wrapped cells (Word content controls) ------------------------------
+
+
+def test_profile_slots_finds_cells_inside_sdt_content_controls(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    """UNIFAP regression: enterprise templates wrap date / dropdown
+    cells in ``<w:sdt><w:sdtContent><w:tc>``. python-docx's
+    ``row.cells`` skips them, so the profiler used to be blind to
+    template-default text like ``15/10/2014`` carried inside those
+    cells. Walking ``<w:tc>`` descendants of the row brings them
+    back."""
+    import shutil
+
+    from engine.section_mapper.slot_profiler import profile_slots
+
+    base = _make_minimal_docx(tmp_path / "base.docx")
+    target = tmp_path / "with_sdt.docx"
+    shutil.copy(base, target)
+
+    sdt_table_xml = """<w:tbl xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>
+      <w:tr>
+        <w:tc>
+          <w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>
+          <w:p><w:r><w:t>Data da Revisao</w:t></w:r></w:p>
+        </w:tc>
+        <w:sdt>
+          <w:sdtPr><w:date><w:dateFormat w:val="dd/MM/yyyy"/></w:date></w:sdtPr>
+          <w:sdtContent>
+            <w:tc>
+              <w:tcPr><w:tcW w:w="2000" w:type="dxa"/></w:tcPr>
+              <w:p><w:r><w:t>15/10/2014</w:t></w:r></w:p>
+            </w:tc>
+          </w:sdtContent>
+        </w:sdt>
+      </w:tr>
+    </w:tbl>"""
+
+    _inject_table_into_docx(target, sdt_table_xml)
+
+    inv = profile_slots(target)
+    cell_slots = [s for s in inv.slots if s.address.location == "table_cell"]
+
+    # Must see TWO cells in the row (the normal one + the sdt-wrapped one),
+    # not just one.
+    assert len(cell_slots) == 2, (
+        f"expected 2 cells, got {len(cell_slots)}: {[s.current_text for s in cell_slots]}"
+    )
+    texts = sorted(s.current_text.strip() for s in cell_slots)
+    assert texts == ["15/10/2014", "Data da Revisao"]
+
+
+def _make_minimal_docx(path):  # type: ignore[no-untyped-def]
+    from docx import Document
+
+    doc = Document()
+    doc.add_paragraph("placeholder")
+    doc.save(str(path))
+    return path
+
+
+def _inject_table_into_docx(path, table_xml: str) -> None:  # type: ignore[no-untyped-def]
+    """Replace document.xml's body with a body that contains only this table."""
+    import shutil
+    import tempfile
+    import zipfile
+
+    body_xml = f"""<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    {table_xml}
+    <w:p><w:r><w:t>end</w:t></w:r></w:p>
+  </w:body>
+</w:document>"""
+
+    fd, tmp = tempfile.mkstemp(suffix=".docx", dir=str(path.parent))
+    import os
+
+    os.close(fd)
+    tmp_path = type(path)(tmp)
+    try:
+        with (
+            zipfile.ZipFile(str(path), "r") as zin,
+            zipfile.ZipFile(str(tmp_path), "w", zipfile.ZIP_DEFLATED) as zout,
+        ):
+            for item in zin.infolist():
+                data = zin.read(item.filename)
+                if item.filename == "word/document.xml":
+                    data = body_xml.encode("utf-8")
+                zout.writestr(item, data)
+        shutil.move(str(tmp_path), str(path))
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
 # --- table cell context anchors column header --------------------------------
 
 

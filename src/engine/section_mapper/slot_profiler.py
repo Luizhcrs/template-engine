@@ -42,7 +42,19 @@ _PLACEHOLDER_RE = re.compile(
 )
 
 _LEADER_RE = re.compile(r"_{3,}|\.{6,}|/{2,}")
-_XX_MASK_RE = re.compile(r"X{2,}|0{2,}")
+_XX_MASK_RE = re.compile(r"X{3,}|0{4,}")
+# Matches strings ending with an isolated trailing ``X`` token used as
+# a fill marker in BR-PT POP templates: ``Gestor do processo X``,
+# ``Chefe da Divisão X``, ``Diretor do Departamento X``. The string
+# must START with a known role token AND end with the bare ``X``,
+# otherwise prose like ``O paciente fez raio X`` would match.
+_ROLE_TRAILING_X_RE = re.compile(
+    r"^(?:Diretor[a]?|Chefe|Gestor[a]?|Gerente|Coordenador[a]?|Supervisor[a]?"
+    r"|Reitor[a]?|Pró-Reitor[a]?|Pró-Reitoria|Vice-Reitor[a]?|Secretári[oa]"
+    r"|Procurador[a]?|Superintendente|Departamento|Divisão|Unidade|Setor)"
+    r"[\w\s\-/áéíóúâêôãõçÁÉÍÓÚÂÊÔÃÕÇ]{0,55}\sX\s*$",
+    re.IGNORECASE,
+)
 _LABEL_NO_VALUE_RE = re.compile(r"^[\w\sÀ-ÿ/]{2,40}:\s*$")
 _LABEL_WITH_LEADER_RE = re.compile(r"^[\w\sÀ-ÿ/]{1,40}:\s*(?:_{3,}|\.{3,}|/+)\s*$")
 _IMPERATIVE_RE = re.compile(
@@ -91,7 +103,9 @@ def _classify(text: str) -> tuple[str, bool]:
         return ("instruction", True)
     if _LEADER_RE.search(stripped) and len(stripped) <= 80:
         return ("placeholder", True)
-    if _XX_MASK_RE.search(stripped) and len(stripped) <= 40:
+    if _XX_MASK_RE.search(stripped):
+        return ("placeholder", True)
+    if _ROLE_TRAILING_X_RE.match(stripped):
         return ("placeholder", True)
     if has_numbered_heading:
         return ("heading", False)  # heading without fillable hint — preserve
@@ -140,16 +154,16 @@ def profile_slots(template_path: Path) -> SlotInventory:
     # Dedupe by the underlying XML element identity so the LLM sees one
     # logical slot per merged group instead of 8 of the same cell.
     for ti, table in enumerate(doc.tables):
-        header_texts = _table_header_texts(table)
+        header_texts = _row_tc_texts(_iter_row_tcs(table.rows[0]._tr)) if table.rows else []
         for ri, row in enumerate(table.rows):
-            seen_tc_ids: set[int] = set()
-            for ci, cell in enumerate(row.cells):
-                tc_id = id(cell._tc)
-                if tc_id in seen_tc_ids:
-                    continue
-                seen_tc_ids.add(tc_id)
-                text = cell.text
-                kind, fillable = _classify(text)
+            row_tcs = _iter_row_tcs(row._tr)
+            row_texts = _row_tc_texts(row_tcs)
+            for ci, tc in enumerate(row_tcs):
+                text = _tc_text(tc)
+                if _tc_has_drawing(tc):
+                    kind, fillable = "data", False
+                else:
+                    kind, fillable = _classify(text)
                 out.append(
                     Slot(
                         id=f"cell_t{ti}_r{ri}_c{ci}",
@@ -161,7 +175,7 @@ def profile_slots(template_path: Path) -> SlotInventory:
                         ),
                         current_text=text,
                         kind=kind,
-                        context=_cell_context(row, ci, header_texts, ri),
+                        context=_cell_context_xml(row_texts, ci, header_texts, ri),
                         is_fillable=fillable,
                     )
                 )
@@ -242,32 +256,79 @@ def _neighbouring_paragraph(paragraphs: list, idx: int) -> str:  # type: ignore[
     return ""
 
 
-def _table_header_texts(table) -> list[str]:  # type: ignore[no-untyped-def]
-    """Return row 0's cell texts (deduped by underlying ``<w:tc>``) so
-    column-positional lookups skip merged duplicates.
+_WP_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+_W_TC = f"{_WP_NS}tc"
+_W_T = f"{_WP_NS}t"
+_W_TCPR = f"{_WP_NS}tcPr"
+_W_VMERGE = f"{_WP_NS}vMerge"
+_W_VAL = f"{_WP_NS}val"
+_W_DRAWING = f"{_WP_NS}drawing"
 
-    Used to anchor each fillable cell's context with its column header.
-    Without this anchor, two empty cells in the same row look identical
-    to the LLM (same row siblings, no column signal) and content lands
-    in the wrong column.
+
+def _iter_row_tcs(tr) -> list:  # type: ignore[no-untyped-def, type-arg]
+    """Return every ``<w:tc>`` descendant of *tr* in document order,
+    excluding vertical-merge CONTINUATION cells.
+
+    Why descendants and not direct children: enterprise templates wrap
+    date / dropdown / plain-text cells inside
+    ``<w:sdt><w:sdtContent><w:tc>`` (Word "Content Controls"), which
+    python-docx's ``row.cells`` skips.
+
+    Why skip continuation cells: a vertically-merged group like a logo
+    image stretching across 3 rows shows up as one tc with
+    ``<w:vMerge w:val="restart"/>`` plus two tcs with ``<w:vMerge/>``
+    (no val = "continue"). Treating each one as its own slot would
+    flood the LLM with phantom empty cells.
+
+    Output is order-preserving and deduplicated on lxml element
+    identity so a horizontally-merged tc that appears once in the XML
+    stays once in the slot inventory.
     """
-    rows = list(table.rows)
-    if not rows:
-        return []
-    header: list[str] = []
     seen: set[int] = set()
-    for cell in rows[0].cells:
-        tc_id = id(cell._tc)
-        if tc_id in seen:
-            header.append(header[-1] if header else "")
+    out = []
+    for tc in tr.iter(_W_TC):
+        if id(tc) in seen:
             continue
-        seen.add(tc_id)
-        header.append(cell.text.strip()[:60])
-    return header
+        seen.add(id(tc))
+        if _is_vmerge_continuation(tc):
+            continue
+        out.append(tc)
+    return out
 
 
-def _cell_context(
-    row,  # type: ignore[no-untyped-def]
+def _is_vmerge_continuation(tc) -> bool:  # type: ignore[no-untyped-def]
+    tcPr = tc.find(_W_TCPR)
+    if tcPr is None:
+        return False
+    vmerge = tcPr.find(_W_VMERGE)
+    if vmerge is None:
+        return False
+    val = vmerge.get(_W_VAL)
+    # No val OR explicit "continue" both mean continuation; "restart"
+    # means this is the top of the merged group and IS its own slot.
+    return val != "restart"
+
+
+def _tc_text(tc) -> str:  # type: ignore[no-untyped-def]
+    """Concatenate every ``<w:t>`` text inside *tc* — same shape as
+    python-docx's ``Cell.text`` so ``_classify`` keeps working.
+    """
+    return "".join((t.text or "") for t in tc.iter(_W_T))
+
+
+def _tc_has_drawing(tc) -> bool:  # type: ignore[no-untyped-def]
+    """True if the cell contains a ``<w:drawing>`` (logo, picture).
+    Such cells are visual content and must NOT be flagged fillable.
+    """
+    return next(tc.iter(_W_DRAWING), None) is not None
+
+
+def _row_tc_texts(tcs) -> list[str]:  # type: ignore[no-untyped-def, type-arg]
+    return [_tc_text(tc).strip()[:60] for tc in tcs]
+
+
+def _cell_context_xml(
+    row_texts: list[str],
     current_col: int,
     header_texts: list[str],
     current_row: int,
@@ -275,22 +336,20 @@ def _cell_context(
     """Build the per-cell context string sent to the LLM.
 
     Layout: ``column="<header>" | siblings: <row siblings joined>``.
-    Header omitted for the header row itself (row 0) to avoid feeding
-    the LLM a self-referential anchor. Row siblings preserve the
-    historical mega-table behaviour (LLM seeing heading cell while
-    deciding the body slot in the same row).
+    Header omitted for row 0 (the header row itself). Row siblings
+    preserve the historical mega-table behaviour (LLM sees the heading
+    cell while deciding the body slot in the same row).
     """
     parts: list[str] = []
     if current_row != 0 and current_col < len(header_texts):
         col_header = header_texts[current_col]
         if col_header:
             parts.append(f'column="{col_header}"')
-    for ci, cell in enumerate(row.cells):
+    for ci, text in enumerate(row_texts):
         if ci == current_col:
             continue
-        text = cell.text.strip()
         if text:
-            parts.append(text[:60])
+            parts.append(text)
     return " | ".join(parts)[:200]
 
 
