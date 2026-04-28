@@ -114,10 +114,16 @@ def profile_slots(template_path: Path) -> SlotInventory:
 
     out: list[Slot] = []
 
-    # Body paragraphs
+    # Body paragraphs. Only flag empty paragraphs as fillable when they
+    # sit DIRECTLY UNDER a heading paragraph — otherwise the LLM treats
+    # every empty paragraph (including spacer / separator paragraphs
+    # above tables) as a slot and fills them with arbitrary content.
+    fillable_empty_idxs = _empty_idxs_under_headings(doc.paragraphs)
     for idx, para in enumerate(doc.paragraphs):
         text = para.text
         kind, fillable = _classify(text)
+        if kind == "empty" and idx not in fillable_empty_idxs:
+            fillable = False
         out.append(
             Slot(
                 id=f"body_para_{idx}",
@@ -129,10 +135,18 @@ def profile_slots(template_path: Path) -> SlotInventory:
             )
         )
 
-    # Body table cells
+    # Body table cells. python-docx's ``row.cells`` returns N entries
+    # even when columns are MERGED (same underlying ``<w:tc>`` repeats).
+    # Dedupe by the underlying XML element identity so the LLM sees one
+    # logical slot per merged group instead of 8 of the same cell.
     for ti, table in enumerate(doc.tables):
         for ri, row in enumerate(table.rows):
+            seen_tc_ids: set[int] = set()
             for ci, cell in enumerate(row.cells):
+                tc_id = id(cell._tc)
+                if tc_id in seen_tc_ids:
+                    continue
+                seen_tc_ids.add(tc_id)
                 text = cell.text
                 kind, fillable = _classify(text)
                 out.append(
@@ -156,6 +170,47 @@ def profile_slots(template_path: Path) -> SlotInventory:
         out.extend(_profile_part_slots(template_path, part_name, slot_kind))
 
     return SlotInventory(template_path=str(template_path), slots=out)
+
+
+def _empty_idxs_under_headings(paragraphs: list) -> set[int]:  # type: ignore[type-arg]
+    """Return the indices of empty paragraphs that DIRECTLY follow a
+    heading paragraph (numbered or all-caps multi-word).
+
+    Such empty paragraphs are body slots the user is expected to fill;
+    other empty paragraphs (above tables, between sections, around
+    page breaks) are layout spacing and should NOT be touched.
+    """
+    out: set[int] = set()
+    last_was_heading = False
+    for i, p in enumerate(paragraphs):
+        text = p.text.strip()
+        if not text:
+            if last_was_heading:
+                out.add(i)
+            # An empty paragraph does NOT reset the heading flag — a
+            # heading often has 1-3 trailing empty slots before the
+            # next non-empty paragraph.
+            continue
+        last_was_heading = _looks_like_heading(text)
+    return out
+
+
+_HEADING_LIKE_RE = re.compile(
+    r"^\s*(?:\d+(?:\.\d+)*[.:]?\s+\S|[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-ZÁÉÍÓÚÂÊÔÃÕÇ\s\-—–:]{3,80})\s*$",
+)
+
+
+def _looks_like_heading(text: str) -> bool:
+    """Heuristic: numbered (``1. OBJETIVO``) or all-caps multi-word
+    (``OBJETIVO``, ``Descrição``-style Title-case headings handled by
+    the bold-aware detector elsewhere).
+    """
+    if not _HEADING_LIKE_RE.match(text):
+        return False
+    if text.endswith("."):
+        # Body sentences ending in period are NOT headings.
+        return False
+    return len(text) <= 80
 
 
 def _neighbouring_paragraph(paragraphs: list, idx: int) -> str:  # type: ignore[type-arg]

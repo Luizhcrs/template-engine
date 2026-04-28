@@ -111,11 +111,17 @@ def _write_body(
         if ci < 0 or ci >= len(row.cells):
             continue
         target = row.cells[ci]
-        target_text = target.text.strip()
-        # Mirror across merged-column siblings (same row, identical text).
-        for sibling in row.cells:
-            if sibling.text.strip() == target_text:
-                _set_cell_text(sibling, new_text)
+        # python-docx's row.cells gives N entries even when cells are
+        # MERGED — same underlying ``<w:tc>`` shows up multiple times.
+        # Setting text on each "duplicate" replaces the same cell N
+        # times with the same content. Skip cells we've already
+        # touched (identity check via the underlying XML element).
+        seen_tcs: set[int] = set()
+        target_tc_id = id(target._tc)
+        if target_tc_id in seen_tcs:
+            continue
+        seen_tcs.add(target_tc_id)
+        _set_cell_text(target, new_text)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     doc.save(str(output_path))
