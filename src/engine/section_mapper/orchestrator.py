@@ -390,6 +390,7 @@ async def _run_auto_mode(
     from engine.section_mapper.slot_filler import fill_slots
     from engine.section_mapper.slot_profiler import profile_slots
     from engine.section_mapper.slot_renderer import apply_slot_fills
+    from engine.section_mapper.slot_reviewer import review_slots
     from engine.section_mapper.source_profiler import profile_source
 
     if llm is None:
@@ -421,6 +422,32 @@ async def _run_auto_mode(
         fills=fills,
     )
 
+    # Closed-loop self-review: render the just-produced docx, show it
+    # to the LLM, ask for corrections. Skipped when the multimodal
+    # renderer can't produce images (docx2pdf / pymupdf missing).
+    review_count = 0
+    try:
+        corrections = await review_slots(
+            output_path,
+            inventory,
+            source_struct,
+            llm=llm,
+        )
+    except Exception as exc:
+        log.info("section_mapper.auto_mode.review_failed", error=str(exc))
+        corrections = {}
+    if corrections:
+        review_count = apply_slot_fills(
+            output_path,
+            output_path,
+            inventory=inventory,
+            fills=corrections,
+        )
+        log.info(
+            "section_mapper.auto_mode.review_applied",
+            corrections=review_count,
+        )
+
     target_sections = parse_docx(template_path)
     source_sections = _dedupe_sections_by_richest(_parse_source(source_path))
     matches = [
@@ -434,6 +461,7 @@ async def _run_auto_mode(
         slots_total=len(inventory.slots),
         slots_fillable=len(inventory.fillable()),
         slots_filled=n,
+        review_corrections=review_count,
         orphans=len(orphans),
     )
 

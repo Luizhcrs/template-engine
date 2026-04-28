@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-28
+
+Closed-loop self-review pass. After the first fill, the orchestrator
+now renders the OUTPUT docx, shows it back to the LLM, and accepts a
+list of corrections — wrong-column placements, repeated row indices,
+left-over placeholder text, duplicate rows, etc. One extra LLM call
+per doc. Skipped silently when ``docx2pdf`` / ``pymupdf`` is missing.
+
+### Added
+
+- `engine.section_mapper.slot_reviewer.review_slots(output_path,
+  inventory, source, *, llm)` — issues ONE multimodal LLM call against
+  the post-fill docx and returns ``dict[slot_id, corrected_text]``.
+  Re-reads each fillable slot's text from the rendered output before
+  showing the LLM, so the model sees real output (not template
+  defaults).
+- `_run_auto_mode` integrates the reviewer: render → review → apply
+  corrections → done. Logged as
+  ``section_mapper.auto_mode.review_applied corrections=N``.
+
+### Real-world impact (UNIFAP POP)
+
+Closed-loop review applied **17 corrections** on top of the first
+pass. Section 10 table (Nome / Setor / Função) had been a duplicate
+of the template default ``Fulano de Tal | Reitoria | Secretário da
+Reitoria``; the reviewer rewrote the empty fill row to
+``Maria Lopes | DIPLAN | Chefe de Planejamento``. Other corrections
+fixed column placements that the first pass had landed in the wrong
+spot.
+
+### Added tests
+
+- `tests/test_slot_reviewer.py` — four unit tests covering: parsed
+  corrections returned to the caller, no-op when no images can be
+  rendered, malformed / whitespace-only entries dropped, LLM
+  exception handled gracefully (empty dict, pipeline keeps the
+  first-pass output).
+
 ## [0.11.7] - 2026-04-28
 
 ### Fixed
