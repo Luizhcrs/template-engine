@@ -172,26 +172,42 @@ def profile_slots(template_path: Path) -> SlotInventory:
     return SlotInventory(template_path=str(template_path), slots=out)
 
 
+_MAX_EMPTY_RUN_AS_SLOT = 2
+
+
 def _empty_idxs_under_headings(paragraphs: list) -> set[int]:  # type: ignore[type-arg]
     """Return the indices of empty paragraphs that DIRECTLY follow a
-    heading paragraph (numbered or all-caps multi-word).
+    heading paragraph AND belong to a short run.
 
-    Such empty paragraphs are body slots the user is expected to fill;
-    other empty paragraphs (above tables, between sections, around
-    page breaks) are layout spacing and should NOT be touched.
+    Rule: when a heading is found, look at the run of consecutive empty
+    paragraphs that follow it. If the run length is ≤
+    :data:`_MAX_EMPTY_RUN_AS_SLOT`, every empty in the run is a fillable
+    body slot. If the run is longer, the empties are page-layout
+    padding (typical before a mega-table or page break) and NONE of
+    them are flagged.
+
+    Why a cap: the Corentocantins POP regression. Its template puts 19
+    empty paragraphs between two title lines purely for page padding —
+    the previous "any empty after a heading is a slot" rule flagged all
+    19, causing the LLM to either fill them with header text or skip
+    them, exploding false-positive slot count from ~16 to 86.
     """
     out: set[int] = set()
-    last_was_heading = False
-    for i, p in enumerate(paragraphs):
-        text = p.text.strip()
-        if not text:
-            if last_was_heading:
-                out.add(i)
-            # An empty paragraph does NOT reset the heading flag — a
-            # heading often has 1-3 trailing empty slots before the
-            # next non-empty paragraph.
+    n = len(paragraphs)
+    i = 0
+    while i < n:
+        text = paragraphs[i].text.strip()
+        if not text or not _looks_like_heading(text):
+            i += 1
             continue
-        last_was_heading = _looks_like_heading(text)
+        run_start = i + 1
+        j = run_start
+        while j < n and not paragraphs[j].text.strip():
+            j += 1
+        run_len = j - run_start
+        if 0 < run_len <= _MAX_EMPTY_RUN_AS_SLOT:
+            out.update(range(run_start, j))
+        i = max(j, i + 1)
     return out
 
 

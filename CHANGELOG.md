@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-04-28
+
+Fix profiler over-flagging empty paragraphs as fillable slots.
+
+### Fixed
+
+- `engine.section_mapper.slot_profiler._empty_idxs_under_headings` —
+  previous rule "any empty paragraph after a heading is a fillable
+  slot" let arbitrary page-padding empties get marked. The
+  Corentocantins POP template ships with 19 consecutive empty
+  paragraphs between two title lines (page-layout padding before a
+  mega-table) and the LLM was being asked to fill them, exploding the
+  fillable-slot count from 16 real cells to 86.
+
+  New rule: empty paragraphs are only fillable when they belong to a
+  short run (≤ 2 consecutive) immediately following a heading. Longer
+  runs are page padding and dropped.
+
+### Impact (real-world fixtures)
+
+| Template | Fillable slots | Filled | Real fill rate |
+|----------|----------------|--------|----------------|
+| UNIFAP POP (before) | 60 | 55 | 92 % |
+| UNIFAP POP (after)  | 60 | 60 | 100 % |
+| Corentocantins POP (before) | 86 (70 false positives) | 14 | 16 % |
+| Corentocantins POP (after)  | 16 | 13 | 81 % |
+
+UNIFAP gain comes from focus: dropping 70 bogus slots from the LLM
+prompt frees the model to fill the real ones consistently.
+
+### Added
+
+- `tests/test_slot_profiler.py` — 11 unit tests covering the
+  cap-2 rule, regression for the Corentocantins 19-empties run, and
+  the heading heuristic boundary cases.
+
 ## [0.11.2] - 2026-04-27
 
 Documentation pass: dropped the internal "Wave A–N" milestone codenames
