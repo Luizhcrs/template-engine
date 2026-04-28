@@ -1,4 +1,4 @@
-"""ABNT NBR 10719 - Relatorio tecnico-cientifico (Wave I).
+"""ABNT NBR 10719 - Relatorio tecnico-cientifico.
 
 Spec: ABNT NBR 10719:2015 - Informacao e documentacao - Relatorio tecnico
 e/ou cientifico - Apresentacao.

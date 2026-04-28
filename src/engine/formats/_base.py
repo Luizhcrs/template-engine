@@ -1,4 +1,4 @@
-"""Format dataclass — common shape for every pre-defined format (Wave H)."""
+"""Format dataclass — common shape for every pre-defined format."""
 
 from __future__ import annotations
 

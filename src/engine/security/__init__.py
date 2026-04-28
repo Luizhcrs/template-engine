@@ -1,4 +1,4 @@
-"""Security primitives for regulated deployments (Wave G).
+"""Security primitives for regulated deployments.
 
 - :mod:`engine.security.pii` — reversible PII masking before LLM calls.
 - :mod:`engine.security.injection` — prompt-injection regex detector.

@@ -1,4 +1,4 @@
-"""Tests for engine.section_mapper (Wave L)."""
+"""Tests for engine.section_mapper."""
 
 from __future__ import annotations
 
@@ -496,7 +496,7 @@ def test_regression_render_into_empty_paragraph_creates_run(tmp_path):
     """Empty body paragraphs (``add_paragraph("")``) have NO ``<w:t>`` —
     setting text via XPath alone fails silently. Renderer must handle this.
 
-    Found 2026-04-27 in the Wave L smoke test against an industrial
+    Found 2026-04-27 in the rules-mode smoke test against an industrial
     template that ships paragraph slots empty.
     """
     p = tmp_path / "tpl.docx"
@@ -596,7 +596,7 @@ def test_regression_template_with_unnumbered_uppercase_headings(tmp_path):
     assert "HISTORICO" in names
 
 
-# ===== numbering resolver (Wave L+) =====
+# ===== numbering resolver =====
 
 
 def test_numbering_resolver_decimal_top_level():
@@ -1116,7 +1116,7 @@ def test_fill_tables_writes_subheaders_into_row_1(tmp_path):
     assert t.rows[3].cells[2].text == "X"
 
 
-# ===== Wave M: profilers + auto mapper =====
+# ===== LLM-driven mapper: profilers + auto mapper =====
 
 
 def test_template_profiler_detects_placeholders_in_header(tmp_path):
@@ -1317,7 +1317,7 @@ def test_auto_renderer_header_substitution_low_level(tmp_path):
     assert ">XXXX<" not in hdr_xml
 
 
-# ===== Wave M enterprise hardening: validation + cache + smart-default =====
+# ===== LLM-driven mapper enterprise hardening: validation + cache + smart-default =====
 
 
 def test_detect_plan_gaps_reports_empty_placeholders():

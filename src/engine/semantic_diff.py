@@ -1,7 +1,7 @@
 """Semantic diff — compare a source document against a normalized output.
 
 Goal: catch the "field present in source but lost in output" failure mode that
-silent regex/LLM extraction can produce. Used by the batch orchestrator (Wave D)
+silent regex/LLM extraction can produce. Used by the batch orchestrator
 as a final QA gate before declaring a doc "done".
 
 This module is text-only — it extracts both docs via :func:`engine.extractor.extract`

@@ -1,4 +1,4 @@
-"""Wave N — vision-driven slot fill via LLM.
+"""Slot pipeline — vision-driven slot fill via LLM.
 
 Single LLM call (multimodal when ``docx2pdf`` + ``pymupdf`` available)
 that takes:

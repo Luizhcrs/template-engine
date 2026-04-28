@@ -4,7 +4,7 @@ Commands:
 
 - ``template-engine info`` — version + available providers
 - ``template-engine extract <path>`` — extract text/tables from .docx/.pdf
-- ``template-engine normalize`` — Wave D batch: 1 template + N source docs → N normalized
+- ``template-engine normalize`` — batch: 1 template + N source docs → N normalized
 - ``template-engine version`` — print version and exit
 """
 
@@ -27,7 +27,7 @@ from engine.extractor import extract as engine_extract
 
 app = typer.Typer(
     name="template-engine",
-    help="Document normalization engine — Wave D batch orchestrator: regex first, LLM fallback.",
+    help="Document normalization engine — batch orchestrator: regex first, LLM fallback.",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -141,7 +141,7 @@ def extract(
 
 @app.command(name="list-formats")
 def cmd_list_formats() -> None:
-    """List all bundled formats (Wave H)."""
+    """List all bundled formats."""
     from engine.formats import describe_formats
 
     table = Table(title="Bundled formats", show_header=True, header_style="bold")
@@ -205,7 +205,7 @@ def normalize(
     skip_diff: Annotated[bool, typer.Option("--skip-diff", help="Skip semantic diff QA pass")] = False,
     max_concurrent: Annotated[int, typer.Option("--max-concurrent", help="Parallel workers")] = 4,
 ) -> None:
-    """Normalize a directory of source documents against a template (Wave D batch).
+    """Normalize a directory of source documents against a template (batch).
 
     Pipeline: schema_inference → pattern_inference (if golds given) →
     hybrid_mapper (regex first, LLM fallback) → token-substitution renderer →
@@ -344,7 +344,7 @@ def conformity(
         Path | None, typer.Option("--json", help="Where to write the conformity report JSON")
     ] = None,
 ) -> None:
-    """Multi-dimensional conformity check (Wave F).
+    """Multi-dimensional conformity check.
 
     Evaluates whether a candidate document conforms to a template across up to
     five dimensions: text (LLM), structural (docx parsing), visual (ascii layout),
@@ -480,7 +480,7 @@ def cmd_map_sections(
 ) -> None:
     """Fill a structural template (no ``{{X}}`` tokens) from a source document.
 
-    Wave L (rules) or Wave M (LLM) mapping depending on whether a
+    rules mode or LLM mode mapping depending on whether a
     ``--provider`` is supplied:
 
     - No provider → ``rules`` mode (PT-BR / Engeman heuristics).

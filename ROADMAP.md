@@ -14,33 +14,24 @@ Ordem por impacto + foundation-first. Cada bloco entrega valor sozinho.
 | v0.1.1 | [done] entregue | `v0.1.1` (2026-04-25) | Security hardening + breaking API cleanups |
 | v0.2.0 | [done] entregue | `v0.2.0` (2026-04-25) | Multi-provider (5 novos) + LLMRouter |
 | v0.2.1 | [done] entregue | `v0.2.1` (2026-04-26) | OpenAI strict fix + bilingual README, 49 tests |
-| Wave A | [done] entregue | `3c42feb` (2026-04-26) | regex inference automatica (10 shapes pre-def + label aggregation) |
-| Wave A v2 | [done] entregue | `594ee1f` (2026-04-26) | grex Tier 2 — generaliza regex via digit/word conversion |
-| Wave D | [done] entregue | `126b0c0` (2026-04-26) | batch orchestrator (1 template + N docs → N normalized + report) |
-| Wave E | [done] entregue | `83cd524` (2026-04-26) | drop legacy preset/renderer/validator/visual_validator (~26% LOC -) |
-| Wave F | [done] entregue | `23118f3` (2026-04-26) | conformity validator multi-dim (5 dimensions: texto + estrutural + visual + design + técnico) |
-| Wave G | [done] entregue | `ea39746` (2026-04-26) | security primitives: PII mask, prompt injection detector, audit log, local_only enforcement, SECURITY-MODEL.md |
-| Wave H | [done] entregue | `de79f8b` (2026-04-26) | 5 formatos pre-definidos + CLI list-formats + --format flag |
-| Wave I | [done] entregue | `2cd973a` (2026-04-26) | renderer fragmented runs fix + 5 formatos novos (10 total) + PyPI workflow + drop examples + scrub fake numbers |
-| Wave J | [done] entregue | `f04346c` (2026-04-26) | TESTING-PLAN.md (10 suites P0-P3) + CODE-REVIEW.md (22 findings, 3 CRITICAL) |
-| Wave K | [done] entregue | `807d107` (2026-04-26) | resolve all 22 findings (3 CRITICAL + 7 HIGH + 9 MEDIUM + 3 LOW) — unblocks PyPI publish |
-| Wave L | [done] entregue | `(pending push)` (2026-04-27) | section_mapper subpackage — handles structural templates (heading hierarchy + tables) that Wave D couldn't. 3-tier similarity (string/embeddings/llm). Validated against Engeman case. |
-| v0.3.0 | [done] tagged | `v0.3.0` (2026-04-26) | Wave A + D + E shipped |
-| v0.4.0 | [done] tagged | `v0.4.0` (2026-04-26) | Wave F shipped (conformity validator) |
-| v0.5.0 | [done] tagged | `v0.5.0` (2026-04-26) | Wave G shipped (security + SECURITY-MODEL.md + README rewrite) |
-| v0.6.0 | [done] tagged | `v0.6.0` (2026-04-26) | Wave H shipped (5 bundled formats + CLI) |
-| v0.7.0 | [done] tagged | `v0.7.0` (2026-04-26) | Wave I shipped (renderer fix + 10 formats + PyPI workflow + drop examples) |
+| v0.3.0 | [done] tagged | `v0.3.0` (2026-04-26) | regex inference (10 pre-defined shapes + label aggregation) + grex Tier 2 generalisation + batch orchestrator (1 template + N docs → N normalized + report) + drop legacy preset/renderer/validator (~26% LOC -) |
+| v0.4.0 | [done] tagged | `v0.4.0` (2026-04-26) | conformity validator multi-dim (5 dimensions: text + structural + visual + design + technical) |
+| v0.5.0 | [done] tagged | `v0.5.0` (2026-04-26) | security primitives: PII mask, prompt injection detector, audit log, local_only enforcement, SECURITY-MODEL.md |
+| v0.6.0 | [done] tagged | `v0.6.0` (2026-04-26) | 5 bundled formats + CLI list-formats + --format flag |
+| v0.7.0 | [done] tagged | `v0.7.0` (2026-04-26) | renderer fragmented-runs fix + 5 new formats (10 total) + PyPI workflow + drop examples + scrub fake numbers |
 | v0.7.1 | [done] tagged | `v0.7.1` (2026-04-26) | Rename PyPI distribution to template-engine-ia |
-| v0.8.0 | [done] tagged | `v0.8.0` (2026-04-27) | Wave K shipped — clears all 22 findings; PyPI publish unblocked |
-| v0.9.0-0.9.7 | [done] tagged | `v0.9.0`-`v0.9.7` (2026-04-27) | Wave L shipped — section_mapper rules-mode pipeline (parser + numbering + similarity + renderer + tables + auto-tables + header_filler + style decoration) — DOcStream parity on Engeman |
-| v0.10.0-0.10.9 | [done] tagged | `v0.10.0`-`v0.10.9` (2026-04-27) | Wave M shipped — LLM-driven vendor-agnostic mapping (template/source profilers + auto-mapper + auto-renderer + multimodal vision + cell-level fills + plan validation/retry + plan cache + polymorphic source + CLI). Validated against 5 synthetic + 2 real-world templates (UNIFAP + Corentocantins). |
-| v0.11+ | [plan] planejado | — | OCR fallback for scanned PDFs + non-Engeman vendor pack expansion |
+| v0.8.0 | [done] tagged | `v0.8.0` (2026-04-27) | Hardening pass — clears all 22 findings (3 CRITICAL + 7 HIGH + 9 MEDIUM + 3 LOW); PyPI publish unblocked |
+| v0.9.0-0.9.7 | [done] tagged | `v0.9.0`-`v0.9.7` (2026-04-27) | section_mapper rules-mode pipeline (parser + numbering + similarity + renderer + tables + auto-tables + header_filler + style decoration) — DOcStream parity on Engeman |
+| v0.10.0-0.10.9 | [done] tagged | `v0.10.0`-`v0.10.9` (2026-04-27) | LLM-driven vendor-agnostic mapping (template/source profilers + auto-mapper + auto-renderer + multimodal vision + cell-level fills + plan validation/retry + plan cache + polymorphic source + CLI). Validated against 5 synthetic + 2 real-world templates (UNIFAP + Corentocantins). |
+| v0.11.0-0.11.1 | [done] tagged | `v0.11.0`-`v0.11.1` (2026-04-27) | Slot pipeline — unified `Slot` abstraction collapsing 5 fill strategies into one. Vision-driven slot fill via multimodal LLM. Profiler emits fillable slots; renderer applies fills in place. Bug fixes for empty-paragraph scope and merged-cell dedupe. |
+| v0.12+ | [plan] planejado | — | OCR fallback for scanned PDFs + non-Engeman vendor pack expansion |
 
 **Onde estamos hoje (2026-04-27):**
 
 - Lib estável com 6 providers + LLMRouter, 363 tests passando, CI verde matrix py3.11/3.12/3.13.
-- **Wave L** entregou rules-mode section_mapper — DOcStream parity em template Engeman real (PT-BR industrial).
-- **Wave M** entrega LLM-driven full-doc mapping vendor-agnóstico — uma chamada multimodal cobrindo header subs, section content, paragraph rewrites, table data, cell-level fills.
+- **Rules-mode section_mapper** — DOcStream parity em template Engeman real (PT-BR industrial).
+- **LLM-driven full-doc mapping** vendor-agnóstico — uma chamada multimodal cobrindo header subs, section content, paragraph rewrites, table data, cell-level fills.
+- **Slot pipeline** — abstração única `Slot` cobrindo todo lugar preenchível. Profiler + multimodal vision + renderer.
 - 7 pares testados: 1 real Engeman + 5 sintéticos adversariais + 2 real-world públicos (UNIFAP universidade + Corentocantins enfermagem).
 - Plan cache (sha256 template+source) → re-runs grátis. Polymorphic source (Path/bytes/BytesIO/URL). CLI `template-engine map-sections`. Smart-default mode.
 
@@ -95,14 +86,14 @@ Multi-provider LLM:
 
 ---
 
-## Wave A — regex inference (entregue 2026-04-26 [done])
+## regex inference (entregue 2026-04-26 [done])
 
 Substitui `_FIELD_PATTERNS` hardcoded por inferência mecânica.
 
 - [done] `engine.pattern_inference` — `infer_field_patterns(gold_docs, field_examples)` aprende regex de exemplos
 - [done] Tier 1: 10 shapes pre-definidas (iso_date, doc_code, cpf, cep, uf, fullname, version, br_date, decimal_br, integer, month_year_pt)
 - [done] Label aggregation via Counter — alterna múltiplos rótulos no mesmo campo
-- [done] Wave A v2: integração `grex` (optional dep `[inference]`) — Tier 2 generaliza patterns
+- [done] grex Tier 2: integração `grex` (optional dep `[inference]`) — Tier 2 generaliza patterns
 - [done] Heurística hybrid digits-only/words: aceita generalização só com structural anchors
 - [done] POCs 08-13 refatorados — 49/49 campos extraídos sem regex hardcoded em 6 designs
 
@@ -110,7 +101,7 @@ Substitui `_FIELD_PATTERNS` hardcoded por inferência mecânica.
 
 ---
 
-## Wave D — batch orchestrator (entregue 2026-04-26 [done])
+## batch orchestrator (entregue 2026-04-26 [done])
 
 End-to-end: 1 template + N source docs → N normalized + report.json.
 
@@ -126,9 +117,9 @@ End-to-end: 1 template + N source docs → N normalized + report.json.
 
 ---
 
-## Wave E — consolidação (planejada, 1 dia)
+## consolidação (planejada, 1 dia)
 
-**Por quê:** lib hoje tem 2 caminhos paralelos (preset legacy vs Wave D schema). Confunde usuário e duplica manutenção.
+**Por quê:** lib hoje tem 2 caminhos paralelos (preset legacy vs schema-based pipeline). Confunde usuário e duplica manutenção.
 
 ### Drops
 
@@ -137,7 +128,7 @@ End-to-end: 1 template + N source docs → N normalized + report.json.
 - [ ] `engine.preset_schemas` — sem consumidor após drop dos 2 acima
 - [ ] `engine.renderer` + `engine.render_ops/` — substituído por `batch._apply_mapping_to_template`
 - [ ] `engine.validator` (legacy tokens críticos) — substituído por `hybrid_mapper` confidence + `semantic_diff`
-- [ ] `engine.visual_validator` (LibreOffice obrigatório) — substituído por Wave F design dimension
+- [ ] `engine.visual_validator` (LibreOffice obrigatório) — substituído por design dimension
 - [ ] CLI `convert` + `visual-validate` — apenas `normalize` permanece
 
 ### Refactor
@@ -157,7 +148,7 @@ End-to-end: 1 template + N source docs → N normalized + report.json.
 
 ---
 
-## Wave F — conformity validator multi-dim (planejada, 3-5 dias)
+## conformity validator multi-dim (planejada, 3-5 dias)
 
 **Por quê:** o usuário pediu — LLM como juiz multi-dimensional ("este doc está sim no padrão"). Não só texto: visual + design + estrutura + técnico.
 

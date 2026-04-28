@@ -1,4 +1,4 @@
-"""Wave N — flat profiler that emits :class:`Slot` records covering
+"""Slot pipeline — flat profiler that emits :class:`Slot` records covering
 every fillable place in a template.
 
 Walks:

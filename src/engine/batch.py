@@ -1,6 +1,6 @@
 """Batch orchestrator — drive 1 template + N source docs → N normalized outputs.
 
-End-to-end pipeline that wires Wave D modules together:
+End-to-end pipeline that wires batch orchestrator modules together:
 
 1. :mod:`engine.schema_inference` → derive field schema from the template.
 2. :mod:`engine.pattern_inference` → if gold examples were supplied, build

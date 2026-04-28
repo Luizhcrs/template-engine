@@ -1,4 +1,4 @@
-"""NR-13 - Laudo de inspecao em caldeiras e vasos de pressao (Wave I).
+"""NR-13 - Laudo de inspecao em caldeiras e vasos de pressao.
 
 Spec: Norma Regulamentadora 13 (Portaria MTE) - Caldeiras, vasos de pressao,
 tubulacoes e tanques metalicos de armazenamento.

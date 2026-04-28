@@ -6,7 +6,7 @@ Status: 269 unit tests green, ruff/format/mypy clean. Review found 22
 concrete issues, **3 CRITICAL** that block PyPI publish.
 
 This document is the verbatim consolidation of the review plus an action
-plan. Wave K addresses CRITICAL + HIGH; MEDIUM/LOW are scheduled.
+plan. v0.8 hardening addresses CRITICAL + HIGH; MEDIUM/LOW are scheduled.
 
 ## Verdict
 
@@ -14,7 +14,7 @@ plan. Wave K addresses CRITICAL + HIGH; MEDIUM/LOW are scheduled.
 > on day 1. The most damaging: bundled formats produce wrong field values on
 > their own gold docs, and `AuditLog` — the centerpiece of the "audit-grade"
 > pitch — is exposed but never invoked from any pipeline. The renderer fix
-> from Wave I is correct for the cases it tests but misses headers/footers
+> from formats catalog is correct for the cases it tests but misses headers/footers
 > and content inside hyperlinks. The injection detector is leaky (misses
 > canonical attacks) and has a quadratic-time ReDoS hole on the PT-BR
 > pattern.
@@ -317,7 +317,7 @@ Skipping the `test_format_hybrid_mapper_extracts_from_gold_doc` value check (#20
 
 ---
 
-## Wave K — fix order
+## v0.8 hardening — fix order
 
 | # | Severity | Effort | Description |
 |---|----------|--------|-------------|
@@ -354,4 +354,4 @@ Publish to PyPI is **blocked** until at least the 3 CRITICAL items are fixed:
 2. **#2 AuditLog not wired** — README's "audit-grade" claim is false; either wire it or strip the framing.
 3. **#3 ReDoS** — regulated workloads will hit adversarial input quickly.
 
-Wave K target: clear all CRITICAL + HIGH (10 items, ~3 days). Then publish v0.8.0 to PyPI. MEDIUM/LOW can ship as v0.8.x patches.
+v0.8 hardening target: clear all CRITICAL + HIGH (10 items, ~3 days). Then publish v0.8.0 to PyPI. MEDIUM/LOW can ship as v0.8.x patches.

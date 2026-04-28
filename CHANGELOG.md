@@ -7,15 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.11.0] - 2026-04-27 — Wave N (Slot-only architecture)
+## [0.11.2] - 2026-04-27
 
-Wave M split fill operations across 5 fields (`header_substitutions`,
+Documentation pass: dropped the internal "Wave A–N" milestone codenames
+across the entire codebase (READMEs, ROADMAP, CHANGELOG headings, docstrings,
+test comments). Wave labels were a private development artifact; published
+docs now refer to milestones by version (`v0.3.0`, `v0.8.0`, …) and to
+runtime concepts by their actual names (`rules mode`, `LLM-driven mapper`,
+`Slot pipeline`, `batch orchestrator`, `conformity validator`,
+`security primitives`, `formats catalog`, `hardening pass`).
+
+No behavioural changes. 363 tests pass, mypy strict + ruff clean.
+
+### Changed
+
+- README.md / README.pt.md — refreshed test count (189 → 363), Section
+  mapper reference now mentions rules mode / LLM-driven mapper / Slot
+  pipeline by name, dropped "Wave H/I/L/M shipped on v0.6" footer.
+- ROADMAP.md — status table consolidated to version rows only; section
+  headings rewritten without Wave labels.
+- CHANGELOG.md — historical entries keep their version anchors but their
+  Wave subtitles are gone.
+- docs/concepts/section_mapper.md / .pt.md — section headings, frontmatter
+  titles and prose use rules mode / LLM-driven mapper directly.
+- src/engine/**/*.py — 50+ docstring/comment cleanups across batch,
+  hybrid_mapper, schema_inference, conformity, formats, section_mapper,
+  security and tests. Public API unchanged.
+
+## [0.11.0] - 2026-04-27
+
+the previous LLM-driven mapper split fill operations across 5 fields (`header_substitutions`,
 `section_content`, `table_data`, `paragraph_rewrites`, `cell_fills`).
 Each had its own renderer path. Coordinating them was brittle: source
 content sometimes got APPENDED next to template instructions instead
 of REPLACING them.
 
-Wave N collapses every fillable place in a docx into one shape:
+the Slot pipeline collapses every fillable place in a docx into one shape:
 **`Slot`**. The LLM returns `{slot_id: new_text}`. The renderer
 substitutes each slot in place. No cloning, no inserting, no strategy
 decisions. The template stays sacred — slots are the only thing that
@@ -75,23 +102,23 @@ text), the new text is mirrored across every sibling.
 
 ### Added — `mode="auto"` (default when provider supplied)
 
-`map_sections_async(... mode=None)` now picks `"auto"` (Wave N
+`map_sections_async(... mode=None)` now picks `"auto"` (the Slot pipeline
 slot-only) when an LLM provider is passed, `"rules"` otherwise. The
 old `"llm"` and `"hybrid"` modes still work but are no longer the
 default.
 
 ### Result on real-world templates
 
-| Template | Slots fillable | Slots filled (Wave N) | Outcome |
+| Template | Slots fillable | Slots filled (the Slot pipeline) | Outcome |
 | --- | --- | --- | --- |
-| **UNIFAP POP** (real-world) | 83 | 18 | imperative `Descrever…` / `Apontar…` / `Identificar…` instructions REPLACED in place by source content (vs Wave M which appended next to them) |
-| **Corentocantins POP** (real-world, mega-table 20×8) | 153 | 128 | every body slot `1. OBJETIVO: (Descrição…)` REPLACED with `1. OBJETIVO: <real>` (vs Wave M which left them as template default) |
+| **UNIFAP POP** (real-world) | 83 | 18 | imperative `Descrever…` / `Apontar…` / `Identificar…` instructions REPLACED in place by source content (vs the previous LLM-driven mapper which appended next to them) |
+| **Corentocantins POP** (real-world, mega-table 20×8) | 153 | 128 | every body slot `1. OBJETIVO: (Descrição…)` REPLACED with `1. OBJETIVO: <real>` (vs the previous LLM-driven mapper which left them as template default) |
 
 UNIFAP `Pré-requisitos` instruction and a couple of activities-table
 explanatory cells still resist replacement — known limit of the
 current prompt. Corentocantins `2. INDICAÇÃO/CONTRAINDICAÇÃO` skipped
-because the source has no equivalent (correct behaviour). Wave N
-delivers the "template sacred + slot-only fill" promise that Wave M
+because the source has no equivalent (correct behaviour). the Slot pipeline
+delivers the "template sacred + slot-only fill" promise that the previous LLM-driven mapper
 couldn't.
 
 ## [0.10.9] - 2026-04-27 — Focused cell-fill checklist + merged-cell mirror
@@ -320,7 +347,7 @@ custom rules**. Open issues:
 
 ## [0.10.5] - 2026-04-27 — Enterprise hardening (smart default + retry + cache + CLI)
 
-Four fixes that take Wave M from "works once" to "production-ready
+Four fixes that take the previous LLM-driven mapper from "works once" to "production-ready
 out of the box". No new features — every change makes the existing
 LLM mode safer and cheaper to run repeatedly.
 
@@ -582,7 +609,7 @@ current limits — open issues in `tests/vendor_c/report.json`,
 358 passing. The vendor B fixtures live under `tests/vendor_b/` so a
 follow-up integration test can be added without re-generating.
 
-## [0.10.1] - 2026-04-27 — Wave M prompt validated against OpenAI gpt-4o
+## [0.10.1] - 2026-04-27 validated against OpenAI gpt-4o
 
 First end-to-end run of the LLM mode against a real provider on the
 Engeman dados.docx pair surfaced two prompt-quality bugs that the
@@ -647,15 +674,15 @@ without rule-table extension.
 Cost: one ~3500-token prompt + ~2000-token response = ~$0.05 with gpt-4o
 or ~$0.001 with Gemini Flash 2.5.
 
-## [0.10.0] - 2026-04-27 — Wave M (LLM-driven full-doc mapping)
+## [0.10.0] - 2026-04-27
 
-The Wave L pipeline relied on hardcoded vendor heuristics: Engeman
+The the rules-mode pipeline pipeline relied on hardcoded vendor heuristics: Engeman
 placeholder names, Brazilian-PT synonym table, canonical Histórico /
 Responsabilidade extractors, regex-based `Aprovador (es):` /
 `IT.PRO.URE.387.0005` parsers, etc. That worked for one vendor's
 templates; it did not generalise.
 
-Wave M ships a vendor-agnostic LLM-driven mode that handles ANY template
+the previous LLM-driven mapper ships a vendor-agnostic LLM-driven mode that handles ANY template
 + source pair the LLM can read.
 
 ### Added — generic profilers
@@ -705,7 +732,7 @@ Both structures are JSON-serialisable.
 ### Added — orchestrator `mode` flag
 
 - `map_sections_async` gains a `mode: str = "rules"` parameter:
-  - `"rules"` (default) — Wave L pipeline, free, deterministic, but
+  - `"rules"` (default) — the rules-mode pipeline pipeline, free, deterministic, but
     Engeman / PT-BR specific.
   - `"llm"` — single LLM call builds the complete substitution plan
     from the profilers. Generalises across vendors and languages.
@@ -1017,9 +1044,9 @@ Routes `.docx` source through the resolver. Returns `list[TextSection]` whose `c
 
 Result on Engeman dados.docx with zero config: mapped **7/8** (was 5/8 with manual synonym additions); empty Histórico table auto-filled with default first row.
 
-### Added — Wave L (section_mapper for structural templates)
+### Added
 
-New subpackage `engine.section_mapper` covers the case the existing pipeline did not: templates that ship with named-but-empty sections (no `{{X}}` placeholders) and rely on heading hierarchy + tables. Validated against an industrial procedure template (Engeman / NR-style) that the Wave D `normalize_batch` could not handle.
+New subpackage `engine.section_mapper` covers the case the existing pipeline did not: templates that ship with named-but-empty sections (no `{{X}}` placeholders) and rely on heading hierarchy + tables. Validated against an industrial procedure template (Engeman / NR-style) that the the batch orchestrator `normalize_batch` could not handle.
 
 - **`engine.section_mapper.parser`** — heading detection from `.docx` (paragraphs + heading styles + numbered + all-caps unnumbered) and from plain text (PDF-extracted). Returns `DocxSection` with paragraph indices and `TextSection` with captured content.
 - **`engine.section_mapper.similarity`** — three-tier matcher:
@@ -1034,7 +1061,7 @@ New subpackage `engine.section_mapper` covers the case the existing pipeline did
 
 Real-world smoke against an Engeman industrial procedure template: 7 target sections detected, 21 source sections detected, 10 mapped (OBJETIVO -> OBJETIVO, APLICAÇÃO -> APLICAÇÃO, DESCRIÇÃO -> SISTEMÁTICA via synonym, REGISTROS -> RESPONSABILIDADE via synonym), 1 metadata table filled (Rev/Data/Alteração).
 
-### Fixed — Wave K (closes 22 code-review findings)
+### Fixed
 
 **3 CRITICAL** + **7 HIGH** + 9 MEDIUM + 3 LOW from `CODE-REVIEW.md` resolved. Unblocks PyPI publish.
 
@@ -1076,25 +1103,25 @@ Real-world smoke against an Engeman industrial procedure template: 7 target sect
 
 - `__version__` bumped to `0.8.0`.
 
-### Fixed — Wave I
+### Fixed
 
 - **Renderer: tokens fragmented across runs.** `batch._apply_mapping_to_template` now uses a two-pass strategy: per-run replacement (preserves intra-paragraph formatting) followed by paragraph-level fallback when a token spans multiple `<w:r>` elements (the common case in Word-edited templates). 6 new tests cover token-in-single-run, fragmented `{{X}}` across 3+ runs, multiple fragmented tokens, table cells, no-op, and direct unit on `_replace_tokens_in_paragraph`.
 
-### Added — Wave I
+### Added
 
 - **5 new bundled formats** (10 total now): `abnt_relatorio_tecnico` (NBR 10719), `nr13` (caldeiras / vasos de pressão), `nr35` (permissão de trabalho em altura), `ata_reuniao` (genérico), `procuracao_simples` (instrumento particular).
 - **`.github/workflows/publish.yml`** — automated PyPI release on `v*.*.*` tag push using PyPA trusted publishing (no `PYPI_API_TOKEN` secret needed once the project is configured at <https://pypi.org/manage/account/publishing/>).
 
-### Removed — Wave I
+### Removed
 
 - **`examples/`** moved out of the main repo to keep the lib focused. POCs continue to exist as reference but are no longer shipped with the package. Prior examples (`08`-`14`) are preserved in git history.
 
-### Changed — Wave I
+### Changed
 
 - **README/README.pt + docs/index.pt.md**: dropped any mention of specific customer numbers, paying customers, or unverified case-study figures. The cost-by-tier table remains as the only quantitative claim.
 - ``__version__`` bumped to ``0.7.0``.
 
-### Added — Wave H (bundled formats library)
+### Added
 
 - **`engine.formats`** subpackage with 5 ready-to-use document formats. Each format ships :class:`FieldSchema` list, ``field_examples`` for ``pattern_inference``, 3 gold docs, conformity weight overrides, required headings, and a recommended threshold.
   - **`abnt_artigo`** — ABNT NBR 6022:2018 (artigo cientifico). 8 fields: titulo, autores, resumo, palavras-chave, abstract, keywords, introducao, referencias.
@@ -1112,7 +1139,7 @@ Real-world smoke against an Engeman industrial procedure template: 7 target sect
 - ``__version__`` bumped to ``0.6.0``.
 - README/quickstart docs add a bundled-formats example.
 
-### Added — Wave G (security primitives for regulated deployments)
+### Added
 
 - **`engine.security.mask_pii(text)`** — reversible PII masking. Replaces CPF / CNPJ / email / phone (BR) / RG / CEP with stable tokens (``<CPF_001>`` etc). Returns ``(masked_text, PIIMask)``. Repeated occurrences of the same value reuse the same token. ``mask.unmask(text)`` restores originals.
 - **`engine.security.detect_prompt_injection(text, mode='warn'|'reject')`** — pattern-based detector for adversarial inputs. 7 rules covering EN + PT-BR ("ignore previous", "respond only with", role hijack, system override, delimiter injection). ``mode='reject'`` raises ``PromptInjectionDetected``.
@@ -1126,10 +1153,10 @@ Public API exports added: ``AuditLog``, ``InjectionMatch``, ``PIIMask``, ``Promp
 
 ### Changed
 
-- ``__version__`` bumped to ``0.5.0`` (Wave G ships security primitives).
+- ``__version__`` bumped to ``0.5.0`` (the security primitives milestone ships security primitives).
 - README rewritten — leads with the differential ("audit-grade, regex-first, LLM-as-judge, zero LibreOffice"), adds an ASCII pipeline diagram, an operating-cost table by tier, and a "Design decisions" section. PT-BR mirror updated.
 
-### Added — Wave F (conformity validator multi-dim)
+### Added
 
 LLM-as-judge multi-dimensional conformity check. Subpackage ``engine.conformity`` with five dimensions:
 
@@ -1149,21 +1176,21 @@ CLI: ``template-engine conformity --template T --candidate C --provider gemini -
 
 Public exports added to ``engine``: ``ConformityReport``, ``ConformityVisualProvider``, ``DimensionResult``, ``Failure``, ``StructuralFingerprint``, ``check_conformity``, ``check_text``, ``check_structural``, ``check_visual``, ``check_design``, ``check_technical``, ``find_orphan_placeholders``, ``validate_cpf``, ``validate_cep``, ``validate_iso_date``, ``validate_br_date``, ``validate_email``, ``validate_phone_br``, ``validate_uf``.
 
-### Removed — Wave E (consolidation, BREAKING)
+### Removed
 
-Drops the legacy preset-bundle pipeline in favor of the Wave D schema-driven path. **Breaking change.** Users on the old pipeline must migrate to ``template-engine normalize``.
+Drops the legacy preset-bundle pipeline in favor of the the batch orchestrator schema-driven path. **Breaking change.** Users on the old pipeline must migrate to ``template-engine normalize``.
 
 - **Source modules dropped:** ``engine.preset_creator``, ``engine.preset_loader``, ``engine.preset_schemas``, ``engine.renderer``, ``engine.render_ops/`` (entire package), ``engine.validator``, ``engine.visual_validator``, ``engine.llm_mapper``.
-- **LLM module dropped:** ``engine.llm.gemini_vision`` and ``engine.llm.base.VisualLLMProvider`` Protocol. (Will return in Wave F under a different name for the conformity validator design dimension.)
+- **LLM module dropped:** ``engine.llm.gemini_vision`` and ``engine.llm.base.VisualLLMProvider`` Protocol. (Will return in the conformity validator milestone under a different name for the conformity validator design dimension.)
 - **CLI commands dropped:** ``template-engine convert`` and ``template-engine visual-validate``. Replacement: ``template-engine normalize``.
 - **Optional extras dropped:** ``[visual]`` (was ``pdf2image`` + ``pillow``). New ``[poc]`` extra exposes ``pillow`` for the example POC scripts.
-- **Examples dropped:** ``examples/01_quickstart.py``, ``examples/02_custom_provider.py``, ``examples/03_validation.py``, ``examples/04_ascii_layout_poc.py``. POCs 08-14 (Wave A demos) preserved.
+- **Examples dropped:** ``examples/01_quickstart.py``, ``examples/02_custom_provider.py``, ``examples/03_validation.py``, ``examples/04_ascii_layout_poc.py``. POCs 08-14 (the regex-inference milestone demos) preserved.
 - **Tests dropped:** ``test_preset_creator``, ``test_preset_loader``, ``test_renderer``, ``test_validator``, ``test_visual_validator``, ``test_llm_mapper``. Total tests: 172 → **131 passing**.
 - **Docs pages dropped:** ``concepts/preset.{md,pt.md}``, ``concepts/render-ops.{md,pt.md}``, ``concepts/visual-validation.{md,pt.md}``.
 
 ### Migration guide
 
-Old pipeline → Wave D:
+Old pipeline → the batch orchestrator:
 
 ```python
 # Before (legacy)
@@ -1172,7 +1199,7 @@ preset = await create_preset(template_path, gold_paths, llm)
 data = await map_content(preset, source_text, llm)
 render(preset, data, output_path)
 
-# After (Wave D)
+# After (the batch orchestrator)
 from engine import normalize_batch
 report = await normalize_batch(
     template_path=template_path,
@@ -1193,17 +1220,17 @@ template-engine visual-validate gold.docx output.docx
 
 # After
 template-engine normalize --template template.docx --source-dir docs/ --output-dir out/
-# (visual validation returns in Wave F as part of conformity check)
+# (visual validation returns in the conformity validator milestone as part of conformity check)
 ```
 
 ### Changed
 
 - **`engine.confidence`** decoupled from `engine.validator`. ``calculate_confidence`` now accepts any object exposing ``critical_tokens_found/total`` and ``sections_present/required`` via a structural Protocol (no more hard import).
-- **`__version__`** bumped to ``0.3.0`` (Wave E completes the v0.3 milestone).
+- **`__version__`** bumped to ``0.3.0`` (the consolidation milestone completes the v0.3 milestone).
 - **LOC stats:** src 4594 → 3045 (-34%), tests 2655 → 1884 (-29%), total py 9897 → 7329 (-26%).
 
 
-### Added — Wave A (regex inference)
+### Added
 
 - **`engine.pattern_inference`** — `infer_field_patterns(gold_docs, field_examples) -> dict[str, InferredPattern]` synthesizes a regex per field from gold docs + example values. Three-tier value-shape detection:
   1. **Predefined shapes** (Tier 1): `iso_date`, `br_date`, `doc_code`, `cpf`, `cep`, `uf`, `decimal_br`, `integer`, `version`, `fullname`, `month_year_pt`.
@@ -1214,7 +1241,7 @@ template-engine normalize --template template.docx --source-dir docs/ --output-d
 - **`[inference]` extra** — `grex>=1.0,<2`. Install via `pip install 'template-engine[inference]'`.
 - 24 new unit tests for pattern_inference (110 → 116 total).
 
-### Added — Wave D (batch orchestrator)
+### Added
 
 - **`engine.schema_inference`** — `detect_placeholders(template_text) -> list[FieldSchema]` recognizes 5 placeholder syntaxes: mustache `{{X}}`, single brace `{X}`, bracket `[X]`, chevron `<<X>>`, named-blank `__X__`, anonymous-blank `___`. Optional `enrich_with_llm(schemas, llm)` calls LLM per field to infer `field_type`, `format_hint`, `required` from surrounding context. `infer_template_schema(template_path, llm=...)` is the top-level entry point.
 - **`engine.hybrid_mapper`** — `map_hybrid(schemas, inferred_patterns, source_text, llm=None)` runs regex first via `apply_inferred`; the missing fields are batched into a single LLM call (when `llm` is supplied) with a focused prompt + dynamic JSON Schema. Output: `dict[str, MappingResult]` with `value`, `source ∈ {regex, llm, missing}`, `confidence ∈ [0,1]`, optional `notes`. Helper `summarize(results)` returns aggregate stats.
@@ -1223,7 +1250,7 @@ template-engine normalize --template template.docx --source-dir docs/ --output-d
 - **CLI `template-engine normalize`** — wires the full pipeline. Flags: `--template`, `--source-dir`, `--output-dir`, `--provider` (omit for regex-only), `--gold-doc` (repeatable), `--field-examples` (JSON file), `--report`, `--skip-diff`, `--max-concurrent`. Prints rich summary table by tier, writes `report.json`.
 - 55 new unit tests across schema_inference (19) + hybrid_mapper (12) + semantic_diff (12) + batch (12). Total: 116 → **172 passing**.
 
-### Added — Visual validation (legacy, to be deprecated in Wave E)
+### Added — Visual validation (legacy, to be deprecated in the consolidation milestone)
 
 - **Visual validation** — `engine.visual_validator.validate_visual()` compares a rendered `.docx` against a gold reference using a multi-modal LLM. Pipeline: LibreOffice headless (`.docx` → PDF) + `pdf2image` (PDF → PNG) + LLM call with structured schema. Returns `VisualValidationResult` with 0-1 score, categorized issues (alignment / spacing / typography / section_order / other), severity (low/medium/high), and rendered images for inspection.
 - **`GeminiVisionProvider`** — multi-modal provider in `engine.llm.gemini_vision`. Implements `VisualLLMProvider` Protocol. Reuses existing `[gemini]` extra (no new dep).
@@ -1234,8 +1261,8 @@ template-engine normalize --template template.docx --source-dir docs/ --output-d
 
 ### Changed
 
-- `__version__` bumped to `0.3.0a1` (alpha — Wave D + visual validator APIs may evolve before v0.3 stable).
-- Pipeline core continues to require **zero LibreOffice**. Only `visual_validator` legacy uses it; replacement (Wave F design dimension via direct multimodal upload) is in roadmap.
+- `__version__` bumped to `0.3.0a1` (alpha — the batch orchestrator + visual validator APIs may evolve before v0.3 stable).
+- Pipeline core continues to require **zero LibreOffice**. Only `visual_validator` legacy uses it; replacement (the conformity validator milestone design dimension via direct multimodal upload) is in roadmap.
 
 ## [0.2.1] - 2026-04-26
 

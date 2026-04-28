@@ -9,7 +9,7 @@ Vendor B differs from the Engeman pair on every dimension:
   ``Aprovado:`` / ``Data:`` / ``TITULO``.
 - Section taxonomy: ``PURPOSE``, ``SCOPE``, ``REFERENCES``,
   ``DEFINITIONS``, ``PROCEDURE``, ``ROLES AND RESPONSIBILITIES``,
-  ``REVISION HISTORY`` (English; not in the Wave L synonym table).
+  ``REVISION HISTORY`` (English; not in the rules engine synonym table).
 - Tables: ``# | Date | Description`` (revision history) and
   ``Activity | Owner`` (single Owner column, not duplicate).
 

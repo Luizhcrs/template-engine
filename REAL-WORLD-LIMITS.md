@@ -4,7 +4,7 @@ This document captures behavior that synthetic tests do not exercise but
 real-world inputs trigger. Each item ships with at least one regression
 test in `tests/`.
 
-## section_mapper (Wave L)
+## section_mapper
 
 ### Heading detector
 
@@ -100,7 +100,7 @@ substitutes the template header placeholders (`XXXX`, `Rev. 00`,
 metadata leaves the placeholder in place so a reviewer can spot the
 gap.
 
-### Wave M (LLM-driven, vendor-agnostic)
+### LLM-driven mapper (LLM-driven, vendor-agnostic)
 
 `map_sections_async(mode="llm", llm=provider)` runs ONE multimodal call (template rendered as PNG + structural JSON + source content) and returns a complete `MappingPlan`. Validated against:
 
@@ -108,7 +108,7 @@ gap.
 - 5 synthetic adversarial pairs (English corporate, ABNT academic, bilingual gov form, legal contract, mega-table).
 - 2 real-world public templates (UNIFAP POP — universidade federal; Corentocantins POP — regional nursing council).
 
-#### What Wave M does that rules-mode does not
+#### What LLM-driven mapper does that rules-mode does not
 
 - Detects placeholders by SHAPE, not by name (`XXXX` / `(TITULO)` / `[FOO]` / `{{X}}` / `___` / `<<TITULO>>` / `§§§§` / dotted leaders / label-with-leader compounds).
 - Fills body multi-placeholder paragraphs (parties block, address line, signature block) via `paragraph_rewrites` — full-paragraph replacement when ≥2 placeholders share a line.
@@ -119,7 +119,7 @@ gap.
 - Caches successful plans under `${XDG_CACHE_HOME:-~/.cache}/template-engine/plans/` keyed by sha256(template) + sha256(source) + prompt-version. Re-runs of the same pair pay 0 LLM calls.
 - Polymorphic source input: accepts `Path` / `str` / `bytes` / `BytesIO` / URL / existing `SourceStructure`.
 
-#### What Wave M still doesn't fully solve
+#### What LLM-driven mapper still doesn't fully solve
 
 - Mega-table body slots whose current text combines a numbered heading with a parenthesised hint (`1. OBJETIVO: (Descrição clara…)`) sometimes resist replacement. The LLM treats the heading prefix as protected and skips overwriting. Closing this requires either a dedicated retry pass focused on these cells or a sharper prompt directive.
 - Tokens caps (template JSON 30 000 chars / source JSON 60 000 chars) silently truncate very large pairs.
@@ -153,30 +153,30 @@ gap.
   layout (`XXXX` / `(TITULO)` / `Elaborado:` / `Aprovado:` / `Data:` /
   `Rev. 00`); other vendor templates need their own substitution map.
 
-## batch_orchestrator (Wave D)
+## batch_orchestrator
 
 - **Templates without explicit `{{X}}` placeholders**: use
   `engine.section_mapper.map_sections` instead. `normalize_batch` only
   handles placeholder templates.
 - **Templates with placeholders fragmented across multiple `<w:r>`
-  runs**: handled by the Wave I two-pass renderer (verified by 6
+  runs**: handled by the formats catalog two-pass renderer (verified by 6
   regression tests).
 - **Source extension collisions**: `doc1.docx` and `doc1.pdf` produce
   separate outputs (`doc1.docx.normalized.docx` and
-  `doc1.pdf.normalized.docx`). No silent overwrites since Wave K.
+  `doc1.pdf.normalized.docx`). No silent overwrites since v0.8 hardening.
 
-## conformity (Wave F)
+## conformity
 
 - **Visual dimension** uses synthetic-render via PIL + ascii_layout.
   This is a layout-density fingerprint, not pixel-perfect comparison.
   Pixel-perfect belongs to the `design` dimension.
 - **Design dimension** ships only the `ConformityVisualProvider`
   Protocol; concrete provider (Gemini File API, etc) is user-supplied.
-- **All-skipped runs are non-conformant** since Wave K. A report whose
+- **All-skipped runs are non-conformant** since v0.8 hardening. A report whose
   every dimension was skipped (typical of `local_only=True` with no
   LLM) can no longer return `is_conformant=True` by accident.
 
-## security (Wave G)
+## security
 
 - **PII patterns** are deliberate: only formatted CPF / CNPJ are
   matched. Bare 11-digit blocks (which would also match phone numbers)

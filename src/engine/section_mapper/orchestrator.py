@@ -1,4 +1,4 @@
-"""Section-mapping orchestrator (Wave L).
+"""Section-mapping orchestrator.
 
 End-to-end driver that wires the four section_mapper modules together:
 
@@ -273,7 +273,7 @@ async def map_sections_async(
 
     Explicit values:
 
-    - ``"rules"`` — Wave L rules pipeline only (PT-BR / Engeman style).
+    - ``"rules"`` — rules-mode pipeline only (PT-BR / Engeman style).
     - ``"llm"`` — single LLM call for vendor-agnostic mapping. Requires
       a provider.
     - ``"hybrid"`` — runs the rules pipeline first, then asks the LLM
@@ -380,7 +380,7 @@ async def _run_auto_mode(
     *,
     llm: LLMProvider | None,
 ) -> SectionMappingReport:
-    """Wave N — Slot-only pipeline.
+    """Slot pipeline — Slot-only pipeline.
 
     Profile every slot in the template, render the template as PNG
     pages, ask the LLM ``{slot_id: new_text}``, apply each fill in
@@ -457,7 +457,7 @@ async def _run_llm_mode(
     llm: LLMProvider | None,
     use_cache: bool = True,
 ) -> SectionMappingReport:
-    """Wave M LLM-driven path: profile both docs, ask the LLM for a
+    """LLM-driven path: profile both docs, ask the LLM for a
     complete substitution plan, render the plan onto the template.
 
     ``use_cache=True`` (default) checks the on-disk plan cache keyed by

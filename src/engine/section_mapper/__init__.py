@@ -1,7 +1,7 @@
-"""Section mapper (Wave L) — fill structural docx templates from source documents.
+"""Section mapper — fill structural docx templates from source documents.
 
-Companion subpackage to :mod:`engine.batch`. Wave D handled placeholder
-templates (``{{X}}`` style); Wave L handles **structural** templates that
+Companion subpackage to :mod:`engine.batch`. batch orchestrator handled placeholder
+templates (``{{X}}`` style); rules engine handles **structural** templates that
 ship with named-but-empty sections (``"1. OBJETIVO\\n\\n2. APLICAÇÃO..."``)
 and rely on heading hierarchy + tables instead of explicit tokens.
 

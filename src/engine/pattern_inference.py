@@ -11,7 +11,7 @@ Algorithm (3-tier shape detection):
 
    a. **Pre-defined shapes**: ISO date, doc code, CPF, CEP, UF, fullname, etc.
       Fast, well-tested, gives readable regex.
-   b. **grex-learned shape** (optional, Wave A v2): when no pre-defined shape fits,
+   b. **grex-learned shape** (optional, grex Tier 2): when no pre-defined shape fits,
       ``grex.RegExpBuilder`` learns a regex from the examples (digits→\\d, alternations).
       Much better than ``[^\\n]+`` for structured but unrecognized values.
    c. **Free-text fallback**: ``[^\\n]+`` when neither tier produces a valid match.

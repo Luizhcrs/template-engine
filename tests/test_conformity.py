@@ -1,4 +1,4 @@
-"""Tests for engine.conformity (Wave F)."""
+"""Tests for engine.conformity."""
 
 from __future__ import annotations
 
@@ -367,7 +367,7 @@ async def test_check_design_uses_stub_provider(docs):
 @pytest.mark.asyncio
 async def test_check_design_provider_error_emits_warning_failure(docs):
     """Provider error must NOT silently pass as score=1.0 — that would let a
-    transient network blip translate to "design conforms". Wave K #8.
+    transient network blip translate to "design conforms". hardening fix #8.
     """
     template, candidate = docs
 

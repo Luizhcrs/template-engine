@@ -8,7 +8,7 @@ class _ValidationLike(Protocol):
     """Structural shape used by :func:`calculate_confidence`.
 
     Decoupled from any concrete ``ValidationResult`` class so this module stays
-    independent after Wave E. Any object exposing these four counters works.
+    independent after the v0.3 consolidation. Any object exposing these four counters works.
     """
 
     critical_tokens_found: int

@@ -1,4 +1,4 @@
-"""ABNT NBR 6022 — formato de artigo cientifico (Wave H).
+"""ABNT NBR 6022 — formato de artigo cientifico.
 
 Spec: ABNT NBR 6022:2018 — Informacao e documentacao — Artigo em publicacao
 periodica tecnica e/ou cientifica — Apresentacao.

@@ -1,4 +1,4 @@
-"""Pre-defined document formats (Wave H).
+"""Pre-defined document formats.
 
 Ready-made schemas, field examples, gold docs, and conformity weights for
 common document standards. Use ``load_format(name)`` to get a :class:`Format`,

@@ -45,12 +45,12 @@ engine/
     ├── table_filler.py      fill_tables (header-set match + subheaders)
     ├── auto_tables.py       detect_default_specs_with_source (Histórico + Resp da fonte)
     ├── header_filler.py     extract_source_metadata + fill_template_header
-    ├── template_profiler.py profile_template (Wave M: cells + placeholders + headings)
-    ├── source_profiler.py   profile_source (Wave M: input polimórfico, body fallback)
-    ├── auto_mapper.py       build_mapping_plan (Wave M: LLM call + retry + checklist)
-    ├── auto_renderer.py     apply_mapping_plan (Wave M: header/body subs + cell_fills)
-    ├── template_renderer.py render_pages (Wave M: docx → PDF → PNG pra vision)
-    ├── plan_cache.py        load_plan / save_plan (Wave M: cache sha256)
+    ├── template_profiler.py profile_template (LLM-driven mapper: cells + placeholders + headings)
+    ├── source_profiler.py   profile_source (LLM-driven mapper: input polimórfico, body fallback)
+    ├── auto_mapper.py       build_mapping_plan (LLM-driven mapper: LLM call + retry + checklist)
+    ├── auto_renderer.py     apply_mapping_plan (LLM-driven mapper: header/body subs + cell_fills)
+    ├── template_renderer.py render_pages (LLM-driven mapper: docx → PDF → PNG pra vision)
+    ├── plan_cache.py        load_plan / save_plan (LLM-driven mapper: cache sha256)
     └── orchestrator.py      map_sections / map_sections_async + SectionMappingReport
 ```
 

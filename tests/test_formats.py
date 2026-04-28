@@ -1,4 +1,4 @@
-"""Tests for engine.formats (Wave H)."""
+"""Tests for engine.formats."""
 
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 """Generic template profiler — extracts structure from any ``.docx``
 template without vendor-specific heuristics.
 
-The Wave L pipeline relies on hardcoded rules (Engeman placeholder names,
+The rules engine pipeline relies on hardcoded rules (Engeman placeholder names,
 Brazilian-PT headings, canonical Histórico / Responsabilidade tables).
 That works for one vendor's templates; it does not generalise.
 
@@ -15,7 +15,7 @@ Generic detection rules:
 
   - Repeated character runs: ``XXXX``, ``0000``, ``XX/XX/XX``.
   - Parenthesised labels: ``(TITULO)``, ``(NOME)``.
-  - Square-bracket tokens: ``[FOO]``, ``[X]`` (also covers Wave D
+  - Square-bracket tokens: ``[FOO]``, ``[X]`` (also covers batch orchestrator
     ``{{X}}`` and ``___`` runs).
   - Empty-suffix labels: ``Label:`` followed by whitespace inside the
     same paragraph (``Elaborado:``, ``Aprovado:``, ``Data:``).

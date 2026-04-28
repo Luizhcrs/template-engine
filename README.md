@@ -97,7 +97,7 @@ Cost by tier (Gemini Flash, ~3K input tokens per LLM call):
 | With `semantic_diff` enabled | 2 | ~$0.0012 |
 | With `check_conformity(dimensions=[text, design])` | 4 | ~$0.0024 |
 
-## Section-mapper pipeline (Wave L)
+## Section-mapper pipeline
 
 For **structural** templates that ship with named-but-empty sections (industrial procedures, NR-12/13, ABNT-shaped academic) and rely on heading hierarchy + tables instead of `{{X}}` tokens, use `engine.section_mapper.map_sections`:
 
@@ -117,7 +117,7 @@ print(f"mapped {report.mapped_count} sections; {report.tables_filled} tables fil
 
 End-to-end on Engeman dados.docx with zero config (rules mode): 7/8 sections mapped, header populated (`IT.PRO.URE.387.0005`, `Rev. 01`, `Elaborado: ...`, `(PARTIDA DA ÁREA DE SÍNTESE)`), Histórico table extracted from source revisions, Responsabilidade table populated from `Compete à gerência` / `Compete aos supervisores` paragraphs.
 
-### Vendor-agnostic LLM mode (Wave M)
+### Vendor-agnostic LLM mode
 
 `map_sections_async(..., mode="llm", llm=provider)` runs a single multimodal LLM call that handles ANY template + source pair. No hardcoded vendor heuristics. Pipeline:
 
@@ -171,7 +171,7 @@ template-engine map-sections \
     --provider openai --model gpt-4o
 ```
 
-See [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) for the complete Wave L (rules) + Wave M (LLM, multimodal vision, cell-level fills, retry, cache, polymorphic source, CLI) reference.
+See [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) for the complete reference covering rules mode, LLM-driven mapper (multimodal vision, cell-level fills, retry, cache, polymorphic source, CLI) and the unified Slot pipeline.
 
 ## Typical batch run
 
@@ -337,11 +337,11 @@ pip install -e ".[dev]"
 ruff check . && ruff format --check . && mypy src/engine && pytest
 ```
 
-189 tests across providers, pattern inference (Wave A), batch orchestrator (Wave D), conformity validator (Wave F), security primitives (Wave G).
+363 tests across providers, pattern inference, batch orchestrator, conformity validator, section mapper (rules + LLM + Slot pipeline), security primitives.
 
 ## Roadmap
 
-[ROADMAP.md](ROADMAP.md) — Wave A/D/E/F/G/H shipped on v0.6.
+[ROADMAP.md](ROADMAP.md) — full milestone history (v0.1 → v0.11) and forward plan.
 
 ## Contributing
 

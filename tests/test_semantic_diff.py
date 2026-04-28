@@ -70,7 +70,7 @@ async def test_diff_texts_returns_empty_when_no_discrepancies():
 @pytest.mark.asyncio
 async def test_diff_texts_handles_llm_failure_emits_warning():
     """Provider error must surface as a synthetic warning discrepancy, not as
-    an empty diff. Wave K #8 — silent passes on transient failures hide bugs.
+    an empty diff. hardening fix #8 — silent passes on transient failures hide bugs.
     """
 
     class _BoomLLM:

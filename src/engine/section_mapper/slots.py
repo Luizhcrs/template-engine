@@ -1,6 +1,6 @@
-"""Wave N — unified ``Slot`` abstraction.
+"""Slot pipeline — unified ``Slot`` abstraction.
 
-The Wave M pipeline split fill operations across five fields
+The LLM-driven mapper pipeline split fill operations across five fields
 (``header_substitutions``, ``section_content``, ``table_data``,
 ``paragraph_rewrites``, ``cell_fills``). Each had its own renderer
 path. Coordinating them was brittle: source content sometimes got
@@ -8,7 +8,7 @@ appended next to template instructions instead of replacing them
 (UNIFAP), mega-table cells with imperative hints sometimes resisted
 overwrite (Corentocantins).
 
-Wave N collapses every fillable place in a docx into one shape: a
+Slot pipeline collapses every fillable place in a docx into one shape: a
 :class:`Slot`. The LLM returns ``{slot_id: new_text}``; the renderer
 substitutes each slot's text in place. No cloning, no inserting, no
 strategy decisions inside the LLM. The template stays sacred —

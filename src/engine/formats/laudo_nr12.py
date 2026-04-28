@@ -1,4 +1,4 @@
-"""NR-12 - Laudo de seguranca em maquinas e equipamentos (Wave H).
+"""NR-12 - Laudo de seguranca em maquinas e equipamentos.
 
 Spec: Norma Regulamentadora 12 (Portaria MTE) - Seguranca no trabalho em
 maquinas e equipamentos.

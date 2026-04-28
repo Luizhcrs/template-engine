@@ -1,4 +1,4 @@
-"""Visual dimension — text-rendered ascii_layout fingerprint compare (Wave F).
+"""Visual dimension — text-rendered ascii_layout fingerprint compare.
 
 Strategy: avoid LibreOffice. Take the extracted text of each docx, render it
 into a synthetic PNG via PIL (monospace font, fixed canvas), feed both into the

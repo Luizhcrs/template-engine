@@ -14,7 +14,7 @@ Output is a deterministic per-field record so callers can:
 - Send LLM-filled rows for human spot-check.
 - Flag missing rows for manual completion.
 
-This module is the heart of Wave D's "400 docs in / 380 auto-resolved out" goal.
+This module is the heart of batch orchestrator's "400 docs in / 380 auto-resolved out" goal.
 """
 
 from __future__ import annotations

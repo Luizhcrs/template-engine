@@ -1,5 +1,5 @@
 ---
-title: Section mapper (Wave L + M)
+title: Section mapper
 ---
 
 # Section mapper
@@ -8,8 +8,8 @@ Companheiro do [`normalize_batch`][batch] para templates **estruturais** que vê
 
 Dois modos lado-a-lado:
 
-- **Wave L (`mode="rules"`)** — determinístico, grátis, zero LLM. Heurísticas hardcoded PT-BR/Engeman. Paridade DOcStream no primeiro par real Engeman.
-- **Wave M (`mode="llm"` / `"hybrid"`)** — vendor-agnostic. UMA chamada multimodal LLM (template renderizado em PNG + JSON estrutural + content fonte) retorna `MappingPlan` completo cobrindo header subs, section content, paragraph rewrites, table data, e cell-level fills. Validado em:
+- **rules engine (`mode="rules"`)** — determinístico, grátis, zero LLM. Heurísticas hardcoded PT-BR/Engeman. Paridade DOcStream no primeiro par real Engeman.
+- **LLM-driven mapper (`mode="llm"` / `"hybrid"`)** — vendor-agnostic. UMA chamada multimodal LLM (template renderizado em PNG + JSON estrutural + content fonte) retorna `MappingPlan` completo cobrindo header subs, section content, paragraph rewrites, table data, e cell-level fills. Validado em:
   - Par Engeman original (PT-BR industrial).
   - 5 pares sintéticos adversariais (English corporate, ABNT acadêmico, gov form bilíngue, contrato legal, mega-table layout).
   - 2 templates reais baixados de sites públicos (UNIFAP POP — universidade federal; Corentocantins POP — conselho regional de enfermagem).
@@ -284,7 +284,7 @@ A chamada LLM retorna `MappingPlan` cobrindo todo placeholder detectado
 (header + body), todo heading do template e toda tabela vazia. Falhas
 caem em plan vazio pra caller encadear retry com rules.
 
-### Validação cross-vendor (Wave M)
+### Validação cross-vendor
 
 `tests/vendor_b/` traz template corporativo inglês sintético que
 difere do par Engeman em toda dimensão:
@@ -305,7 +305,7 @@ fixtures com:
 python scripts/build_vendor_b_fixtures.py
 ```
 
-## Modos de operação (Wave M)
+## Modos de operação
 
 | Modo | Quando | Custo (Gemini Flash 2.5) |
 | --- | --- | --- |
@@ -335,7 +335,7 @@ asyncio.run(main())
 
 `mode=None` (default) auto-pick: provider→llm, sem→rules.
 
-### Multimodal vision (Wave M)
+### Multimodal vision
 
 LLM call recebe PNG renderizado do template (até 3 pages) → vê células merged, geometria de tabela, logos. Pipeline:
 
@@ -345,7 +345,7 @@ template.docx → docx2pdf (Word COM) → PDF → PyMuPDF → PNG → base64 →
 
 `engine.section_mapper.template_renderer.render_pages(docx_path, max_pages=3)` retorna `list[PageImage]`. `docx2pdf` + `pymupdf` opcionais — quando faltam, fallback pra text-only. Install: `pip install docx2pdf pymupdf`.
 
-### Cell-level fills (Wave M)
+### Cell-level fills
 
 Mega-tables (Corentocantins) tem documento inteiro como tabela. `TemplateCell(table_index, row, col, text, is_fillable)` profile cada célula com heurística de fillability. `MappingPlan.cell_fills` endereça cada célula via coordenadas. `_apply_cell_fills` mirra fill em colunas merged (mesmo texto em N cols → preenche N).
 
@@ -414,7 +414,7 @@ Veja [REAL-WORLD-LIMITS.md][limits] pra lista completa. Honest call-outs:
 
 [limits]: https://github.com/Luizhcrs/template-engine/blob/main/REAL-WORLD-LIMITS.md
 
-### Wave L (rules)
+### rules mode
 
 - PDFs escaneados não passam por OCR. Use `.docx` quando possível.
 - PDFs multi-coluna interleavam — converta pra single-column.
@@ -422,7 +422,7 @@ Veja [REAL-WORLD-LIMITS.md][limits] pra lista completa. Honest call-outs:
 - Synonym table PT-BR only. Instale `[embeddings]` ou use LLM.
 - Sub-seção (`3.2.1.`) preservada como text prefix.
 
-### Wave M (LLM)
+### LLM mode
 
 - **Determinismo perdido** — gpt-4o varia entre runs. Cache mitiga em re-runs.
 - **Custo** — ~$0.05/doc gpt-4o, ~$0.001 Gemini Flash. Cache torna follow-up grátis.

@@ -1,4 +1,4 @@
-"""Text dimension — wraps :mod:`engine.semantic_diff` (Wave F).
+"""Text dimension — wraps :mod:`engine.semantic_diff`.
 
 Calls the existing semantic_diff to surface ``missing_in_output`` /
 ``value_mismatch`` / ``extra_in_output`` discrepancies, then converts them into

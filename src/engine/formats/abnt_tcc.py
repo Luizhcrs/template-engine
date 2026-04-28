@@ -1,4 +1,4 @@
-"""ABNT NBR 14724 - TCC / dissertacao / tese (Wave H).
+"""ABNT NBR 14724 - TCC / dissertacao / tese.
 
 Spec: ABNT NBR 14724:2024 - Informacao e documentacao - Trabalhos academicos -
 Apresentacao.

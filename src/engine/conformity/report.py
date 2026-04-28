@@ -1,4 +1,4 @@
-"""Conformity report dataclasses (Wave F).
+"""Conformity report dataclasses.
 
 A :class:`ConformityReport` aggregates :class:`DimensionResult` outcomes from up
 to 5 dimensions (text / structural / visual / design / technical) into a single

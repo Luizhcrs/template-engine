@@ -1,4 +1,4 @@
-"""Technical dimension — required fields + format validators + zero-orphan-placeholder (Wave F).
+"""Technical dimension — required fields + format validators + zero-orphan-placeholder.
 
 Pure deterministic checks, **zero LLM**. Inputs:
 

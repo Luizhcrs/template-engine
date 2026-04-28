@@ -1,4 +1,4 @@
-"""Structural dimension — counts headings/tables/sections/lists in docx (Wave F).
+"""Structural dimension — counts headings/tables/sections/lists in docx.
 
 Pure ``python-docx`` parsing, **zero LLM**. Compares the structural fingerprint
 of two ``.docx`` documents and flags mismatches:

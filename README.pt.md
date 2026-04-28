@@ -95,7 +95,7 @@ Custo por tier (Gemini Flash, ~3K tokens input por LLM call):
 | Com `semantic_diff` ligado | 2 | ~$0.0012 |
 | Com `check_conformity(dimensions=[text, design])` | 4 | ~$0.0024 |
 
-## Pipeline section-mapper (Wave L)
+## Pipeline section-mapper
 
 Para templates **estruturais** que vêm com seções nomeadas porém vazias (procedimentos industriais, NR-12/13, acadêmico ABNT) e dependem de hierarquia de heading + tabelas em vez de tokens `{{X}}`, use `engine.section_mapper.map_sections`:
 
@@ -115,7 +115,7 @@ print(f"sections mapeadas: {report.mapped_count}; tabelas: {report.tables_filled
 
 End-to-end em Engeman dados.docx com zero config (rules mode): 7/8 sections mapeadas, header preenchido (`IT.PRO.URE.387.0005`, `Rev. 01`, `Elaborado: ...`, `(PARTIDA DA ÁREA DE SÍNTESE)`), tabela Histórico extraída das revisões da fonte, tabela Responsabilidade populada dos parágrafos `Compete à gerência` / `Compete aos supervisores`.
 
-### Modo LLM vendor-agnóstico (Wave M)
+### Modo LLM vendor-agnóstico
 
 `map_sections_async(..., mode="llm", llm=provider)` faz UMA chamada multimodal que cobre QUALQUER par template+source. Sem heurística vendor hardcoded. Pipeline:
 
@@ -169,7 +169,7 @@ template-engine map-sections \
     --provider openai --model gpt-4o
 ```
 
-Veja [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) pra reference completa Wave L (rules) + Wave M (LLM, multimodal vision, cell-level fills, retry, cache, source polimórfico, CLI).
+Veja [Section mapper](https://luizhcrs.github.io/template-engine/concepts/section_mapper/) pra reference completa cobrindo rules mode, LLM-driven mapper (multimodal vision, cell-level fills, retry, cache, source polimórfico, CLI) e Slot pipeline unificado.
 
 ## Rodada típica
 
@@ -335,11 +335,11 @@ pip install -e ".[dev]"
 ruff check . && ruff format --check . && mypy src/engine && pytest
 ```
 
-189 tests — providers, pattern inference (Wave A), batch orchestrator (Wave D), conformity validator (Wave F), primitivas de segurança (Wave G).
+363 tests — providers, pattern inference, batch orchestrator, conformity validator, section mapper (rules + LLM + Slot pipeline), primitivas de segurança.
 
 ## Roadmap
 
-[ROADMAP.md](ROADMAP.md) — Wave A/D/E/F/G/H shipped na v0.6.
+[ROADMAP.md](ROADMAP.md) — histórico completo de milestones (v0.1 → v0.11) e plano futuro.
 
 ## Contribuir
 

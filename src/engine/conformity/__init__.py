@@ -1,4 +1,4 @@
-"""Conformity validator (Wave F).
+"""Conformity validator.
 
 LLM-as-judge multi-dimensional check: does the candidate document conform to
 the template's standard? Five dimensions:

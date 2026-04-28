@@ -1,4 +1,4 @@
-"""Procuracao simples - formato generico (Wave I).
+"""Procuracao simples - formato generico.
 
 Documento por instrumento particular, geralmente exigindo reconhecimento de
 firma. Use como base; estenda os schemas pra clausulas especificas (poderes

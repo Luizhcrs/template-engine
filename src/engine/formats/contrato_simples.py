@@ -1,4 +1,4 @@
-"""Contrato bilateral simples (Wave H).
+"""Contrato bilateral simples.
 
 Formato generico de contrato bilateral entre pessoa juridica contratante e
 pessoa juridica contratada. Cobre objeto + valor + vigencia + foro.

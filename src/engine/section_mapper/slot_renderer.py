@@ -1,4 +1,4 @@
-"""Wave N — apply slot fills to a docx in place.
+"""Slot pipeline — apply slot fills to a docx in place.
 
 Walks the inventory + dict of fills and writes each new text at the
 slot's exact address. Never clones, inserts, or removes structure —

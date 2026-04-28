@@ -1,4 +1,4 @@
-"""Ata de Reuniao - formato generico (Wave I)."""
+"""Ata de Reuniao - formato generico."""
 
 from __future__ import annotations
 

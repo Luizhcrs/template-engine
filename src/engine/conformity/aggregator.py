@@ -1,4 +1,4 @@
-"""Conformity aggregator — top-level :func:`check_conformity` (Wave F).
+"""Conformity aggregator — top-level :func:`check_conformity`.
 
 Drives all 5 dimensions, collects per-dimension scores, computes a weighted
 overall score, and returns a :class:`ConformityReport` with the pass/fail

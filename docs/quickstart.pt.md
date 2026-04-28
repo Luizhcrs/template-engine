@@ -91,7 +91,7 @@ template-engine normalize \
   --report report.json
 ```
 
-## Formatos bundled (Wave H)
+## Formatos bundled
 
 5 formatos prontos: `abnt_artigo`, `abnt_tcc`, `abnt_referencia`, `laudo_nr12`, `contrato_simples`. Cada um traz schemas + gold docs + field examples + conformity weights tunados.
 

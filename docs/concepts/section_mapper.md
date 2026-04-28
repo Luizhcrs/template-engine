@@ -1,5 +1,5 @@
 ---
-title: Section mapper (Wave L + M)
+title: Section mapper
 ---
 
 # Section mapper
@@ -8,8 +8,8 @@ Companion to [`normalize_batch`][batch] for **structural** templates that ship w
 
 Two modes ship side-by-side:
 
-- **Wave L (`mode="rules"`)** — deterministic, free, zero LLM calls. Hardcoded heuristics tuned to Brazilian-PT industrial procedures (Engeman, NR-12 / NR-13). DOcStream parity on the first real-world Engeman pair.
-- **Wave M (`mode="llm"` / `"hybrid"`)** — vendor-agnostic. ONE multimodal LLM call (template rendered as PNG + structural JSON + source content) returns a complete `MappingPlan` covering header substitutions, section content, paragraph rewrites, table data, and cell-level fills. Validated against:
+- **rules engine (`mode="rules"`)** — deterministic, free, zero LLM calls. Hardcoded heuristics tuned to Brazilian-PT industrial procedures (Engeman, NR-12 / NR-13). DOcStream parity on the first real-world Engeman pair.
+- **LLM-driven mapper (`mode="llm"` / `"hybrid"`)** — vendor-agnostic. ONE multimodal LLM call (template rendered as PNG + structural JSON + source content) returns a complete `MappingPlan` covering header substitutions, section content, paragraph rewrites, table data, and cell-level fills. Validated against:
   - The original Engeman pair (PT-BR industrial).
   - Five synthetic adversarial pairs (English corporate, ABNT academic, bilingual gov form, legal contract, mega-table layout).
   - Two real-world templates downloaded from public Brazilian institution sites (UNIFAP POP — universidade federal; Corentocantins POP — regional nursing council).
@@ -285,7 +285,7 @@ placeholder (header + body), every template heading, and every empty
 table. Failure paths fall back to an empty plan so callers can chain a
 rules-mode retry.
 
-### Cross-vendor validation (Wave M)
+### Cross-vendor validation
 
 Five fixture pairs and two real-world public templates exercise the
 LLM mapper:
@@ -322,7 +322,7 @@ python scripts/run_adversarial_llm.py
 python scripts/run_real_world_llm.py
 ```
 
-### Multimodal vision (Wave M)
+### Multimodal vision
 
 The LLM call attaches PNG renders of the template (up to 3 pages) so
 the model can SEE merged cells, table geometry, embedded logos.
@@ -351,13 +351,13 @@ mode (logged at info level). Install via:
 pip install docx2pdf pymupdf
 ```
 
-### Cell-level fills (Wave M)
+### Cell-level fills
 
 Mega-table layouts (Corentocantins-style POPs) carry the entire
 document as one big table. Heading cells and body slot cells live in
-the same table grid. The Wave L renderer doesn't see inside cells.
+the same table grid. The rules engine renderer doesn't see inside cells.
 
-Wave M adds:
+LLM-driven mapper adds:
 
 - `TemplateCell(table_index, row, col, text, is_fillable)` — every
   cell of every body table is profiled with a fillability heuristic
@@ -445,7 +445,7 @@ See [REAL-WORLD-LIMITS.md][limits] for the full list. Honest call-outs:
 
 [limits]: https://github.com/Luizhcrs/template-engine/blob/main/REAL-WORLD-LIMITS.md
 
-### Wave L (rules mode)
+### rules engine (rules mode)
 
 - Scanned PDFs are not OCR'd. Use `.docx` source whenever possible.
 - Multi-column PDFs interleave columns at extraction time; convert to single-column first.
@@ -453,7 +453,7 @@ See [REAL-WORLD-LIMITS.md][limits] for the full list. Honest call-outs:
 - Synonym table is Brazilian-Portuguese specific. Install the `[embeddings]` extra for cross-language matching, or supply an LLM provider for the long tail.
 - Sub-section hierarchy (`3.2.1.`) is preserved as text prefix, not as nested heading anchors.
 
-### Wave M (LLM mode)
+### LLM-driven mapper (LLM mode)
 
 - **Determinism lost** — gpt-4o varies slightly across runs. The plan cache mitigates this for repeated pairs but not for first runs.
 - **Cost** — ~$0.05/doc with gpt-4o, ~$0.001/doc with Gemini Flash 2.5. Cache makes follow-up runs free.

@@ -1,4 +1,4 @@
-"""Design dimension — multimodal LLM compare of full documents (Wave F).
+"""Design dimension — multimodal LLM compare of full documents.
 
 Asks a multi-modal provider (Gemini File API, Anthropic Files, OpenAI Files,
 etc) to compare two ``.docx`` files end-to-end on **design conformity**: fonts,
@@ -11,7 +11,7 @@ user code). When no provider is supplied, the dimension is skipped gracefully.
 
 Why a new Protocol (instead of reusing the legacy ``VisualLLMProvider``):
 
-- Wave E removed the LibreOffice-coupled VisualLLMProvider.
+- v0.3 consolidation removed the LibreOffice-coupled VisualLLMProvider.
 - This Protocol takes ``(template_path, candidate_path)`` directly, no
   pre-rendered images, no LO. Providers handle the upload via their own
   file API.

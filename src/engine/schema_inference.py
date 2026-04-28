@@ -17,7 +17,7 @@ text. When an :class:`engine.llm.base.LLMProvider` is supplied, the schema is
 enriched with an inferred ``type`` and ``format_hint`` based on the surrounding
 context.
 
-Used by Wave D (orchestrator) to convert "1 template" into "JSON schema of fields
+Used by the batch orchestrator to convert "1 template" into "JSON schema of fields
 to extract per source doc" automatically.
 """
 

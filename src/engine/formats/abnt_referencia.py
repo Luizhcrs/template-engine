@@ -1,4 +1,4 @@
-"""ABNT NBR 6023 - Referencias bibliograficas (Wave H).
+"""ABNT NBR 6023 - Referencias bibliograficas.
 
 Spec: ABNT NBR 6023:2018 - Informacao e documentacao - Referencias - Elaboracao.
 

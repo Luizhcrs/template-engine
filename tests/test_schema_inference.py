@@ -16,7 +16,7 @@ from engine.schema_inference import (
 class _StubLLM:
     """Stub LLMProvider that returns the full ``responses`` dict in one call.
 
-    Wave K #9 batched ``enrich_with_llm`` into a single LLM call returning a
+    hardening fix #9 batched ``enrich_with_llm`` into a single LLM call returning a
     dict keyed by every field name. Tests now feed that shape verbatim.
     """
 

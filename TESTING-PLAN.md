@@ -12,7 +12,7 @@ release process can rely on.
 
 ## Suite 1 — Renderer stress (fragmented runs)
 
-**Why.** Wave I fixed token-spans-runs in synthetic tests. Word documents in
+**Why.** formats catalog fixed token-spans-runs in synthetic tests. Word documents in
 the wild produce far weirder fragmentation: spell-check splits, language
 markers, comment ranges, change-tracking, smart-quotes. The two-pass renderer
 must hold up against samples we did not write.
@@ -267,7 +267,7 @@ silently ignored.
 
 | Suite | Priority | Why |
 |-------|----------|-----|
-| 1. Renderer stress | **P0** | Wave I fix needs to hold up; this is the project's most-real bug area |
+| 1. Renderer stress | **P0** | formats catalog fix needs to hold up; this is the project's most-real bug area |
 | 5. Security adversarial | **P0** | Security primitives are a core differentiator; they must withstand red-team |
 | 4. Conformity stress | **P1** | Validates the user-facing verdict isn't fragile |
 | 3. Batch scale | **P1** | Validates production throughput claim |

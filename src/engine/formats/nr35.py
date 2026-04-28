@@ -1,4 +1,4 @@
-"""NR-35 - Permissao de Trabalho em Altura (Wave I).
+"""NR-35 - Permissao de Trabalho em Altura.
 
 Spec: Norma Regulamentadora 35 (Portaria MTE) - Trabalho em altura.
 

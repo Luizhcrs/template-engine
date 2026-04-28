@@ -3,7 +3,7 @@
 Industrial templates commonly leave tables intentionally empty for the
 caller to fill: a *Histórico* table (``Rev. | Data | Alteração``), an
 *Atividades* table (``Atividades | Responsabilidade | Responsabilidade``),
-etc. The Wave D renderer ignored these; this module addresses them.
+etc. The batch orchestrator renderer ignored these; this module addresses them.
 
 Strategy: header-driven matching.
 

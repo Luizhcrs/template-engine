@@ -5,7 +5,7 @@ single batched LLM call that returns a complete substitution plan for
 the whole document — header placeholders, section content, table data,
 in one round trip.
 
-This is the Wave M generalisation of the Wave L rules-based pipeline:
+This is the LLM-driven mapper generalisation of the rules-mode-based pipeline:
 the LLM replaces every hardcoded vendor heuristic (Engeman placeholder
 names, Brazilian-PT synonym table, canonical Histórico /
 Responsabilidade extractors). The same code now handles any template +
