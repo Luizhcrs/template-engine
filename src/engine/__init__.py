@@ -89,7 +89,7 @@ from engine.semantic_diff import (
     filter_by_severity,
 )
 
-__version__ = "0.11.3"
+__version__ = "0.11.4"
 
 __all__ = [
     "AuditLog",

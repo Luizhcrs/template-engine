@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.4] - 2026-04-28
+
+Anchor table-cell slot context with the column header so the LLM
+stops placing data in the wrong column.
+
+### Fixed
+
+- `engine.section_mapper.slot_profiler` — for table-cell slots the
+  context string now starts with `column="<header_text>" | …`. Two
+  empty cells in the same row used to produce IDENTICAL contexts
+  (just the row siblings) so the LLM had no signal for which column
+  was which. UNIFAP regression: phone numbers landed in the e-mail
+  column, names in the phone column, dates scattered randomly across
+  Activity/Resp/Tempo.
+
+  Header row (row 0) cells do NOT receive the column anchor — they
+  ARE the header, so a self-reference would just repeat their text.
+
+- `engine.section_mapper.slot_filler` — prompt now treats the
+  `column="…"` prefix as a hard constraint. Phone numbers must go in
+  Telefone columns, emails in e-mail columns, dates in Data columns,
+  names in Nome columns. If the source has no value matching the
+  column header, the LLM is told to OMIT the slot. Row-index columns
+  (`Nº`, `#`, `Item`) must carry distinct incrementing integers.
+
+### Impact (UNIFAP POP, real-world fixture)
+
+| Table | Cell | Before | After |
+|-------|------|--------|-------|
+| LISTA DE CONTATOS row 1 | (Telefone, e-mail) | `Maria Lopes \| diplan@unifap.br` | `(96) 3213-1010 \| diplan@unifap.br` |
+| Activity row 1 | (Atividade, Resp, Tempo) | `1.0 \| 15/03/2023 \| Maria Lopes` | `Setor identifica... \| Setor \| 1 dia` |
+| Nome/Setor/Função row 2 | all 3 columns | `15/03/2023 \| 15/03/2023 \| 15/03/2023` | `Maria Lopes \| DIPLAN \| Chefe de Divisão` |
+
+### Added
+
+- `tests/test_slot_profiler.py::test_profile_slots_table_cell_context_includes_column_header`
+  — regression test asserting two empty cells in the same row receive
+  distinct column anchors.
+
 ## [0.11.3] - 2026-04-28
 
 Fix profiler over-flagging empty paragraphs as fillable slots.

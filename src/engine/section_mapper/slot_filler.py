@@ -96,6 +96,17 @@ Rules:
   belongs there based on the ``context`` snippet.
 - Never repeat the slot's own context or surrounding template text in
   the new_text — write only the replacement value.
+- For ``table_cell`` slots, the ``context`` may start with
+  ``column="<header>"``. THIS IS A HARD CONSTRAINT — the ``new_text``
+  must be a value that semantically matches that column header. Place
+  phone numbers in a Telefone/Phone column, e-mails in an e-mail
+  column, dates in a Data/Date column, names in a Nome/Name column.
+  Do NOT put data in the wrong column. If the source has no value
+  matching the column header, OMIT the slot.
+- For row-index columns (``column="Nº"``, ``column="#"``,
+  ``column="Item"`` and similar), each filled body row must carry a
+  DISTINCT incrementing integer (1, 2, 3, ...). Never repeat a value
+  across rows.
 
 SLOTS (JSON array of fillable slots):
 {slots_json}

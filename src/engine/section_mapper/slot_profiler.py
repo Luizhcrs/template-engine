@@ -140,6 +140,7 @@ def profile_slots(template_path: Path) -> SlotInventory:
     # Dedupe by the underlying XML element identity so the LLM sees one
     # logical slot per merged group instead of 8 of the same cell.
     for ti, table in enumerate(doc.tables):
+        header_texts = _table_header_texts(table)
         for ri, row in enumerate(table.rows):
             seen_tc_ids: set[int] = set()
             for ci, cell in enumerate(row.cells):
@@ -160,7 +161,7 @@ def profile_slots(template_path: Path) -> SlotInventory:
                         ),
                         current_text=text,
                         kind=kind,
-                        context=_row_context(row, ci),
+                        context=_cell_context(row, ci, header_texts, ri),
                         is_fillable=fillable,
                     )
                 )
@@ -241,13 +242,49 @@ def _neighbouring_paragraph(paragraphs: list, idx: int) -> str:  # type: ignore[
     return ""
 
 
-def _row_context(row, current_col: int) -> str:  # type: ignore[no-untyped-def]
-    """Return the texts of the OTHER cells in the same row, joined.
+def _table_header_texts(table) -> list[str]:  # type: ignore[no-untyped-def]
+    """Return row 0's cell texts (deduped by underlying ``<w:tc>``) so
+    column-positional lookups skip merged duplicates.
 
-    For mega-table layouts this gives the LLM the heading cell
-    alongside the body slot it's deciding on.
+    Used to anchor each fillable cell's context with its column header.
+    Without this anchor, two empty cells in the same row look identical
+    to the LLM (same row siblings, no column signal) and content lands
+    in the wrong column.
+    """
+    rows = list(table.rows)
+    if not rows:
+        return []
+    header: list[str] = []
+    seen: set[int] = set()
+    for cell in rows[0].cells:
+        tc_id = id(cell._tc)
+        if tc_id in seen:
+            header.append(header[-1] if header else "")
+            continue
+        seen.add(tc_id)
+        header.append(cell.text.strip()[:60])
+    return header
+
+
+def _cell_context(
+    row,  # type: ignore[no-untyped-def]
+    current_col: int,
+    header_texts: list[str],
+    current_row: int,
+) -> str:
+    """Build the per-cell context string sent to the LLM.
+
+    Layout: ``column="<header>" | siblings: <row siblings joined>``.
+    Header omitted for the header row itself (row 0) to avoid feeding
+    the LLM a self-referential anchor. Row siblings preserve the
+    historical mega-table behaviour (LLM seeing heading cell while
+    deciding the body slot in the same row).
     """
     parts: list[str] = []
+    if current_row != 0 and current_col < len(header_texts):
+        col_header = header_texts[current_col]
+        if col_header:
+            parts.append(f'column="{col_header}"')
     for ci, cell in enumerate(row.cells):
         if ci == current_col:
             continue

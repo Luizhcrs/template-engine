@@ -106,3 +106,44 @@ def test_empty_after_body_is_not_fillable() -> None:
 def test_empty_at_top_of_doc_is_not_fillable() -> None:
     paras = _build(["", "", "OBJETIVO GERAL"])
     assert _empty_idxs_under_headings(paras) == set()
+
+
+# --- table cell context anchors column header --------------------------------
+
+
+def test_profile_slots_table_cell_context_includes_column_header(
+    tmp_path,  # type: ignore[no-untyped-def]
+) -> None:
+    """UNIFAP regression: two empty cells in the same row must get
+    DISTINCT contexts so the LLM can tell which column it's filling."""
+    from docx import Document
+
+    from engine.section_mapper.slot_profiler import profile_slots
+
+    doc = Document()
+    table = doc.add_table(rows=2, cols=4)
+    table.rows[0].cells[0].text = "Nº"
+    table.rows[0].cells[1].text = "Nome"
+    table.rows[0].cells[2].text = "Telefone"
+    table.rows[0].cells[3].text = "e-mail"
+    table.rows[1].cells[0].text = "1"
+    # row 1, columns 1-3 left empty (fillable slots)
+
+    template_path = tmp_path / "two_col_table.docx"
+    doc.save(str(template_path))
+
+    inv = profile_slots(template_path)
+    by_id = {s.id: s for s in inv.slots}
+
+    # Header row cells must NOT carry a column anchor (they ARE the
+    # header — a self-reference would just repeat their text). They
+    # still see their row siblings.
+    assert not by_id["cell_t0_r0_c0"].context.startswith("column=")
+
+    # Body row empty cells must carry distinct column anchors.
+    assert by_id["cell_t0_r1_c1"].context.startswith('column="Nome"')
+    assert by_id["cell_t0_r1_c2"].context.startswith('column="Telefone"')
+    assert by_id["cell_t0_r1_c3"].context.startswith('column="e-mail"')
+
+    # Row siblings still appear after the column anchor.
+    assert "1" in by_id["cell_t0_r1_c1"].context
