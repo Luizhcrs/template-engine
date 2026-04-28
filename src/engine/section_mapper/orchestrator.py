@@ -27,6 +27,7 @@ before shipping the rendered docx.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
@@ -387,11 +388,24 @@ async def _run_auto_mode(
     place. Template structure is preserved verbatim — only slot
     contents change.
     """
+    from engine.section_mapper.record_aligner import (
+        TableInventory,
+        TableRow,
+        align_records_to_rows,
+    )
+    from engine.section_mapper.record_extractor import extract_records
+    from engine.section_mapper.schemas.detector import detect_table_schema
     from engine.section_mapper.slot_filler import fill_slots
-    from engine.section_mapper.slot_profiler import profile_slots
+    from engine.section_mapper.slot_profiler import (
+        _is_vmerge_continuation,
+        _iter_row_tcs,
+        _tc_text,
+        profile_slots,
+    )
     from engine.section_mapper.slot_renderer import apply_slot_fills
     from engine.section_mapper.slot_reviewer import review_slots
     from engine.section_mapper.source_profiler import profile_source
+    from engine.section_mapper.typed_fill import TypedFillRequest, apply_typed_fills
 
     if llm is None:
         raise ValueError("mode='auto' requires an llm provider")
@@ -408,15 +422,142 @@ async def _run_auto_mode(
     except Exception as exc:
         log.info("section_mapper.auto_mode.render_skipped", error=str(exc))
 
+    # ---- schema-driven table fill (Phase 1-3) ----------------------------
+    #
+    # Walk every docx table once: detect a known TableSchema from row 0
+    # headers, build a TableInventory describing each row's vmerge +
+    # fillable cells, ask the LLM to extract records matching the
+    # schema from the source, align records to rows deterministically,
+    # write each typed cell. Tables WITHOUT a matched schema fall
+    # through to the legacy slot pipeline so we keep coverage of body
+    # paragraphs and one-off layouts.
+    schema_typed_requests: list[TypedFillRequest] = []
+    schema_covered_table_indices: set[int] = set()
+    schema_covered_slot_ids: set[str] = set()
+    try:
+        from docx import Document
+        from docx.oxml.ns import qn
+
+        doc = Document(str(template_path))
+        source_text_for_extraction = json.dumps(source_struct.to_dict(), ensure_ascii=False)
+
+        for ti, table in enumerate(doc.tables):
+            tr_elements = table._tbl.findall(qn("w:tr"))
+            if not tr_elements:
+                continue
+            header_cells = _iter_row_tcs(tr_elements[0])
+            header_texts = [_tc_text(tc).strip() for tc in header_cells]
+            schema = detect_table_schema(header_texts)
+            if schema is None:
+                continue
+
+            # Build TableInventory describing every row's structural
+            # shape — vmerge + per-cell fillable flags VISUAL-COLUMN
+            # aligned. Each entry of cell_fillable corresponds to ONE
+            # visual column position (matching schema columns
+            # one-to-one); vmerge-continuation cells occupy a visual
+            # column but are NOT fillable.
+            rows: list[TableRow] = []
+            inv_by_id = inventory.by_id()
+            for ri, tr in enumerate(tr_elements):
+                all_tcs = list(tr.iter(qn("w:tc")))
+                first_tc = tr.find(qn("w:tc"))
+                row_is_continuation = ri > 0 and first_tc is not None and _is_vmerge_continuation(first_tc)
+                # Map visual-column index -> fillable. Continuation
+                # cells block the position from being written. The
+                # slot inventory addresses each tc by its iter index
+                # AFTER continuation skip, so we have to track BOTH
+                # a visual column and an iter index in lockstep.
+                fillable: list[bool] = []
+                iter_idx = 0
+                for tc in all_tcs:
+                    if _is_vmerge_continuation(tc):
+                        fillable.append(False)
+                        continue
+                    slot = inv_by_id.get(f"cell_t{ti}_r{ri}_c{iter_idx}")
+                    # In a schema-matched table, body-row cells are
+                    # ALL eligible for typed-fill. The slot
+                    # inventory's is_fillable flag is too conservative
+                    # for this case — template defaults like
+                    # "Fulano (Titular)" / "Ciclano (Substituto)" /
+                    # "Reitoria" classify as data and would be left in
+                    # place, but the schema knows they're sample text
+                    # to overwrite with real records.
+                    is_body_row = ri > 0
+                    fillable.append(is_body_row)
+                    if slot is not None:
+                        schema_covered_slot_ids.add(slot.id)
+                    iter_idx += 1
+                # Truncate to schema column count. Some templates have
+                # extra trailing tcs that are not part of the logical
+                # columns.
+                fillable = fillable[: len(schema.columns)]
+                rows.append(
+                    TableRow(
+                        vmerge_with_above=row_is_continuation,
+                        cell_fillable=fillable,
+                    )
+                )
+
+            records = await extract_records(
+                source_text=source_text_for_extraction,
+                schema=schema,
+                llm=llm,
+            )
+            if not records:
+                # No source records — skip this table; do NOT mark its
+                # slots as covered, so they fall through to the legacy
+                # path (which may still extract something useful).
+                continue
+
+            inv = TableInventory(schema=schema, rows=rows)
+            cell_fills = align_records_to_rows(inv, records)
+            if not cell_fills:
+                continue
+            schema_typed_requests.append(
+                TypedFillRequest(
+                    table_index=ti,
+                    schema=schema,
+                    cell_fills=cell_fills,
+                )
+            )
+            schema_covered_table_indices.add(ti)
+            log.info(
+                "section_mapper.auto_mode.schema_matched",
+                table=ti,
+                schema=schema.name,
+                records=len(records),
+                cells=len(cell_fills),
+            )
+    except Exception as exc:
+        log.warning("section_mapper.auto_mode.schema_layer_failed", error=str(exc))
+        schema_typed_requests = []
+        schema_covered_slot_ids = set()
+        schema_covered_table_indices = set()
+
+    # Apply schema-driven cell fills FIRST so subsequent slot writes
+    # see them as the new template baseline.
+    schema_cells_written = 0
+    if schema_typed_requests:
+        schema_cells_written = apply_typed_fills(
+            template_path,
+            output_path,
+            schema_typed_requests,
+        )
+
+    # ---- legacy slot pipeline (covers body paragraphs + uncovered tables) ----
+    template_for_slot_pass = output_path if schema_typed_requests else template_path
     fills = await fill_slots(
         inventory,
         source_struct,
         llm=llm,
         template_images=template_image_urls or None,
     )
+    # Drop fills targeting cells already handled by the schema layer.
+    fills = {sid: text for sid, text in fills.items() if sid not in schema_covered_slot_ids}
 
     n = apply_slot_fills(
-        template_path,
+        template_for_slot_pass,
         output_path,
         inventory=inventory,
         fills=fills,
@@ -439,6 +580,10 @@ async def _run_auto_mode(
     except Exception as exc:
         log.info("section_mapper.auto_mode.review_failed", error=str(exc))
         corrections = {}
+    # Don't let the reviewer overwrite cells the schema layer already
+    # validated and wrote — those are auditable and type-checked,
+    # whereas the reviewer is best-effort.
+    corrections = {sid: text for sid, text in corrections.items() if sid not in schema_covered_slot_ids}
     if corrections:
         review_count = apply_slot_fills(
             output_path,
@@ -464,6 +609,8 @@ async def _run_auto_mode(
         slots_total=len(inventory.slots),
         slots_fillable=len(inventory.fillable()),
         slots_filled=n,
+        schema_tables=len(schema_covered_table_indices),
+        schema_cells=schema_cells_written,
         review_corrections=review_count,
         orphans=len(orphans),
     )

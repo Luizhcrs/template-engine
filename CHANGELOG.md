@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-04-28
+
+Schema-driven table fill pipeline. The flat slot pipeline shipped
+through 0.11.x and 0.12.x kept hitting its ceiling — tables came out
+scrambled because one LLM call had to extract, align AND fill every
+cell with no record-level scaffolding. UNIFAP screenshots after 9
+fix releases still showed names in phone columns and template
+defaults left in role cells.
+
+This release introduces a separate, schema-aware path for tables
+that match a known shape. Plan in
+`docs/superpowers/plans/2026-04-28-schema-driven-table-fill.md`.
+
+### Added
+
+- `engine.section_mapper.schemas` — ColumnType enum, ColumnSpec,
+  TableSchema dataclasses + four builtin schemas (CONTACT_LIST,
+  REVISION_TABLE, PARTICIPANT_TABLE, SIGNATURE_BOX) covering the
+  table types that recur across BR-PT POPs.
+- `engine.section_mapper.schemas.detector.detect_table_schema(headers)`
+  — header-similarity matcher tolerant of case / accent /
+  punctuation drift (`E-mail` / `Email` / `e-mail` all canonicalise
+  the same).
+- `engine.section_mapper.record_extractor.extract_records(source,
+  schema, llm)` — single LLM call constrained by a JSON Schema
+  derived from the TableSchema. Returns typed `Record` dicts; drops
+  records missing required columns; returns `[]` on transport
+  failure or malformed response.
+- `engine.section_mapper.record_aligner.align_records_to_rows` —
+  pure-code deterministic record-to-row mapping. Walks the table's
+  rows in document order, one record per row, respecting vmerge
+  continuation rows and per-cell fillability flags.
+- `engine.section_mapper.typed_fill.apply_typed_fills` — type-validated
+  per-cell writer. Phones go in PHONE columns, emails in EMAIL
+  columns, dates in DATE columns; mismatched values are rejected
+  silently. Walks visual columns (not iter index) so vmerge
+  continuation cells don't shift schema-column alignment.
+- `_run_auto_mode` integrates the schema layer ahead of the slot
+  pipeline. Tables matched by a builtin schema are filled
+  deterministically; un-matched tables and body paragraphs fall
+  through to the existing slot pipeline so no coverage is lost.
+  Reviewer is restricted to slots NOT covered by the schema layer
+  (those are auditable + type-checked already).
+
+### Changed
+
+- 36 new tests across `test_schemas.py`, `test_record_extractor.py`,
+  `test_record_aligner.py`, `test_typed_fill.py`. Total 433 pass.
+  Free-form NAME / SECTOR / ROLE columns now reject obvious
+  mis-typed values (a date in a Nome column, a phone in a Setor
+  column) so the regressions visible in 0.12.x screenshots cannot
+  recur via the schema path.
+
+### Real-world impact (UNIFAP POP)
+
+| Table                         | 0.12.1                         | 0.13.0                                   |
+|-------------------------------|--------------------------------|------------------------------------------|
+| LISTA DE CONTATOS             | name in Telefone col, scrambled| names+phones+emails in correct cols      |
+| Nome / Setor / Função         | duplicate Fulano de Tal default| Maria Lopes \| DIPLAN \| Chefe ...        |
+| Atividade / Data / Nome / Função | empty Nome col, X in Função | filled with real reviewer + date         |
+| Versão / Data / Descrição     | only Versão filled, rest empty | full revision history                    |
+| Schema cells written per run  | 0                              | 41                                       |
+
+### Known gaps
+
+- Substituto pairing in CONTACT_LIST: when source has 3 contacts and
+  the template has 4 rows (titular+substituto vmerge groups), the
+  aligner assigns one record per row in order, so a substituto row
+  may land where another titular was expected. Future work: detect
+  vmerge groups and bind titular+substituto records as a pair.
+- Schema detector matches by header parity. A table whose headers
+  match SIGNATURE_BOX but whose content is a revision history
+  (Atividade column carries "Data da Revisão" not a real activity)
+  will surface row content semantics we cannot easily disambiguate
+  from headers alone.
+
 ## [0.12.1] - 2026-04-28
 
 Tightening pass for the closed-loop reviewer. The first cut shipped
