@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.11.7] - 2026-04-28
+
+### Fixed
+
+- `engine.section_mapper.slot_profiler._iter_row_tcs` was deduping
+  iterated tcs by Python ``id()``. lxml's element proxies do NOT have
+  stable ``id()`` across iteration — the same memory address gets
+  reused for different XML nodes — and the dedupe was silently dropping
+  legitimate cells whose proxy ``id`` collided with an earlier one.
+  Removed the dedupe entirely (OOXML uses ``gridSpan`` on a single tc
+  for horizontal merges, not duplicated tcs, so dedupe was unnecessary).
+
+  UNIFAP regression: table 1 (LISTA DE CONTATOS) row 2 used to surface
+  only 2 of its 4 cells; the substituto's phone and e-mail slots were
+  invisible to the profiler.
+
 ## [0.11.6] - 2026-04-28
 
 Detect Word content-control type from the parent ``<w:sdt>`` so cells

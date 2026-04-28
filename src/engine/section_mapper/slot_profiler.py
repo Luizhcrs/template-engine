@@ -300,16 +300,14 @@ def _iter_row_tcs(tr) -> list:  # type: ignore[no-untyped-def, type-arg]
     (no val = "continue"). Treating each one as its own slot would
     flood the LLM with phantom empty cells.
 
-    Output is order-preserving and deduplicated on lxml element
-    identity so a horizontally-merged tc that appears once in the XML
-    stays once in the slot inventory.
+    No dedupe is needed: OOXML uses ``gridSpan`` on a single tc to
+    encode horizontal merges (not repeated tcs), and lxml's element
+    proxies do NOT have stable ``id()`` across iteration so an
+    id-based dedupe was actively dropping legitimate cells whose proxy
+    happened to be reused.
     """
-    seen: set[int] = set()
     out = []
     for tc in tr.iter(_W_TC):
-        if id(tc) in seen:
-            continue
-        seen.add(id(tc))
         if _is_vmerge_continuation(tc):
             continue
         out.append(tc)
